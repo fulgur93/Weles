@@ -1,0 +1,106 @@
+@page "/"
+@inject Weles.Infrastructure.Queries.DashboardQueries Queries
+@inject IAiService Ai
+
+<PageTitle>Dashboard · WELES</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>Dashboard</h1>
+        <p class="page-subtitle">Stan bezpieczeństwa infrastruktury na podstawie rzeczywistych wyników skanowania.</p>
+    </div>
+</div>
+
+@if (_summary is null)
+{
+    <div class="card loading">Wczytywanie danych…</div>
+}
+else if (!_summary.HasAnyScan)
+{
+    <section class="hero card">
+        <div class="hero-body">
+            <div class="eyebrow">Pierwsze uruchomienie</div>
+            <h2>Brak wykonanych audytów</h2>
+            <p>
+                WELES nie wyświetla żadnych przykładowych ani szacunkowych liczb. Dashboard wypełni się danymi po pierwszym
+                skanowaniu zatwierdzonego zakresu sieci.
+            </p>
+            <ol class="steps">
+                <li><span class="step-no">1</span><div><strong>Zdefiniuj i zatwierdź zakres</strong><span>sieć lokalna wykryta automatycznie albo własne adresy IP, CIDR i domeny</span></div></li>
+                <li><span class="step-no">2</span><div><strong>Uruchom discovery</strong><span>urządzenia, porty, usługi, wersje i certyfikaty TLS</span></div></li>
+                <li><span class="step-no">3</span><div><strong>Przeanalizuj ryzyko</strong><span>podatności, priorytety napraw i wyjaśnienia lokalnego AI</span></div></li>
+            </ol>
+            <div class="hero-actions">
+                <button class="btn btn-primary" disabled title="Moduł Network Discovery – Etap 2">
+                    <Icon Name="play" Size="16" /> Rozpocznij pierwszy audyt
+                </button>
+                <span class="muted small">Moduł skanowania jest w realizacji (Etap 2).</span>
+            </div>
+        </div>
+        <div class="hero-visual" aria-hidden="true">
+            <BrandMark Size="160" />
+        </div>
+    </section>
+}
+else
+{
+    <section class="kpi-grid">
+        <div class="kpi card">
+            <div class="kpi-label">Security Posture Score</div>
+            <div class="kpi-value">@(_summary.SecurityPostureScore is { } s ? s.ToString("0") : "—")</div>
+            <div class="kpi-hint">@(_summary.SecurityPostureScore is null ? "Ocena ryzyka – Etap 5" : "0–100, wyżej = lepiej")</div>
+        </div>
+        <div class="kpi card"><div class="kpi-label">Urządzenia</div><div class="kpi-value">@_summary.AssetCount</div><div class="kpi-hint">nowe od ostatniego skanu: @_summary.NewAssetsSinceLastScan</div></div>
+        <div class="kpi card"><div class="kpi-label">Aktywne usługi</div><div class="kpi-value">@_summary.ActiveServiceCount</div><div class="kpi-hint">otwarte porty w ostatnim skanie</div></div>
+        <div class="kpi card"><div class="kpi-label">Podatności</div><div class="kpi-value">@_summary.VulnerabilityCount</div><div class="kpi-hint">otwarte dopasowania</div></div>
+        <div class="kpi card kpi-critical"><div class="kpi-label">Krytyczne problemy</div><div class="kpi-value">@_summary.CriticalFindingCount</div><div class="kpi-hint">w ostatnim skanie</div></div>
+    </section>
+
+    @if (_summary.LastScan is { } last)
+    {
+        <section class="card">
+            <div class="card-title"><Icon Name="clock" /> Ostatnie skanowanie</div>
+            <dl class="facts">
+                <dt>Zakres</dt><dd>@last.TargetName</dd>
+                <dt>Zakończone</dt><dd>@last.CompletedAt?.ToLocalTime().ToString("g")</dd>
+                <dt>Aktywne hosty</dt><dd>@last.HostsAlive</dd>
+                <dt>Otwarte porty</dt><dd>@last.OpenPorts</dd>
+            </dl>
+        </section>
+    }
+}
+
+<section class="grid-3">
+    <div class="card">
+        <div class="card-title"><Icon Name="database" /> Baza danych</div>
+        <StatusPill Tone="ok">Gotowa</StatusPill>
+        <p class="muted small">Lokalna baza SQLite, migracje zastosowane. Zakończone skany: @(_summary?.CompletedScanCount ?? 0).</p>
+    </div>
+    <div class="card">
+        <div class="card-title"><Icon Name="vulnerabilities" /> Baza podatności</div>
+        @if (_summary?.VulnerabilityDatabaseUpdatedAt is { } updated)
+        {
+            <StatusPill Tone="ok">Aktualizacja: @updated.ToLocalTime().ToString("d")</StatusPill>
+        }
+        else
+        {
+            <StatusPill Tone="muted">Nie załadowano</StatusPill>
+            <p class="muted small">Lokalna baza NVD / CISA KEV / EPSS – Etap 4.</p>
+        }
+    </div>
+    <div class="card">
+        <div class="card-title"><Icon Name="ai" /> Lokalne AI</div>
+        <AiStatusView Status="_ai" />
+    </div>
+</section>
+
+@code {
+    private DashboardSummary? _summary;
+    private AiEngineStatus? _ai;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _summary = await Queries.GetSummaryAsync();
+        _ai = await Ai.GetStatusAsync();
+    }
+}

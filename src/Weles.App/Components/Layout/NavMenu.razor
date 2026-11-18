@@ -1,0 +1,21 @@
+<nav class="nav">
+    @foreach (var group in ModuleCatalog.Groups)
+    {
+        <div class="nav-group">
+            <div class="nav-group-title">@group.Key</div>
+            @foreach (var module in group)
+            {
+                <NavLink class="@(module.IsAvailable ? "nav-item" : "nav-item planned")" href="@module.Route"
+                         Match="@(module.Route == "" ? NavLinkMatch.All : NavLinkMatch.Prefix)"
+                         title="@(module.IsAvailable ? module.Summary : $"Planowany – Etap {module.Stage}")">
+                    <Icon Name="@module.Icon" />
+                    <span class="nav-label">@module.Title</span>
+                    @if (!module.IsAvailable)
+                    {
+                        <span class="nav-stage">E@(module.Stage)</span>
+                    }
+                </NavLink>
+            }
+        </div>
+    }
+</nav>

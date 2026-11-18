@@ -1,0 +1,9 @@
+<span class="pill pill-@Tone">
+    <span class="pill-dot"></span>@ChildContent
+</span>
+
+@code {
+    /// <summary>ok | warn | bad | muted | info</summary>
+    [Parameter] public string Tone { get; set; } = "muted";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

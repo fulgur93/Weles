@@ -1,0 +1,797 @@
+PROMPT GŁÓWNY – WELES
+
+    • Watchful – Weles jako obserwator tego, co ukryte.
+    • Enterprise – infrastruktura firmowa.
+    • Local Environment – sieci lokalne, urządzenia i systemy.
+    • Security – bezpieczeństwo całego środowiska.
+
+Attack Surface Intelligence Platform
+Kompletny projekt aplikacji do zarządzania powierzchnią ataku i analizowania bezpieczeństwa infrastruktury IT
+Przejmij rolę głównego architekta oprogramowania, doświadczonego programisty .NET, specjalisty cyberbezpieczeństwa, inżyniera AI oraz projektanta interfejsów użytkownika.
+Twoim zadaniem jest zaprojektowanie i stopniowe stworzenie kompletnej aplikacji WELES – Attack Surface Intelligence Platform.
+Nie twórz jedynie demonstracyjnej makiety ani prostego skanera portów. Celem jest stworzenie rzeczywistego, działającego produktu, który będzie można zainstalować na komputerze z Windows lub Linux, uruchomić bez skomplikowanej konfiguracji i wykorzystać do przeprowadzenia audytu bezpieczeństwa infrastruktury IT.
+Projekt jest przygotowywany z myślą o konkursie HackNation 2026, w ramach zadania:
+ATTACK SURFACE INTELLIGENCE
+Aplikacja powinna być na tyle dopracowana, aby można było przeprowadzić krótką demonstrację przed jury, bez konieczności instalowania dodatkowych środowisk, baz danych, serwerów czy modeli AI.
+
+1. GŁÓWNA KONCEPCJA PRODUKTU
+WELES to lokalna platforma do identyfikowania, analizowania i monitorowania powierzchni ataku infrastruktury IT.
+System ma odpowiadać na następujące pytania:
+    • Jakie urządzenia znajdują się w mojej sieci?
+    • Jakie usługi i porty są dostępne na tych urządzeniach?
+    • Jakie wersje oprogramowania są uruchomione?
+    • Czy wykryte wersje zawierają znane podatności?
+    • Które urządzenia stanowią największe zagrożenie?
+    • Czy pojawiły się nowe, nieznane urządzenia?
+    • Czy ktoś uruchomił nową usługę lub otworzył dodatkowy port?
+    • Czy moje zasoby są dostępne z Internetu?
+    • Jakie są potencjalne ścieżki ekspozycji infrastruktury?
+    • Co powinienem naprawić w pierwszej kolejności?
+    • Jak zmienił się poziom bezpieczeństwa infrastruktury od poprzedniego skanowania?
+WELES nie może być jedynie kolejnym narzędziem do skanowania portów.
+Najważniejszym elementem produktu ma być połączenie:
+    1. Asset Discovery.
+    2. Network Discovery.
+    3. Service Discovery.
+    4. Vulnerability Intelligence.
+    5. Risk Assessment.
+    6. Attack Surface Monitoring.
+    7. Network Topology.
+    8. Attack Path Analysis.
+    9. AI Security Analyst.
+    10. Raportowania i historii audytów.
+System ma prezentować informacje w sposób zrozumiały również dla osób, które nie są specjalistami cyberbezpieczeństwa.
+2. TECHNOLOGIE
+Podstawowy stos technologiczny:
+    • .NET 10.
+    • ASP.NET Core 10.
+    • Blazor Web App.
+    • Interactive Server.
+    • C#.
+    • Entity Framework Core 10.
+    • SQLite.
+    • BackgroundService / IHostedService.
+    • Dependency Injection.
+    • HttpClient.
+    • System.Text.Json.
+    • Ollama – lokalny silnik AI.
+    • Modele językowe w kwantyzacji, preferencyjnie Q4.
+    • QuestPDF lub inna odpowiednia biblioteka do generowania raportów PDF.
+Preferuj rozwiązania natywne dla .NET.
+Nie buduj aplikacji w React, Angular ani Vue.
+Nie wprowadzaj JavaScriptu jako podstawy interfejsu. Preferuj komponenty Blazor i C#. Jeżeli jakaś funkcjonalność wymaga biblioteki JavaScript, np. zaawansowanej wizualizacji grafów, zastosuj niewielki, odizolowany komponent integracyjny, bez przenoszenia logiki aplikacji do JavaScriptu.
+Nie twórz mikroserwisów na potrzeby pierwszej wersji. Projekt ma być modularnym monolitem.
+Nie wprowadzaj Pythona ani dodatkowego środowiska wykonawczego, jeżeli nie jest to rzeczywiście konieczne.
+3. ARCHITEKTURA APLIKACJI
+WELES ma być przede wszystkim samodzielną aplikacją lokalną.
+Użytkownik pobiera instalator, instaluje program i uruchamia go jak zwykłą aplikację.
+Po uruchomieniu:
+    1. WELES uruchamia lokalny serwer ASP.NET Core.
+    2. Serwer nasłuchuje wyłącznie na interfejsie localhost.
+    3. Aplikacja otwiera interfejs Blazor w domyślnej przeglądarce.
+    4. Baza SQLite jest automatycznie tworzona, jeżeli jeszcze nie istnieje.
+    5. WELES sprawdza dostępność lokalnego silnika AI.
+    6. Jeżeli AI jest dostępne, uruchamia je lub łączy z działającą instancją.
+    7. Użytkownik może rozpocząć skanowanie.
+Przykładowy adres:
+http://127.0.0.1:5080
+Port powinien być możliwy do skonfigurowania lub przydzielany dynamicznie, jeżeli domyślny jest zajęty.
+Aplikacja nie może bez potrzeby udostępniać panelu administracyjnego w sieci lokalnej ani publicznie.
+3.1. Proponowana struktura rozwiązania
+Zaprojektuj rozwiązanie jako:
+WELES/
+    • src/
+        ◦ WELES.App/
+            ▪ Program.cs
+            ▪ Components/
+            ▪ Layout/
+            ▪ Pages/
+            ▪ Shared/
+            ▪ wwwroot/
+        ◦ WELES.Core/
+            ▪ Entities/
+            ▪ DTOs/
+            ▪ Enums/
+            ▪ Interfaces/
+            ▪ Models/
+            ▪ Rules/
+        ◦ WELES.Infrastructure/
+            ▪ Database/
+            ▪ Repositories/
+            ▪ Scanning/
+            ▪ Discovery/
+            ▪ Vulnerabilities/
+            ▪ Intelligence/
+            ▪ RiskAssessment/
+            ▪ NetworkTopology/
+            ▪ Reporting/
+            ▪ AI/
+        ◦ WELES.Agent/
+            ▪ Workers/
+            ▪ Scanning/
+            ▪ Communication/
+            ▪ Configuration/
+        ◦ WELES.Tests/
+    • deploy/
+        ◦ windows/
+        ◦ linux/
+    • docs/
+        ◦ architecture.md
+        ◦ installation.md
+        ◦ user-guide.md
+        ◦ security.md
+Możesz zmodyfikować strukturę, jeśli istnieje uzasadniony techniczny powód. Zachowaj jednak wyraźny podział na logikę domenową, infrastrukturę i interfejs.
+Nie twórz niepotrzebnych projektów ani warstw.
+4. INSTALACJA I SAMODZIELNOŚĆ
+To jeden z najważniejszych wymogów projektu.
+WELES musi działać jako samodzielny produkt.
+Użytkownik końcowy nie może być zmuszony do instalowania:
+    • .NET Runtime.
+    • SQL Server.
+    • PostgreSQL.
+    • Pythona.
+    • Ollamy z osobnego instalatora.
+    • Modelu AI z Internetu.
+    • Dodatkowych narzędzi developerskich.
+Przygotuj aplikację jako self-contained .NET publish.
+Docelowo przygotuj osobne paczki:
+Windows:
+    • instalator EXE lub MSI;
+    • aplikacja WELES;
+    • SQLite;
+    • lokalny silnik AI;
+    • gotowy model AI;
+    • konfiguracja uruchamiania.
+Linux:
+    • paczka DEB lub AppImage, ewentualnie RPM;
+    • aplikacja WELES;
+    • SQLite;
+    • lokalny silnik AI;
+    • gotowy model AI;
+    • skrypt lub mechanizm uruchamiania.
+Na potrzeby pierwszej demonstracji dopuszczalne są paczki ZIP dla Windows oraz TAR.GZ dla Linuxa.
+Zadbaj o automatyczne tworzenie katalogów danych, logów, konfiguracji i bazy danych.
+Nie zapisuj danych użytkownika w katalogu instalacyjnym.
+Przygotuj mechanizm aktualizacji aplikacji i modelu AI jako przyszłą funkcjonalność, ale nie uzależniaj działania systemu od dostępu do Internetu.
+5. BAZA DANYCH
+Podstawową bazą danych jest SQLite.
+Nie wymagaj zewnętrznego serwera bazy danych.
+Zaprojektuj encje i relacje dla:
+    • Asset – urządzenie lub zasób.
+    • NetworkInterface – interfejs sieciowy.
+    • NetworkSegment – segment sieci.
+    • Scan – pojedyncze skanowanie.
+    • ScanTarget – zakres skanowania.
+    • DiscoveredHost – wykryty host.
+    • DiscoveredPort – wykryty port.
+    • DiscoveredService – wykryta usługa.
+    • SoftwareVersion – wykryte oprogramowanie i wersje.
+    • Vulnerability – podatność.
+    • AssetVulnerability – powiązanie zasobu z podatnością.
+    • RiskFinding – wykryty problem.
+    • RiskScore – ocena ryzyka.
+    • Certificate – certyfikat TLS.
+    • Domain – domena lub subdomena.
+    • Agent – zarejestrowany agent.
+    • AgentScan – wyniki skanowania agenta.
+    • NetworkRelationship – relacja pomiędzy zasobami.
+    • AttackPath – potencjalna ścieżka ekspozycji.
+    • AuditReport – raport audytu.
+    • AIConversation – historia rozmów z AI.
+    • AIMessage – wiadomość użytkownika lub AI.
+    • ApplicationSettings – ustawienia aplikacji.
+Zachowaj historię skanowań. Nie nadpisuj bezpowrotnie wyników poprzednich audytów.
+Użytkownik musi mieć możliwość porównywania wyników w czasie.
+Zadbaj o indeksy, klucze obce, migracje EF Core i odpowiednie ograniczenia.
+6. MODUŁ SKANOWANIA – DISCOVERY ENGINE
+Skanowanie jest jednym z głównych elementów aplikacji.
+Napisz własny silnik skanujący w C#.
+Możesz opcjonalnie zintegrować Nmap jako dodatkowy silnik, ale aplikacja nie może wymagać jego instalowania do podstawowego działania.
+Skanowanie powinno obejmować:
+6.1. Wykrywanie urządzeń
+    • komputery Windows;
+    • komputery Linux;
+    • serwery;
+    • routery;
+    • switche;
+    • drukarki sieciowe;
+    • kamery IP;
+    • urządzenia IoT;
+    • maszyny wirtualne;
+    • inne urządzenia sieciowe.
+Wykorzystuj odpowiednie techniki:
+    • ICMP;
+    • ARP;
+    • TCP connect;
+    • DNS;
+    • podstawowe rozpoznawanie usług;
+    • identyfikację producenta na podstawie OUI MAC, jeżeli adres MAC jest dostępny.
+Nie zakładaj, że brak odpowiedzi ICMP oznacza brak urządzenia.
+Uwzględnij ograniczenia uprawnień i możliwości systemu operacyjnego.
+6.2. Wykrywanie portów
+Wykrywaj popularne porty oraz umożliwiaj skanowanie wybranego zakresu.
+Przykładowo:
+    • 20, 21 – FTP;
+    • 22 – SSH;
+    • 23 – Telnet;
+    • 25 – SMTP;
+    • 53 – DNS;
+    • 80 – HTTP;
+    • 110 – POP3;
+    • 135 – RPC;
+    • 139 – NetBIOS;
+    • 143 – IMAP;
+    • 443 – HTTPS;
+    • 445 – SMB;
+    • 3306 – MySQL;
+    • 3389 – RDP;
+    • 5432 – PostgreSQL;
+    • 5900 – VNC;
+    • 6379 – Redis;
+    • 8080 – HTTP alternatywny;
+    • 8443 – HTTPS alternatywny;
+    • 27017 – MongoDB.
+Użytkownik powinien móc określić własny zakres portów.
+6.3. Rozpoznawanie usług
+Nie wystarczy stwierdzić, że port jest otwarty.
+System powinien próbować ustalić:
+    • rodzaj usługi;
+    • nazwę oprogramowania;
+    • wersję;
+    • protokół;
+    • dodatkowe informacje z banerów usług, jeśli są bezpiecznie dostępne;
+    • podstawowe informacje o konfiguracji.
+Wyniki muszą zawierać poziom pewności identyfikacji.
+Nie przypisuj wersji oprogramowania na podstawie samego numeru portu.
+6.4. TLS i certyfikaty
+Sprawdzaj:
+    • dostępność TLS;
+    • datę wygaśnięcia certyfikatu;
+    • nazwę podmiotu;
+    • wystawcę;
+    • zgodność nazw DNS;
+    • podstawowe parametry certyfikatu;
+    • przestarzałe wersje protokołów, jeżeli można je bezpiecznie sprawdzić.
+6.5. HTTP
+Dla dostępnych usług HTTP analizuj:
+    • nagłówki;
+    • przekierowania;
+    • podstawowe informacje o serwerze;
+    • dostępność HTTPS;
+    • podstawowe błędne konfiguracje;
+    • publicznie dostępne panele administracyjne, jeśli można je rozpoznać bez logowania.
+Nie wykonuj prób logowania ani testów wykorzystujących podatności.
+7. ZAKRESY SKANOWANIA I BEZPIECZEŃSTWO
+WELES ma być narzędziem do legalnych audytów infrastruktury.
+Wprowadź mechanizmy bezpieczeństwa:
+    • jawne definiowanie zakresu skanowania;
+    • zatwierdzanie zakresu przez użytkownika;
+    • allowlistę adresów IP, CIDR i domen;
+    • możliwość wykluczania adresów;
+    • limity równoległych połączeń;
+    • ograniczenia szybkości skanowania;
+    • timeouty;
+    • logowanie operacji;
+    • możliwość zatrzymania skanowania;
+    • brak automatycznego wykorzystywania podatności.
+Nie wykonuj exploitów, brute force, prób przełamywania haseł ani destrukcyjnych testów.
+Rozdziel wykrywanie zasobów od aktywnego testowania bezpieczeństwa.
+Każdy skan powinien być przypisany do zatwierdzonego zakresu.
+Nie skanuj publicznych adresów ani domen bez wyraźnego uprawnienia użytkownika.
+8. VULNERABILITY INTELLIGENCE
+To jeden z najważniejszych modułów.
+WELES ma dopasowywać wykryte wersje usług i oprogramowania do znanych podatności.
+Wykorzystuj publiczne źródła danych:
+    • NVD – National Vulnerability Database;
+    • CISA Known Exploited Vulnerabilities (KEV);
+    • EPSS – Exploit Prediction Scoring System;
+    • MITRE CVE;
+    • MITRE ATT&CK.
+Zaprojektuj mechanizm pobierania i lokalnego przechowywania danych podatności.
+Ważne: aplikacja musi działać także bez Internetu.
+Jeśli aktualne dane nie są dostępne, wykorzystuj ostatnią pobraną bazę i wyświetlaj datę jej aktualizacji.
+Dla każdej podatności zapisuj:
+    • CVE ID;
+    • nazwę;
+    • opis;
+    • CVSS;
+    • EPSS, jeżeli dostępne;
+    • informację o obecności w CISA KEV;
+    • źródło;
+    • datę publikacji;
+    • datę ostatniej aktualizacji;
+    • dotknięte produkty i zakresy wersji;
+    • referencje;
+    • poziom pewności dopasowania.
+Nie traktuj każdego podobnego numeru wersji jako potwierdzonej podatności.
+Dopasowywanie wersji musi uwzględniać producenta, produkt, zakresy wersji oraz możliwe poprawki dystrybucyjne.
+Każde dopasowanie powinno mieć status:
+    • Potwierdzone.
+    • Prawdopodobne.
+    • Wymaga weryfikacji.
+    • Brak wystarczających danych.
+9. RISK ASSESSMENT ENGINE
+Zaprojektuj własny mechanizm oceny ryzyka.
+Nie opieraj oceny wyłącznie na CVSS.
+Uwzględniaj:
+    • CVSS;
+    • EPSS;
+    • CISA KEV;
+    • dostępność usługi z Internetu;
+    • krytyczność zasobu;
+    • ekspozycję w sieci lokalnej;
+    • liczbę powiązanych usług;
+    • znaczenie urządzenia dla infrastruktury;
+    • pewność wykrycia;
+    • wiek wykrytego oprogramowania;
+    • historię zmian.
+Wprowadź klasyfikację:
+    • Critical;
+    • High;
+    • Medium;
+    • Low;
+    • Informational.
+Zaprojektuj przejrzysty algorytm punktacji.
+Nie ukrywaj powodów przypisania poziomu ryzyka.
+Użytkownik musi móc zobaczyć, dlaczego konkretne urządzenie otrzymało określoną ocenę.
+Przykładowo:
+Serwer NAS:
+    • otwarty SMB;
+    • nieaktualna wersja oprogramowania;
+    • podatność obecna w CISA KEV;
+    • dostępność z wielu segmentów sieci.
+System powinien wskazać, dlaczego jest to priorytet.
+10. NETWORK TOPOLOGY
+Stwórz moduł wizualizacji infrastruktury.
+Użytkownik powinien widzieć:
+    • urządzenia;
+    • segmenty sieci;
+    • adresy IP;
+    • nazwy hostów;
+    • usługi;
+    • połączenia;
+    • potencjalne punkty ekspozycji;
+    • urządzenia o wysokim ryzyku.
+Wizualizacja ma być interaktywna.
+Kliknięcie urządzenia powinno otwierać szczegółowe informacje.
+Zastosuj bibliotekę kompatybilną z Blazor, jeśli to możliwe.
+Nie uzależniaj całego systemu od JavaScriptu.
+Wizualizacja ma być czytelna, estetyczna i przydatna podczas demonstracji.
+11. ATTACK PATH ANALYSIS
+Zaprojektuj moduł analizujący potencjalne ścieżki ekspozycji infrastruktury.
+Przykład:
+Internet
+→ publiczny router
+→ dostępna usługa
+→ serwer wewnętrzny
+→ podatna usługa SMB
+→ potencjalnie krytyczny zasób.
+System ma przedstawiać możliwe drogi dotarcia do zasobów na podstawie wykrytych relacji i konfiguracji.
+Bardzo ważne:
+Sama możliwość połączenia sieciowego nie oznacza możliwości przejęcia urządzenia.
+Każdy element ścieżki musi mieć uzasadnienie i poziom pewności.
+Nie prezentuj hipotetycznej ścieżki jako potwierdzonego ataku.
+Nie wykonuj rzeczywistych prób wykorzystania podatności.
+12. CONTINUOUS MONITORING
+WELES musi zapisywać historię skanowań.
+Porównuj kolejne wyniki i wykrywaj:
+    • nowe urządzenia;
+    • znikające urządzenia;
+    • nowe otwarte porty;
+    • zamknięte porty;
+    • nowe usługi;
+    • zmiany wersji oprogramowania;
+    • nowe podatności;
+    • znikające podatności;
+    • zmiany certyfikatów;
+    • wzrost lub spadek ryzyka.
+Przygotuj widok zmian w czasie.
+Użytkownik powinien móc odpowiedzieć na pytanie:
+„Co zmieniło się w mojej sieci od ostatniego audytu?”
+Dodaj harmonogram automatycznego skanowania, ale nie uruchamiaj skanów bez zatwierdzonego zakresu.
+13. EXTERNAL ATTACK SURFACE
+Dodaj moduł analizy zewnętrznej powierzchni ataku.
+Użytkownik może podać własną domenę lub publiczne adresy IP, do których ma uprawnienia.
+Analizuj:
+    • DNS;
+    • rekordy A i AAAA;
+    • MX;
+    • NS;
+    • TXT;
+    • subdomeny z autoryzowanych źródeł;
+    • certyfikaty TLS;
+    • publiczne usługi;
+    • publicznie dostępne porty;
+    • ekspozycję usług administracyjnych.
+Nie wykonuj nieautoryzowanego skanowania cudzych zasobów.
+Rozdziel analizę pasywną od aktywnego skanowania.
+14. AI SECURITY ANALYST – LOKALNE AI
+To bardzo ważna funkcjonalność WELES.
+Chcę, aby aplikacja miała własnego lokalnego asystenta AI.
+Użytkownik nie może być zmuszony do samodzielnego instalowania Ollamy, pobierania modeli ani konfigurowania środowiska AI.
+Ollama oraz wybrany model językowy mają być dołączone do instalatora WELES.
+14.1. Architektura AI
+Zastosuj:
+    • Ollama jako lokalny silnik inferencyjny;
+    • lokalny model językowy;
+    • model w kwantyzacji Q4;
+    • komunikację przez lokalne API;
+    • osobny moduł AI Service napisany w C#.
+Model powinien być przygotowany do pracy z językiem polskim i angielskim.
+Rozważ modele:
+    • Bielik 7B/11B;
+    • Qwen 3 4B/8B;
+    • inne odpowiednie modele dostępne w formacie obsługiwanym przez Ollama.
+Wybierz model na podstawie jakości, szybkości, rozmiaru i licencji.
+Nie zakładaj z góry, że największy model będzie najlepszy.
+Przygotuj mechanizm sprawdzania, czy model jest dostępny, oraz jego automatycznego uruchamiania.
+AI musi działać lokalnie i nie może wysyłać danych infrastruktury użytkownika do zewnętrznych usług.
+Nie wymagaj połączenia z Internetem.
+14.2. Funkcje AI
+AI Security Analyst powinien:
+    • wyjaśniać wykryte podatności;
+    • analizować ryzyko;
+    • wskazywać priorytety napraw;
+    • analizować zmiany pomiędzy skanami;
+    • podsumowywać stan infrastruktury;
+    • odpowiadać na pytania użytkownika;
+    • generować podsumowania audytów;
+    • wyjaśniać potencjalne ścieżki ekspozycji;
+    • pomagać zrozumieć konfigurację usług;
+    • przygotowywać rekomendacje napraw.
+Przykładowe pytania:
+„Jakie są trzy największe zagrożenia w mojej sieci?”
+„Czy pojawiły się nowe urządzenia od ostatniego skanowania?”
+„Które podatności powinienem naprawić najpierw?”
+„Wyjaśnij mi CVE-XXXX w prostym języku.”
+„Czy mój serwer NAS jest narażony na atak z Internetu?”
+„Przygotuj raport z ostatniego audytu.”
+14.3. Ograniczenia AI
+AI nie jest źródłem prawdy o podatnościach.
+Dane o CVE, wersjach, portach i wynikach skanowania muszą pochodzić z rzeczywistych danych systemu.
+AI ma analizować istniejące dane.
+Nie może wymyślać urządzeń, podatności ani wyników skanowania.
+Jeśli brakuje informacji, musi to wyraźnie zaznaczyć.
+Zadbaj o ograniczenie kontekstu przekazywanego do modelu, kontrolę wielkości odpowiedzi i obsługę błędów.
+AI nie może samodzielnie wykonywać operacji sieciowych ani uruchamiać skanowania na podstawie polecenia tekstowego bez zatwierdzenia użytkownika.
+14.4. Sprzęt
+System powinien działać na komputerach bez dedykowanej karty graficznej, wykorzystując CPU.
+Jeżeli dostępne jest GPU, należy umożliwić wykorzystanie akceleracji.
+Nie zakładaj dostępności CUDA ani konkretnego producenta GPU.
+Przygotuj ustawienia:
+    • wybór modelu spośród dołączonych modeli;
+    • CPU/GPU, jeśli obsługiwane;
+    • maksymalna liczba tokenów;
+    • temperatura;
+    • limit kontekstu;
+    • status silnika AI;
+    • status modelu;
+    • zużycie pamięci, jeśli można je wiarygodnie odczytać.
+Nie pobieraj automatycznie innych modeli z Internetu.
+15. OPCJONALNE AGENTY ZDALNE
+Podstawowa aplikacja działa bez agentów.
+WELES samodzielnie skanuje sieć, w której jest uruchomiony.
+W przyszłości użytkownik może zainstalować dodatkowego agenta na wybranej maszynie w innym segmencie lub lokalizacji.
+Agent ma być napisany w .NET jako Worker Service.
+Powinien działać na Windows i Linux.
+Agent może:
+    • wykonywać lokalne discovery;
+    • wykrywać urządzenia w swoim segmencie;
+    • zbierać wybrane informacje o systemie;
+    • wykonywać zatwierdzone skany;
+    • przekazywać wyniki do WELES.
+Agent powinien inicjować połączenie wychodzące HTTPS do aplikacji centralnej, bez konieczności otwierania portów przychodzących.
+Komunikacja musi być uwierzytelniona.
+Zadbaj o rejestrację agenta, jego identyfikację, autoryzację, status oraz możliwość unieważnienia dostępu.
+Agent nie może mieć nieograniczonego dostępu do systemu centralnego.
+Moduł agentów nie powinien blokować realizacji podstawowej wersji aplikacji.
+16. INTERFEJS UŻYTKOWNIKA
+Interfejs powinien być nowoczesny, profesjonalny i przypominać profesjonalne platformy cyberbezpieczeństwa.
+Zastosuj ciemny motyw jako domyślny, z możliwością przełączenia na jasny.
+Projekt powinien być czytelny i nie może wyglądać jak standardowy panel administracyjny wygenerowany z szablonu.
+Preferowany styl:
+    • ciemne tło;
+    • subtelne obramowania;
+    • wyraźna hierarchia informacji;
+    • nowoczesne wykresy;
+    • czytelne tabele;
+    • odpowiednie ikony;
+    • profesjonalne wizualizacje sieci;
+    • wyraźne oznaczenia poziomów ryzyka.
+16.1. Główna nawigacja
+Zaprojektuj następujące sekcje:
+    1. Dashboard.
+    2. Assets.
+    3. Network Discovery.
+    4. Scans.
+    5. Vulnerabilities.
+    6. Risk Assessment.
+    7. Attack Surface.
+    8. Network Topology.
+    9. Attack Paths.
+    10. Monitoring.
+    11. AI Analyst.
+    12. Reports.
+    13. Agents.
+    14. Settings.
+Sekcje mogą być początkowo dostępne w różnych etapach realizacji, ale nawigacja powinna być przemyślana od początku.
+Nie pokazuj pustych, pozornie działających modułów.
+Jeżeli funkcjonalność nie została jeszcze zaimplementowana, oznacz ją jako planowaną.
+16.2. Dashboard
+Dashboard powinien zawierać:
+    • Security Posture Score;
+    • liczbę wykrytych urządzeń;
+    • liczbę aktywnych usług;
+    • liczbę podatności;
+    • liczbę krytycznych problemów;
+    • liczbę zasobów publicznych;
+    • nowe urządzenia;
+    • ostatnie skanowanie;
+    • zmiany od poprzedniego audytu;
+    • najważniejsze zagrożenia;
+    • aktywność agentów;
+    • status lokalnego AI.
+Dodaj wykres trendu bezpieczeństwa.
+Dashboard ma prezentować rzeczywiste dane z bazy.
+Jeśli nie wykonano jeszcze skanowania, pokaż czytelny ekran startowy z możliwością rozpoczęcia pierwszego audytu.
+16.3. Widok urządzeń
+Tabela urządzeń powinna obsługiwać:
+    • wyszukiwanie;
+    • sortowanie wielokolumnowe;
+    • filtrowanie;
+    • paginację;
+    • wybór kolumn;
+    • szczegóły urządzenia;
+    • historię skanowań;
+    • podatności;
+    • otwarte porty;
+    • usługi;
+    • poziom ryzyka.
+Kliknięcie urządzenia otwiera szczegółowy widok.
+16.4. Szczegóły urządzenia
+Widok urządzenia powinien zawierać:
+    • nazwę hosta;
+    • IP;
+    • MAC, jeśli dostępny;
+    • producenta;
+    • system operacyjny, jeśli rozpoznany;
+    • segment sieci;
+    • otwarte porty;
+    • usługi;
+    • wersje oprogramowania;
+    • podatności;
+    • ocenę ryzyka;
+    • historię zmian;
+    • relacje z innymi urządzeniami.
+17. RAPORTY
+Umożliwiaj generowanie raportów PDF.
+Raport powinien zawierać:
+    • dane audytu;
+    • datę;
+    • zakres skanowania;
+    • podsumowanie infrastruktury;
+    • listę urządzeń;
+    • wykryte usługi;
+    • podatności;
+    • poziomy ryzyka;
+    • rekomendacje;
+    • zmiany od poprzedniego audytu;
+    • podsumowanie AI, jeśli użytkownik je wygenerował.
+Przygotuj również eksport danych audytu do formatu JSON lub ZIP.
+Eksport powinien umożliwiać przeniesienie audytu na inny komputer i jego późniejsze otwarcie w WELES.
+18. MONITORING I LOGOWANIE
+Zaprojektuj centralny mechanizm logowania.
+Loguj:
+    • uruchomienie aplikacji;
+    • zatrzymanie aplikacji;
+    • rozpoczęcie skanowania;
+    • zakończenie skanowania;
+    • błędy;
+    • połączenia agentów;
+    • aktualizacje bazy podatności;
+    • działania AI;
+    • eksport raportów.
+Nie zapisuj haseł, kluczy ani poufnych danych w logach.
+Zadbaj o rotację logów i możliwość pobrania ich przez użytkownika.
+19. TESTY I JAKOŚĆ
+Projekt ma być rzeczywiście działający.
+Dodaj testy jednostkowe i integracyjne.
+Testuj szczególnie:
+    • discovery;
+    • rozpoznawanie portów;
+    • dopasowywanie CVE;
+    • ocenę ryzyka;
+    • porównywanie skanów;
+    • obsługę SQLite;
+    • komunikację z Ollamą;
+    • import i eksport audytów.
+Nie twórz fałszywych wyników udających prawdziwe skanowanie.
+Do demonstracji możesz przygotować osobny, jawnie oznaczony tryb demonstracyjny z przykładowymi danymi.
+Dane demonstracyjne nie mogą być mieszane z rzeczywistymi wynikami skanowania.
+20. BEZPIECZEŃSTWO SAMEJ APLIKACJI
+Zabezpiecz:
+    • lokalne API;
+    • dostęp do plików;
+    • komunikację z agentami;
+    • importowane archiwa;
+    • konfigurację;
+    • dane AI;
+    • operacje administracyjne.
+Ogranicz dostęp do lokalnego API do localhost.
+Nie zakładaj, że localhost automatycznie oznacza pełne bezpieczeństwo. Zastosuj odpowiednie zabezpieczenie przed nieautoryzowanym wywoływaniem lokalnych endpointów, w szczególności z poziomu przeglądarki.
+Waliduj dane wejściowe.
+Nie wykonuj poleceń systemowych na podstawie niezaufanych danych.
+Nie pozwalaj modelowi AI na dowolne wykonywanie poleceń powłoki.
+21. PRIORYTETY REALIZACJI
+Pracuj etapami. Nie próbuj tworzyć całego systemu w jednej odpowiedzi.
+ETAP 1 – FUNDAMENT
+    • utworzenie rozwiązania .NET 10;
+    • konfiguracja Blazor Web App;
+    • konfiguracja EF Core;
+    • SQLite;
+    • podstawowa struktura bazy;
+    • uruchamianie lokalnego serwera;
+    • podstawowy layout;
+    • konfiguracja logowania.
+ETAP 2 – NETWORK DISCOVERY
+    • wykrywanie interfejsów sieciowych;
+    • wykrywanie zakresów CIDR;
+    • discovery urządzeń;
+    • skanowanie portów;
+    • rozpoznawanie usług;
+    • zapisywanie wyników w bazie.
+ETAP 3 – ASSETS
+    • lista urządzeń;
+    • szczegóły urządzenia;
+    • historia skanowań;
+    • filtrowanie;
+    • sortowanie;
+    • wyszukiwanie.
+ETAP 4 – VULNERABILITY INTELLIGENCE
+    • integracja z NVD;
+    • integracja z CISA KEV;
+    • integracja z EPSS;
+    • lokalna baza podatności;
+    • dopasowywanie wersji;
+    • ocena pewności dopasowania.
+ETAP 5 – RISK ENGINE
+    • mechanizm oceny ryzyka;
+    • klasyfikacja zagrożeń;
+    • priorytetyzacja;
+    • dashboard;
+    • Security Posture Score.
+ETAP 6 – AI SECURITY ANALYST
+    • dołączenie Ollamy;
+    • integracja C#;
+    • dołączenie modelu;
+    • automatyczne uruchamianie;
+    • interfejs rozmowy;
+    • kontekst infrastruktury;
+    • analiza podatności;
+    • rekomendacje.
+ETAP 7 – MONITORING I TOPOLOGY
+    • historia skanów;
+    • porównywanie;
+    • wykrywanie zmian;
+    • mapa sieci;
+    • relacje;
+    • potencjalne ścieżki ekspozycji.
+ETAP 8 – EXTERNAL ATTACK SURFACE
+    • domeny;
+    • DNS;
+    • subdomeny;
+    • certyfikaty;
+    • publiczne usługi.
+ETAP 9 – RAPORTY
+    • raport PDF;
+    • eksport JSON;
+    • eksport ZIP;
+    • import audytu.
+ETAP 10 – AGENTY
+    • agent Windows;
+    • agent Linux;
+    • komunikacja HTTPS;
+    • rejestracja;
+    • autoryzacja;
+    • przesyłanie wyników.
+ETAP 11 – PAKOWANIE
+    • Windows;
+    • Linux;
+    • instalatory;
+    • automatyczne uruchamianie;
+    • dołączony Ollama Runtime;
+    • dołączony model AI;
+    • testy instalacji na czystych systemach.
+22. ZASADY PRACY AGENTA PROGRAMISTYCZNEGO
+To bardzo ważna część.
+Nie ograniczaj się do opisywania, jak można coś zrobić.
+Masz rzeczywiście tworzyć kod i pliki projektu.
+Pracuj w następujący sposób:
+    1. Najpierw przeanalizuj aktualne środowisko i istniejące pliki projektu.
+    2. Jeżeli projekt już istnieje, nie nadpisuj go bez potrzeby.
+    3. Przygotuj architekturę i plan realizacji.
+    4. Przedstaw strukturę katalogów.
+    5. Rozpocznij implementację pierwszego etapu.
+    6. Twórz kompletne, kompilowalne fragmenty kodu.
+    7. Po każdym etapie uruchamiaj kompilację.
+    8. Naprawiaj błędy przed przejściem do kolejnego etapu.
+    9. Dodawaj testy.
+    10. Aktualizuj dokumentację.
+Nie twórz fikcyjnych metod ani atrap funkcjonalności.
+Nie pozostawiaj kodu z komentarzami TODO zamiast implementacji, chyba że dana funkcjonalność została świadomie odłożona.
+Nie twórz wszystkich klas i interfejsów bez ich rzeczywistego wykorzystania.
+Nie komplikuj architektury ponad potrzeby.
+Preferuj konkretne, czytelne rozwiązania w C#.
+Nie używaj JavaScriptu, jeśli można osiągnąć ten sam efekt w Blazor.
+Nie pytaj o każdą drobną decyzję techniczną. Podejmuj rozsądne decyzje samodzielnie i dokumentuj je.
+Jeśli występuje istotna decyzja, która wpływa na architekturę, koszty, bezpieczeństwo lub zakres produktu, przedstaw rekomendację i uzasadnienie.
+Nie zmieniaj samowolnie podstawowych założeń projektu.
+Po każdym etapie przedstaw:
+    • co zostało wykonane;
+    • jakie pliki zostały dodane lub zmienione;
+    • jakie funkcjonalności działają;
+    • wynik kompilacji;
+    • wynik testów;
+    • co pozostaje do wykonania;
+    • jaki jest następny etap.
+23. WYMAGANIA KONKURSOWE I DEMONSTRACJA
+WELES jest przygotowywany z myślą o HackNation 2026.
+Najważniejsze jest stworzenie produktu, który można szybko uruchomić i zaprezentować.
+Przygotuj scenariusz demonstracyjny trwający maksymalnie 2 minuty.
+Powinien obejmować:
+    1. Uruchomienie WELES.
+    2. Wykrycie urządzeń w lokalnej sieci.
+    3. Rozpoznanie usług i portów.
+    4. Wykrycie przykładowych podatności.
+    5. Pokazanie Security Posture Score.
+    6. Otwarcie AI Security Analyst.
+    7. Zadanie pytania o największe zagrożenia.
+    8. Pokazanie rekomendacji napraw.
+Przygotuj również środowisko demonstracyjne, które pozwoli zaprezentować produkt, jeśli sieć podczas prezentacji nie będzie dostępna.
+Nie udawaj rzeczywistych wyników w trybie demonstracyjnym.
+24. KRYTERIA UKOŃCZENIA PRODUKTU
+Projekt można uznać za gotowy do demonstracji, kiedy:
+    • działa na Windows;
+    • działa na Linux;
+    • nie wymaga instalacji .NET Runtime;
+    • nie wymaga zewnętrznej bazy danych;
+    • SQLite tworzy się automatycznie;
+    • aplikacja potrafi wykrywać urządzenia;
+    • potrafi wykrywać porty i usługi;
+    • zapisuje wyniki skanowania;
+    • potrafi porównywać skany;
+    • posiada bazę informacji o podatnościach;
+    • potrafi obliczać ryzyko;
+    • posiada dashboard;
+    • posiada lokalnego asystenta AI;
+    • Ollama i model są dostarczane z instalatorem;
+    • AI działa bez Internetu;
+    • generuje raport PDF;
+    • można uruchomić demonstrację bez dodatkowej konfiguracji.
+
+25. PIERWSZE ZADANIE – ROZPOCZĘCIE PROJEKTU
+Nie zaczynaj od implementowania wszystkich modułów.
+Najpierw:
+    1. Przeanalizuj wymagania.
+    2. Wskaż potencjalne problemy techniczne i ryzyka.
+    3. Zaproponuj ostateczną architekturę.
+    4. Dobierz konkretny model AI i sposób jego dystrybucji, uwzględniając licencję.
+    5. Zaproponuj mechanizm dołączania Ollamy do instalatora Windows i Linux.
+    6. Zaprojektuj bazę danych.
+    7. Przygotuj dokładną strukturę solution.
+    8. Przedstaw plan realizacji etapami.
+    9. Wskaż, które funkcjonalności są konieczne do pierwszej demonstracji, a które można odłożyć.
+Następnie rozpocznij ETAP 1 i faktycznie utwórz projekt.
+Nie kończ pracy na przedstawieniu planu. Po jego przedstawieniu rozpocznij implementację.
+
+NAJWAŻNIEJSZA ZASADA
+WELES ma być profesjonalnym, samodzielnym narzędziem Attack Surface Intelligence, a nie zwykłym skanerem portów z dodanym chatbotem.
+Największą wartością produktu ma być połączenie rzeczywistego wykrywania infrastruktury, informacji o podatnościach, kontekstowej oceny ryzyka, monitorowania zmian oraz lokalnego AI, które potrafi wyjaśnić użytkownikowi, co naprawdę dzieje się w jego sieci.
+Projektuj z myślą o rzeczywistym użytkowniku, który instaluje aplikację i chce od razu z niej korzystać.
+
+
+Moje dodatkowe zalecenia przed rozpoczęciem
+Są trzy rzeczy, które szczególnie polecam zachować:
+    1. Nie budować wszystkiego naraz. Najpierw działające skanowanie, baza i dashboard. Potem CVE, ocena ryzyka i AI. Dzięki temu będziesz mieć działający produkt nawet wtedy, gdy zabraknie czasu na wszystkie moduły.
+    2. Nie uzależniać instalatora od jednej karty graficznej. AI powinno działać na CPU, a GPU być opcjonalnym przyspieszeniem.
+    3. Nie traktować Ollamy jako części logiki aplikacji. Zrób interfejs IAiService, żeby w przyszłości można było wymienić Ollamę na llama.cpp

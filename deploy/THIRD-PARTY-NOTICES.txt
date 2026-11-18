@@ -1,0 +1,12 @@
+WELES – third-party components
+==============================
+
+.NET / ASP.NET Core / Entity Framework Core – MIT License, (c) .NET Foundation and Contributors
+SQLite – Public Domain
+Microsoft.Data.Sqlite / SQLitePCLRaw – MIT / Apache-2.0
+Serilog – Apache-2.0
+
+Bundled in later stages (listed when added to the package):
+  Ollama – MIT License
+  Qwen3-4B-Instruct-2507 (GGUF Q4_K_M) – Apache-2.0, (c) Alibaba Cloud
+  NVD data – U.S. Government work (public domain); CISA KEV – public domain; EPSS – FIRST.org, attribution required

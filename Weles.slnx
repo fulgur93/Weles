@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <File Path="src\MainJob.txt" />
+    <Project Path="src/Weles.App/Weles.App.csproj" />
+    <Project Path="src/Weles.Core/Weles.Core.csproj" />
+    <Project Path="src/Weles.Infrastructure/Weles.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Weles.Tests/Weles.Tests.csproj" />
+  </Folder>
+</Solution>

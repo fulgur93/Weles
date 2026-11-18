@@ -1,0 +1,28 @@
+@if (Status is null)
+{
+    <StatusPill Tone="muted">Sprawdzanie…</StatusPill>
+}
+else
+{
+    switch (Status.State)
+    {
+        case AiEngineState.Ready:
+            <StatusPill Tone="ok">Gotowe · @Status.ConfiguredModel</StatusPill>
+            break;
+        case AiEngineState.ModelMissing:
+            <StatusPill Tone="warn">Brak modelu</StatusPill>
+            break;
+        default:
+            <StatusPill Tone="muted">Niedostępne</StatusPill>
+            break;
+    }
+
+    @if (!string.IsNullOrEmpty(Status.Message))
+    {
+        <p class="muted small">@Status.Message @(Status.State == AiEngineState.Unavailable ? "Dołączenie silnika Ollama i modelu do instalatora – Etap 6. Pozostałe moduły działają bez AI." : "")</p>
+    }
+}
+
+@code {
+    [Parameter] public AiEngineStatus? Status { get; set; }
+}

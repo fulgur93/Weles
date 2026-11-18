@@ -1,0 +1,21 @@
+@page "/Error"
+@using System.Diagnostics
+
+<PageTitle>Błąd · WELES</PageTitle>
+
+<div class="page-header"><div><h1>Wystąpił błąd</h1><p class="page-subtitle">Podczas przetwarzania żądania wystąpił nieoczekiwany błąd. Szczegóły zapisano w logach aplikacji.</p></div></div>
+
+@if (!string.IsNullOrEmpty(RequestId))
+{
+    <p class="muted">Identyfikator żądania: <code>@RequestId</code></p>
+}
+
+@code {
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    private string? RequestId { get; set; }
+
+    protected override void OnInitialized() =>
+        RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+}

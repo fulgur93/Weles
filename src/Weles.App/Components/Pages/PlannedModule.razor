@@ -1,0 +1,54 @@
+@* One page for every module that is not implemented yet. When a module ships, its route is removed from here. *@
+@page "/assets"
+@page "/discovery"
+@page "/scans"
+@page "/attack-surface"
+@page "/vulnerabilities"
+@page "/risk"
+@page "/topology"
+@page "/attack-paths"
+@page "/monitoring"
+@page "/ai"
+@page "/reports"
+@page "/agents"
+@inject NavigationManager Navigation
+
+<PageTitle>@(_module?.Title ?? "Moduł") · WELES</PageTitle>
+
+@if (_module is not null)
+{
+    <div class="page-header">
+        <div>
+            <h1>@_module.Title</h1>
+            <p class="page-subtitle">@_module.Summary</p>
+        </div>
+    </div>
+
+    <section class="card planned-card">
+        <div class="planned-head">
+            <div class="planned-icon"><Icon Name="@_module.Icon" Size="28" /></div>
+            <div>
+                <StatusPill Tone="info">Planowany · Etap @_module.Stage</StatusPill>
+                <p class="muted">Ten moduł nie jest jeszcze zaimplementowany. WELES nie pokazuje pustych ani pozornie działających ekranów – funkcje pojawią się tutaj po zakończeniu etapu.</p>
+            </div>
+        </div>
+        <div class="card-title">Zakres modułu</div>
+        <ul class="checklist">
+            @foreach (var capability in _module.PlannedCapabilities)
+            {
+                <li><Icon Name="layers" Size="15" /> @capability</li>
+            }
+        </ul>
+        <a class="btn btn-ghost" href=""><Icon Name="arrow-left" Size="15" /> Wróć do dashboardu</a>
+    </section>
+}
+
+@code {
+    private WelesModule? _module;
+
+    protected override void OnParametersSet()
+    {
+        var route = Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0];
+        _module = ModuleCatalog.FindByRoute(route);
+    }
+}

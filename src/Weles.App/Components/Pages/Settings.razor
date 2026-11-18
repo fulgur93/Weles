@@ -1,0 +1,114 @@
+@page "/settings"
+@inject RuntimeInfo Runtime
+@inject Weles.Infrastructure.Platform.WelesPaths Paths
+@inject Weles.Infrastructure.Database.DatabaseInfoService DatabaseInfo
+@inject IAiService Ai
+@inject ThemeState ThemeState
+@inject Microsoft.Extensions.Options.IOptions<Weles.Infrastructure.AI.AiOptions> AiOptions
+
+<PageTitle>Settings · WELES</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>Settings</h1>
+        <p class="page-subtitle">Konfiguracja i stan lokalnej instalacji WELES.</p>
+    </div>
+</div>
+
+<section class="grid-2">
+    <div class="card">
+        <div class="card-title"><Icon Name="info" /> Aplikacja</div>
+        <dl class="facts">
+            <dt>Wersja</dt><dd>@Runtime.Version</dd>
+            <dt>Tryb</dt><dd>@(Runtime.DemoMode ? "Demonstracyjny (osobna baza)" : "Produkcyjny")</dd>
+            <dt>Adres panelu</dt><dd class="mono">@Runtime.BaseUrl</dd>
+            <dt>Dostęp</dt><dd>tylko localhost, sesja chroniona tokenem uruchomieniowym</dd>
+            <dt>Uruchomiono</dt><dd>@Runtime.StartedAt.ToLocalTime().ToString("g")</dd>
+            <dt>Środowisko</dt><dd>@Runtime.Framework</dd>
+            <dt>System</dt><dd>@Runtime.OperatingSystem (@Runtime.Architecture)</dd>
+        </dl>
+    </div>
+
+    <div class="card">
+        <div class="card-title"><Icon Name="sun" /> Wygląd</div>
+        <div class="segmented" role="radiogroup" aria-label="Motyw">
+            <button class="@(ThemeState.IsDark ? "active" : "")" @onclick="@(() => ThemeState.SetAsync(ThemeState.Dark))"><Icon Name="moon" Size="15" /> Ciemny</button>
+            <button class="@(!ThemeState.IsDark ? "active" : "")" @onclick="@(() => ThemeState.SetAsync(ThemeState.Light))"><Icon Name="sun" Size="15" /> Jasny</button>
+        </div>
+        <p class="muted small">Wybór jest zapisywany w lokalnej bazie.</p>
+    </div>
+
+    <div class="card">
+        <div class="card-title"><Icon Name="database" /> Baza danych</div>
+        @if (_db is null)
+        {
+            <p class="muted">Wczytywanie…</p>
+        }
+        else
+        {
+            <dl class="facts">
+                <dt>Plik</dt><dd class="mono break">@_db.FilePath</dd>
+                <dt>Rozmiar</dt><dd>@Format.Bytes(_db.SizeBytes)</dd>
+                <dt>SQLite</dt><dd>@_db.SqliteVersion</dd>
+                <dt>Migracje</dt>
+                <dd>
+                    @_db.AppliedMigrations.Count zastosowanych
+                    @if (_db.PendingMigrations.Count > 0)
+                    {
+                        <StatusPill Tone="warn">@_db.PendingMigrations.Count oczekujących</StatusPill>
+                    }
+                </dd>
+            </dl>
+        }
+    </div>
+
+    <div class="card">
+        <div class="card-title"><Icon Name="ai" /> Silnik AI</div>
+        <AiStatusView Status="_ai" />
+        <dl class="facts">
+            <dt>Silnik</dt><dd>@(_ai?.EngineName ?? "Ollama") @(_ai?.EngineVersion is { } v ? $"v{v}" : "")</dd>
+            <dt>Endpoint</dt><dd class="mono">@AiOptions.Value.Endpoint</dd>
+            <dt>Model</dt><dd class="mono">@AiOptions.Value.Model</dd>
+            @if (_ai?.InstalledModels.Count > 0)
+            {
+                <dt>Zainstalowane</dt><dd class="mono">@string.Join(", ", _ai.InstalledModels)</dd>
+            }
+        </dl>
+        <button class="btn btn-ghost" @onclick="RefreshAiAsync" disabled="@_checkingAi"><Icon Name="refresh" Size="15" /> Sprawdź ponownie</button>
+    </div>
+
+    <div class="card span-2">
+        <div class="card-title"><Icon Name="folder" /> Dane i logi</div>
+        <p class="muted small">Dane użytkownika nigdy nie są zapisywane w katalogu instalacyjnym. Logi rotują codziennie (maks. 10 MB na plik, 14 plików) i nie zawierają haseł ani tokenów.</p>
+        <dl class="facts">
+            <dt>Katalog danych</dt><dd class="mono break">@Paths.Root</dd>
+            <dt>Logi</dt><dd class="mono break">@Paths.LogsDirectory</dd>
+            <dt>Raporty</dt><dd class="mono break">@Paths.ReportsDirectory</dd>
+            <dt>Eksporty</dt><dd class="mono break">@Paths.ExportsDirectory</dd>
+            <dt>Baza podatności</dt><dd class="mono break">@Paths.VulnerabilityDataDirectory</dd>
+        </dl>
+        <a class="btn btn-ghost" href="api/logs/download" download><Icon Name="download" Size="15" /> Pobierz logi (ZIP)</a>
+    </div>
+</section>
+
+@code {
+    private Weles.Infrastructure.Database.DatabaseInfo? _db;
+    private AiEngineStatus? _ai;
+    private bool _checkingAi;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _db = await DatabaseInfo.GetInfoAsync();
+        _ai = await Ai.GetStatusAsync();
+    }
+
+    private async Task RefreshAiAsync()
+    {
+        _checkingAi = true;
+        _ai = null;
+        StateHasChanged();
+        _ai = await Ai.GetStatusAsync();
+        _checkingAi = false;
+    }
+
+}

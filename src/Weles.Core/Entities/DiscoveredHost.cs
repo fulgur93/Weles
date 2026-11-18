@@ -1,0 +1,85 @@
+using Weles.Core.Enums;
+
+namespace Weles.Core.Entities;
+
+/// <summary>Immutable snapshot of a host as observed in a single scan.</summary>
+public class DiscoveredHost
+{
+    public int Id { get; set; }
+    public int ScanId { get; set; }
+    public Scan? Scan { get; set; }
+
+    public int? AssetId { get; set; }
+    public Asset? Asset { get; set; }
+
+    public required string IpAddress { get; set; }
+    public string? Hostname { get; set; }
+    public string? MacAddress { get; set; }
+    public string? Vendor { get; set; }
+    public DiscoveryMethod DiscoveryMethods { get; set; }
+    public double? RoundTripMs { get; set; }
+    public int? Ttl { get; set; }
+    public string? OsGuess { get; set; }
+    public DateTime DiscoveredAt { get; set; }
+
+    public List<DiscoveredPort> Ports { get; set; } = [];
+}
+
+public class DiscoveredPort
+{
+    public int Id { get; set; }
+    public int DiscoveredHostId { get; set; }
+    public DiscoveredHost? Host { get; set; }
+
+    public int Port { get; set; }
+    public TransportProtocol Protocol { get; set; }
+    public PortState State { get; set; }
+
+    /// <summary>Why the state was assigned, e.g. "syn-ack", "timeout", "reset".</summary>
+    public string? Reason { get; set; }
+
+    public DiscoveredService? Service { get; set; }
+}
+
+public class DiscoveredService
+{
+    public int Id { get; set; }
+    public int DiscoveredPortId { get; set; }
+    public DiscoveredPort? Port { get; set; }
+
+    public string? ServiceName { get; set; }
+    public string? Product { get; set; }
+    public string? Vendor { get; set; }
+    public string? Version { get; set; }
+    public string? Cpe { get; set; }
+    public string? Banner { get; set; }
+
+    /// <summary>Identification confidence 0–100. Port number alone never yields a version.</summary>
+    public int Confidence { get; set; }
+    public string? DetectionMethod { get; set; }
+    public bool IsTls { get; set; }
+    public string? ExtraInfoJson { get; set; }
+
+    public List<Certificate> Certificates { get; set; } = [];
+}
+
+public class Certificate
+{
+    public int Id { get; set; }
+    public int DiscoveredServiceId { get; set; }
+    public DiscoveredService? Service { get; set; }
+
+    public required string Subject { get; set; }
+    public required string Issuer { get; set; }
+    public DateTime NotBefore { get; set; }
+    public DateTime NotAfter { get; set; }
+    public required string Thumbprint { get; set; }
+    public string? SerialNumber { get; set; }
+    public string? SubjectAlternativeNames { get; set; }
+    public string? KeyAlgorithm { get; set; }
+    public int? KeySize { get; set; }
+    public string? SignatureAlgorithm { get; set; }
+    public string? TlsProtocol { get; set; }
+    public bool IsSelfSigned { get; set; }
+    public bool? HostnameMatches { get; set; }
+}

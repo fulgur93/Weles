@@ -1,0 +1,12 @@
+bin/
+obj/
+/packages/
+riderModule.iml
+/_ReSharper.Caches/*.user
+.vs/
+.idea/
+TestResults/
+artifacts/
+*.db
+*.db-shm
+*.db-wal
