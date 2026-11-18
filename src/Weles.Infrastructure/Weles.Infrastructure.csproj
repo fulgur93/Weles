@@ -17,6 +17,7 @@
   </ItemGroup>
 
   <PropertyGroup>
+    <Description>Infrastruktura WELES: baza SQLite (EF Core, migracje), ścieżki danych użytkownika, silnik skanowania sieci (wykrywanie hostów, porty, rozpoznawanie usług, TLS, HTTP), baza producentów OUI, tablica ARP, kolejka skanów w tle oraz klient lokalnego silnika AI (Ollama).</Description>
   </PropertyGroup>
 
   <ItemGroup>

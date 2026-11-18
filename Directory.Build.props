@@ -9,5 +9,6 @@
     <Version>0.1.0</Version>
     <Product>WELES – Attack Surface Intelligence Platform</Product>
     <Company>WELES</Company>
+    <NeutralLanguage>pl-PL</NeutralLanguage>
   </PropertyGroup>
 </Project>

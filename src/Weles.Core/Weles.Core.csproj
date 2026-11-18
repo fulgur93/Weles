@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <Description>Rdzeń domenowy WELES bez zależności zewnętrznych: encje bazy danych, enumeracje, modele i interfejsy (m.in. IAiService) oraz czysta logika – parsowanie i rozwiązywanie zakresów skanowania, specyfikacja portów, rozpoznawanie banerów i odpowiedzi HTTP, katalog produktów CPE i klasyfikacja urządzeń.</Description>
   </PropertyGroup>
 
 </Project>

@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <Description>Testy jednostkowe i integracyjne WELES (xUnit): parsery i reguły rozpoznawania, baza SQLite, zabezpieczenia lokalnego panelu, sondy usług na lokalnych serwerach testowych oraz pełne skany 127.0.0.1 przez silnik i kolejkę w tle.</Description>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
