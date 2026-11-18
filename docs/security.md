@@ -21,7 +21,7 @@ WELES służy do legalnych audytów infrastruktury, do której masz uprawnienia.
 | Limity | `MaxHostsPerScan`, `MaxConcurrentConnections`, `ConnectionsPerSecond` (token bucket), timeouty połączeń/banerów/sond. |
 | Zatrzymanie | Przycisk „Zatrzymaj skan” anuluje wszystkie sondy; zebrane wyniki są zapisywane, status `Zatrzymany`. |
 | Audyt | `ScanEvent` (dziennik w bazie) + logi aplikacji: start, fazy, ostrzeżenia, zakończenie, błędy. |
-| Brak testów ofensywnych | Tylko: TCP connect, ICMP echo, odczyt banera, `GET /`, handshake TLS, `PING`/`INFO server` (Redis, tylko gdy bez hasła – metadane), `SSLRequest` (PostgreSQL), negocjacja RDP. Bez logowania, bez brute force, bez exploitów. Sondy z danymi tylko na portach ich protokołów. |
+| Brak testów ofensywnych | Tylko: TCP connect, ICMP echo, odczyt banera, `GET /`, handshake TLS, `PING`/`INFO server` (Redis, tylko gdy bez hasła – metadane), `SSLRequest` (PostgreSQL), negocjacja RDP. `CNXN` (ADB – bez odpowiedzi na wyzwanie AUTH), zapytanie DNS `version.bind` (CHAOS TXT), zapytania mDNS/DNS-SD (tylko sieć lokalna, wyniki filtrowane do zakresu). Bez logowania, bez brute force, bez exploitów. Sondy z danymi tylko na portach ich protokołów. |
 | Dane z sieci są niezaufane | Banery i nagłówki są sanityzowane (drukowalne ASCII, limit długości), regexy z timeoutem, rozmiary odpowiedzi ograniczone. |
 
 ## Ochrona lokalnego panelu (zaimplementowane w Etapie 1)

@@ -50,6 +50,7 @@ public static class Labels
         AssetType.VirtualMachine => "Maszyna wirtualna",
         AssetType.Nas => "NAS",
         AssetType.NetworkDevice => "Urządzenie sieciowe",
+        AssetType.MobileDevice => "Urządzenie mobilne",
         _ => type.ToString()
     };
 
@@ -60,6 +61,7 @@ public static class Labels
         if (methods.HasFlag(DiscoveryMethod.TcpConnect)) parts.Add("TCP");
         if (methods.HasFlag(DiscoveryMethod.Arp)) parts.Add("ARP");
         if (methods.HasFlag(DiscoveryMethod.Dns)) parts.Add("DNS");
+        if (methods.HasFlag(DiscoveryMethod.Mdns)) parts.Add("mDNS");
         if (methods.HasFlag(DiscoveryMethod.Agent)) parts.Add("Agent");
         return parts.Count == 0 ? "—" : string.Join(" · ", parts);
     }

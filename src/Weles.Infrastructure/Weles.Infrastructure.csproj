@@ -21,7 +21,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Discovery\Data\oui.csv.gz" LogicalName="Weles.oui.csv.gz" />
+    <EmbeddedResource Include="Discovery\Data\oui.txt.gz" LogicalName="Weles.oui.txt.gz" />
   </ItemGroup>
 
   <ItemGroup>

@@ -12,8 +12,10 @@ public class OuiAndArpTests
     [Fact]
     public void Bundled_registry_is_loaded_and_resolves_known_vendors()
     {
-        Assert.True(Bundled.Count > 20_000); // IEEE MA-L registry: ~26.5k assignments
+        Assert.True(Bundled.Count > 35_000); // complete IEEE MA-L registry: ~39k assignments
         Assert.Contains("Cisco", Bundled.Lookup("00:00:0C:12:34:56"));
+        // Regression: missing from IEEE oui.csv, present in oui.txt (found on a real network scan).
+        Assert.Equal("Frontier Silicon Ltd", Bundled.Lookup("00:22:61:7b:98:19"));
     }
 
     [Theory]
@@ -42,14 +44,14 @@ public class OuiAndArpTests
     }
 
     [Fact]
-    public void Csv_parser_handles_quoted_commas()
+    public void Registry_parser_reads_hex_lines_and_ignores_base16_lines()
     {
-        var csv = "Registry,Assignment,Organization Name,Organization Address\nMA-L,ABCDEF,\"Acme, Inc.\",\"Street 1, City\"\nMA-M,ABCDEF1,Other,x\n";
+        var txt = "OUI/MA-L\t\t\tOrganization\n\n00-22-61   (hex)\t\tFrontier Silicon Ltd\n002261     (base 16)\t\tFrontier Silicon Ltd\n\t\t\t\tCambridge GB\nAB-CD-EF   (hex)\t\tAcme, Inc.\n";
         var gz = new MemoryStream();
-        using (var z = new GZipStream(gz, CompressionLevel.Fastest, leaveOpen: true)) z.Write(Encoding.UTF8.GetBytes(csv));
+        using (var z = new GZipStream(gz, CompressionLevel.Fastest, leaveOpen: true)) z.Write(Encoding.UTF8.GetBytes(txt));
         var db = new OuiDatabase(() => new MemoryStream(gz.ToArray()));
 
-        Assert.Equal(1, db.Count);
+        Assert.Equal(2, db.Count);
         Assert.Equal("Acme, Inc.", db.Lookup("ab:cd:ef:00:00:01"));
     }
 

@@ -32,7 +32,10 @@ nie pokazują pustych ani pozornie działających ekranów.
 2. **Zakres** – wpisz adresy (IP, CIDR do /16, zakres `10.0.0.10-50`, domena) oraz wykluczenia. „Podgląd zakresu”
    pokazuje, ile adresów zostanie sprawdzonych. Adresy publiczne wymagają osobnej zgody.
 3. **Zatwierdź…** – potwierdź, że masz uprawnienia do zasobów. Każda edycja zakresu cofa zatwierdzenie.
-4. Wybierz profil portów: *Szybki* (39 portów), *Standardowy* (~130) albo własną listę (`22,80,8000-8100`) i **Uruchom skan**.
+4. Wybierz profil portów: *Szybki* (39 portów), *Standardowy* (~130), *Urządzenia mobilne* (szybki + ADB, FTP aplikacji
+   do udostępniania plików, AirDroid, KDE Connect, iPhone) albo własną listę (`22,80,8000-8100`) i **Uruchom skan**.
+   Niezależnie od profilu WELES pyta sieć lokalną przez mDNS, jakie usługi ogłaszają urządzenia (np. Chromecast,
+   drukarki, debugowanie bezprzewodowe Androida) – ogłoszone porty są skanowane zawsze.
 5. Strona skanu pokazuje postęp na żywo (fazy, hosty, porty, usługi) i przycisk **Zatrzymaj skan** – zebrane wyniki zostają zapisane.
 6. Kliknij host, aby zobaczyć usługi: produkt i wersję, **pewność identyfikacji** i metodę (baner, HTTP, TLS…),
    tytuł strony, wykryte panele administracyjne, certyfikat TLS (ważność, wystawca, zgodność nazwy), brakujące nagłówki
@@ -42,6 +45,13 @@ nie pokazują pustych ani pozornie działających ekranów.
 Wersja z dopiskiem dystrybucji (np. Ubuntu) może zawierać poprawki bezpieczeństwa bez zmiany numeru – WELES to zaznacza.
 
 Limity (równoległość, tempo, timeouty, maks. liczba hostów) są w `appsettings.json`, sekcja `Weles:Scanning`.
+
+## Telefony i tablety
+
+WELES sprawdza, co telefon **wystawia w sieci**: otwarte porty, ADB przez sieć (z autoryzacją lub bez), debugowanie
+bezprzewodowe (wykrywane przez mDNS), serwery udostępniania plików. Telefony zwykle mają losowy adres MAC, więc
+producent nie jest znany. Wersji Androida/iOS i poprawek bezpieczeństwa nie da się odczytać z sieci.
+Aby przetestować wykrywanie, włącz na telefonie *Opcje programisty → Debugowanie bezprzewodowe* i uruchom skan.
 
 ## Motyw
 

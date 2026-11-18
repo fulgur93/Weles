@@ -45,7 +45,8 @@ public enum DiscoveryMethod
     TcpConnect = 2,
     Arp = 4,
     Dns = 8,
-    Agent = 16
+    Agent = 16,
+    Mdns = 32
 }
 
 public enum AssetType
@@ -61,7 +62,8 @@ public enum AssetType
     IoTDevice = 8,
     VirtualMachine = 9,
     Nas = 10,
-    NetworkDevice = 11
+    NetworkDevice = 11,
+    MobileDevice = 12
 }
 
 /// <summary>Business criticality of an asset, set by the user (default Medium).</summary>

@@ -164,6 +164,7 @@ Kluczowa decyzja: **rozdzielenie tożsamości od obserwacji**.
 ### 4.4. Zmiany w Etapie 2 (migracja `Stage2Discovery`)
 
 - `ScanEvent` – dziennik skanu (start, fazy, ostrzeżenia, zatrzymanie, błędy), kaskadowo z `Scan`.
+- Migracja `Stage2Mdns`: `DiscoveredHost.AnnouncedServicesJson` (usługi ogłaszane przez mDNS); `AssetType.MobileDevice`, `DiscoveryMethod.Mdns`.
 - `Scan`: `HostsTargeted`, `HostsProbed`, `PortCount`, `ScopeSnapshot` (zakres w chwili skanu – zakres można później edytować), `SettingsJson` (użyte limity).
 - `DiscoveredHost`: `IsGateway`, `AssetTypeGuess`, `ClassificationConfidence`, `ClassificationReasons`; `Asset.ClassificationReasons`; `ScanTarget.UpdatedAt`.
 - Zapisywane są wyłącznie porty **otwarte**; zamknięcie portu w Monitoringu = brak portu w kolejnym skanie.
@@ -193,7 +194,32 @@ Zasady rozpoznawania:
 - Sufiks dystrybucji (`Ubuntu-3ubuntu0.10`, `+deb12u3`, `(Ubuntu)`) zapisywany jako `distribution` – podstawa statusu „Wymaga weryfikacji” w Etapie 4.
 - Brak udanego handshake TLS 1.0/1.1 jest **niejednoznaczny** (polityka OpenSSL klienta) – raportowana jest tylko potwierdzona akceptacja.
 
-Ograniczenia znane po Etapie 2: brak UDP (SNMP, mDNS, NetBIOS-NS), brak SMB negotiate (wersja SMB/SMBv1 – Etap 5), brak STARTTLS dla SMTP/IMAP, MongoDB rozpoznawane tylko z portu.
+Weryfikacja na prawdziwej sieci (192.168.0.0/24, 2026‑11‑18, za zgodą właściciela): 11 urządzeń z 254 adresów
+(router TP‑Link, punkt dostępowy Tenda, 2 dekodery ADB, radio internetowe Frontier Silicon, Chromecast/Android TV,
+telefony z losowym MAC, komputer z WELES), skan Szybki ~18 s, Standardowy ~21 s; 3 kolejne skany → 33 obserwacje,
+11 zasobów (korelacja bez duplikatów). Dekodery bez odpowiedzi ICMP wykryte przez TCP + ARP.
+
+Zasada dla DNS: wersja z `version.bind` może należeć do serwera nadrzędnego (router przekazujący zapytania) – pewność 55
+i flaga `dns.versionNote`; Etap 4 musi traktować dopasowania o pewności < 70 jako „Wymaga weryfikacji”.
+
+### 5.1. Urządzenia mobilne i mDNS
+
+- Profil portów `mobile` = profil szybki + usługi zostawiane włączone na telefonach: ADB przez TCP (5555), serwery FTP
+  aplikacji do udostępniania plików (2121, 2221), SSH Termux (8022), AirDroid (8888/8889), KDE Connect (1714–1764),
+  synchronizacja iPhone (62078), AirPlay (7000).
+- Sonda ADB wysyła wyłącznie pakiet `CNXN` (pierwszy krok `adb connect`) i odczytuje odpowiedź: `AUTH` = ADB włączone
+  z autoryzacją, `CNXN` = ADB **bez** autoryzacji (+ model urządzenia). WELES nigdy nie odpowiada na wyzwanie AUTH
+  i nie wysyła klucza – na telefonie nie pojawia się okno autoryzacji i nie powstaje sesja.
+- mDNS/DNS-SD (`MdnsDiscovery`): zapytania „legacy unicast” z portu efemerycznego do 224.0.0.251:5353 (bez zajmowania
+  portu 5353), dwie rundy – enumeracja typów + lista typów istotnych (`MdnsServiceCatalog`). Wyniki są filtrowane do
+  zatwierdzonego zakresu. Porty ogłoszone przez urządzenie są zawsze skanowane – tak wykrywane jest debugowanie
+  bezprzewodowe Androida (losowy port, `_adb-tls-connect._tcp`).
+- Z sieci **nie da się** ustalić wersji Androida/iOS, poziomu poprawek ani zainstalowanych aplikacji – do tego potrzebny
+  byłby agent na urządzeniu lub MDM. WELES ocenia wyłącznie to, co telefon wystawia w sieci.
+- Weryfikacja na żywo (2026‑11‑18): mDNS ujawnił radio „DigitRadio 140” i Android TV „kuchnia” wraz z portem 6466,
+  którego nie ma w żadnym profilu; telefon Xiaomi nie ogłaszał usług i miał zamknięte wszystkie 65 535 portów TCP.
+
+Ograniczenia znane po Etapie 2: brak UDP poza mDNS (SNMP, NetBIOS-NS, SSDP), brak SMB negotiate (wersja SMB/SMBv1 – Etap 5), brak STARTTLS dla SMTP/IMAP, MongoDB rozpoznawane tylko z portu.
 
 ## 6. Bezpieczeństwo aplikacji (Etap 1)
 
@@ -239,3 +265,7 @@ Ograniczenia znane po Etapie 2: brak UDP (SNMP, mDNS, NetBIOS-NS), brak SMB nego
 | 2026‑11‑18 | Sondy wysyłające dane (Redis, PostgreSQL, RDP) tylko na ich standardowych portach – nie wysyłamy obcych protokołów do nieznanych usług. |
 | 2026‑11‑18 | Skany wykonywane sekwencyjnie (jeden naraz) – przewidywalne obciążenie sieci i SQLite; równoległość wewnątrz skanu ograniczona `ConnectionGate`. |
 | 2026‑11‑18 | Laboratorium demo (Docker) przesunięte do Etapu 4 – wtedy stare wersje usług dają widoczne dopasowania CVE; na maszynie deweloperskiej brak Dockera. |
+| 2026‑11‑18 | Rejestr OUI z `oui.txt` zamiast `oui.csv` – CSV z IEEE zawierał 26,5 tys. z 39,2 tys. przypisań (brakowało m.in. Frontier Silicon), wykryte na prawdziwej sieci. |
+| 2026‑11‑18 | Jedno przekierowanie HTTP w obrębie tego samego schematu/hosta/portu (walidacja `Location` – brak znaków sterujących, limit długości); inne hosty nigdy. |
+| 2026‑11‑18 | Nieznany nagłówek `Server` bez wersji nie tworzy produktu (np. „BH”, „Http Server”); w nagłówkach UPnP pomijane są znaczniki protokołu/systemu. UPnP nie jest „panelem administracyjnym”. |
+| 2026‑11‑18 | Wskazówki z certyfikatu TLS (np. `CN=tplinkwifi.net`, `OU=Widevine`) używane do rozpoznania urządzenia; własny komputer rozpoznawany po adresach interfejsów; nazwy `_gateway` z systemd-resolved odrzucane. |

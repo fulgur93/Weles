@@ -26,6 +26,9 @@ public class DiscoveredHost
 
     /// <summary>Newline-separated reasons behind the OS/type guess.</summary>
     public string? ClassificationReasons { get; set; }
+
+    /// <summary>Services the device advertises over mDNS/DNS-SD (JSON array of {Type, Instance, Port}).</summary>
+    public string? AnnouncedServicesJson { get; set; }
     public DateTime DiscoveredAt { get; set; }
 
     public List<DiscoveredPort> Ports { get; set; } = [];

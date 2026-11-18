@@ -48,6 +48,7 @@ internal sealed class DiscoveredHostConfiguration : IEntityTypeConfiguration<Dis
         b.Property(x => x.MacAddress).HasMaxLength(17);
         b.Property(x => x.Vendor).HasMaxLength(255);
         b.Property(x => x.OsGuess).HasMaxLength(255);
+        b.Property(x => x.AnnouncedServicesJson).HasMaxLength(4000);
         b.Property(x => x.ClassificationReasons).HasMaxLength(2000);
         b.HasIndex(x => new { x.ScanId, x.IpAddress }).IsUnique();
         b.HasIndex(x => x.AssetId);

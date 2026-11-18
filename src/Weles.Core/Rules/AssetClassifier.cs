@@ -9,7 +9,10 @@ public sealed record HostEvidence(
     string? Vendor,
     int? Ttl,
     bool IsGateway,
-    string? Hostname);
+    string? Hostname,
+    bool IsLocalMachine = false,
+    bool HasRandomizedMac = false,
+    IReadOnlyCollection<string>? MdnsServiceTypes = null);
 
 public sealed record HostClassification(AssetType Type, string? OsFamily, int Confidence, IReadOnlyList<string> Reasons);
 
@@ -27,7 +30,22 @@ public static class AssetClassifier
         // --- Operating system ---
         string? os = null;
         var osHint = e.Services.Select(s => s.OsHint).FirstOrDefault(h => h is not null);
-        if (osHint is not null)
+        if (e.IsLocalMachine)
+        {
+            os = OperatingSystem.IsWindows() ? "Windows" : OperatingSystem.IsMacOS() ? "macOS" : "Linux";
+            reasons.Add($"Komputer, na którym działa WELES ({os})");
+        }
+        else if (MdnsOs(e) is { } mdnsOs)
+        {
+            os = mdnsOs.Os;
+            reasons.Add($"Urządzenie ogłasza w sieci (mDNS): {mdnsOs.Label}");
+        }
+        else if (e.OpenPorts.Contains(62078))
+        {
+            os = "iOS/iPadOS";
+            reasons.Add("Port synchronizacji iPhone/iPad (62078)");
+        }
+        else if (osHint is not null)
         {
             os = osHint.StartsWith("Linux", StringComparison.Ordinal) ? "Linux" : osHint;
             reasons.Add($"System {osHint} wskazany przez baner usługi");
@@ -54,7 +72,22 @@ public static class AssetClassifier
         AssetType type;
         int confidence;
 
-        if (IsVirtualMachineVendor(vendor))
+        if (e.IsLocalMachine)
+        {
+            type = os == "Windows" ? AssetType.WindowsHost : AssetType.LinuxHost; confidence = 95;
+            if (os == "macOS") type = AssetType.Unknown;
+        }
+        else if (os is "Android" or "iOS/iPadOS" && MdnsDevice(e) is not AssetType.IoTDevice && deviceFromHttp is null)
+        {
+            type = AssetType.MobileDevice; confidence = 75;
+            if (e.Services.FirstOrDefault(s => s.Extra.ContainsKey("adb.model")) is { } adb) reasons.Add($"Model zgłoszony przez ADB: {adb.Extra["adb.model"]}");
+        }
+        else if (MdnsDevice(e) is { } mdnsDevice)
+        {
+            type = mdnsDevice; confidence = 80;
+            reasons.Add($"Typ wynika z usług ogłaszanych przez mDNS: {string.Join(", ", (e.MdnsServiceTypes ?? []).Select(t => MdnsServiceCatalog.Find(t)?.Label ?? t).Distinct())}");
+        }
+        else if (IsVirtualMachineVendor(vendor))
         {
             type = AssetType.VirtualMachine; confidence = 80;
             reasons.Add($"Producent karty sieciowej: {vendor} (wirtualizacja)");
@@ -84,16 +117,21 @@ public static class AssetClassifier
             type = AssetType.Nas; confidence = 75;
             reasons.Add($"Producent: {vendor}");
         }
-        else if (ContainsAny(vendor, "Cisco", "Juniper", "MikroTik", "Ubiquiti", "Aruba", "Netgear", "TP-Link", "Zyxel", "Fortinet") || os == "Network OS")
+        else if (ContainsAny(vendor, NetworkVendors) || os == "Network OS")
         {
             type = ports.Overlaps([22, 23, 80, 443]) ? AssetType.NetworkDevice : AssetType.Switch;
             confidence = 60;
             reasons.Add(vendor.Length > 0 ? $"Producent sprzętu sieciowego: {vendor}" : "TTL charakterystyczny dla urządzeń sieciowych");
         }
-        else if (ports.Contains(1883) || ContainsAny(vendor, "Espressif", "Tuya", "Shelly", "Sonoff", "Xiaomi", "Philips Lighting", "Nest"))
+        else if (ports.Contains(1883) || ContainsAny(vendor, IoTVendors))
         {
             type = AssetType.IoTDevice; confidence = 65;
-            reasons.Add(ports.Contains(1883) ? "Broker/urządzenie MQTT (1883)" : $"Producent IoT: {vendor}");
+            reasons.Add(ports.Contains(1883) ? "Broker/urządzenie MQTT (1883)" : $"Producent urządzeń IoT/multimedialnych: {vendor}");
+        }
+        else if (e.Services.Any(s => s.Extra.ContainsKey("http.upnp")) && os is null)
+        {
+            type = AssetType.IoTDevice; confidence = 45;
+            reasons.Add("Usługa UPnP (typowo urządzenie multimedialne lub IoT) – niska pewność");
         }
         else if (os == "Windows")
         {
@@ -113,8 +151,38 @@ public static class AssetClassifier
             reasons.Add("Za mało danych do określenia typu urządzenia");
         }
 
+        if (e.HasRandomizedMac && type == AssetType.Unknown)
+        {
+            reasons.Add("Losowy adres MAC – zwykle telefon, tablet lub laptop z ochroną prywatności");
+        }
+
         return new HostClassification(type, os, confidence, reasons);
     }
+
+    private static (string Os, string Label)? MdnsOs(HostEvidence e)
+    {
+        foreach (var type in e.MdnsServiceTypes ?? [])
+        {
+            if (MdnsServiceCatalog.Find(type) is { Os: { } os } entry && os is "Android" or "iOS/iPadOS" or "macOS") return (os, entry.Label);
+        }
+
+        return null;
+    }
+
+    private static AssetType? MdnsDevice(HostEvidence e) =>
+        (e.MdnsServiceTypes ?? []).Select(t => MdnsServiceCatalog.Find(t)?.Device).FirstOrDefault(d => d is not null);
+
+    private static readonly string[] NetworkVendors =
+    [
+        "Cisco", "Juniper", "MikroTik", "Routerboard", "Ubiquiti", "Aruba", "Netgear", "TP-Link", "Zyxel", "Fortinet", "Tenda", "D-Link",
+        "Huawei", "ZTE", "Sagemcom", "Technicolor", "AVM", "Linksys", "Mercusys", "Edimax", "Netis", "Draytek", "Arcadyan", "Askey"
+    ];
+
+    private static readonly string[] IoTVendors =
+    [
+        "Espressif", "Tuya", "Shelly", "Sonoff", "Philips Lighting", "Signify", "Nest", "Advanced Digital Broadcast", "Frontier Silicon",
+        "Roku", "Sonos", "Humax", "Vestel", "TechniSat", "Amazon Technologies", "Ring LLC", "Ecobee", "Wyze"
+    ];
 
     public static bool IsVirtualMachineVendor(string vendor) =>
         ContainsAny(vendor, "VMware", "Oracle VirtualBox", "PCS Systemtechnik", "QEMU", "Xensource", "Parallels", "Microsoft Corporation Hyper-V")

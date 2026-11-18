@@ -107,6 +107,7 @@ public static partial class HttpFingerprinter
         new("Hikvision", "device-ui", AssetType.IpCamera, Rx(@"Hikvision|DNVRS-Webs|App-webs")),
         new("Dahua", "device-ui", AssetType.IpCamera, Rx(@"Dahua|DH_WEB")),
         new("Axis camera", "device-ui", AssetType.IpCamera, Rx(@"AXIS")),
+        new("Google Cast / Android TV", "device-ui", AssetType.IoTDevice, Rx(@"OU=Widevine|Google Cast|Chromecast")),
         new("HP printer", "device-ui", AssetType.Printer, Rx(@"HP (LaserJet|OfficeJet|DeskJet|Color LaserJet)|HP-ChaiSOE")),
         new("Brother printer", "device-ui", AssetType.Printer, Rx(@"Brother (HL|MFC|DCP)")),
         new("Epson printer", "device-ui", AssetType.Printer, Rx(@"EPSON")),
@@ -114,7 +115,8 @@ public static partial class HttpFingerprinter
         new("CUPS", "print-server", null, Rx(@"\bCUPS\b")),
     ];
 
-    public static ServiceIdentification Identify(HttpResponseInfo response, bool isTls)
+    /// <param name="certificateSubject">Subject of the TLS certificate – vendors often put the product name there (e.g. "CN=tplinkwifi.net").</param>
+    public static ServiceIdentification Identify(HttpResponseInfo response, bool isTls, string? certificateSubject = null)
     {
         var server = response.Header("Server");
         var (product, version, distro) = ParseServerHeader(server);
@@ -137,14 +139,23 @@ public static partial class HttpFingerprinter
             extra["http.auth"] = auth.Length > 120 ? auth[..120] : auth;
         }
 
-        var haystack = $"{response.Title}\n{server}\n{response.Header("X-Powered-By")}\n{(response.Body.Length > 20_000 ? response.Body[..20_000] : response.Body)}";
-        if (PanelRules.FirstOrDefault(r => r.Pattern.IsMatch(haystack)) is { } panel)
+        if (server is not null && server.Contains("UPnP", StringComparison.OrdinalIgnoreCase)) extra["http.upnp"] = "true";
+
+        var haystack = $"{response.Title}\n{server}\n{response.Header("X-Powered-By")}\n{certificateSubject}\n{(response.Body.Length > 20_000 ? response.Body[..20_000] : response.Body)}";
+        var isUpnp = extra.ContainsKey("http.upnp");
+        var panel = PanelRules.FirstOrDefault(r => r.Pattern.IsMatch(haystack));
+        if (panel is not null && isUpnp)
+        {
+            // A UPnP endpoint names the device vendor in its Server header, but it is not an admin panel.
+            if (panel.Device is { } upnpDevice) extra["http.device"] = upnpDevice.ToString();
+        }
+        else if (panel is not null)
         {
             extra["http.panel"] = panel.Label;
             extra["http.panelCategory"] = panel.Category;
             if (panel.Device is { } device) extra["http.device"] = device.ToString();
         }
-        else if (LoginForm().IsMatch(response.Body) || (response.Title is { } t && LoginTitle().IsMatch(t)))
+        else if (!isUpnp && LoginForm().IsMatch(response.Body) || (response.Title is { } t && LoginTitle().IsMatch(t)))
         {
             extra["http.panel"] = "Panel logowania";
             extra["http.panelCategory"] = "login-page";
@@ -169,9 +180,55 @@ public static partial class HttpFingerprinter
             Banner = response.StatusLine + (server is null ? "" : $" | Server: {server}"),
             DistributionHint = distro,
             OsHint = os,
-            Confidence = product is null ? 70 : version is null ? 80 : 90,
+            Confidence = product is null ? 70 : ProductCatalog.Find(product) is null ? (version is null ? 70 : 75) : version is null ? 80 : 90,
             Method = isTls ? "https-request" : "http-request",
             IsTls = isTls,
+            Extra = extra
+        };
+    }
+
+    /// <summary>
+    /// Returns the path to request when <paramref name="location"/> points to the same scheme, host and port; otherwise null.
+    /// Location is untrusted input: anything with control characters, spaces or an excessive length is rejected.
+    /// </summary>
+    public static string? SameOriginRedirectPath(string? location, IReadOnlyCollection<string> hosts, int port, bool isTls)
+    {
+        if (string.IsNullOrWhiteSpace(location)) return null;
+        location = location.Trim();
+        if (location.Length > 512 || location.Any(c => c < 0x21 || c > 0x7E)) return null;
+
+        if (location.StartsWith("//", StringComparison.Ordinal)) return null;
+        if (location.StartsWith('/')) return location;
+        if (!location.Contains("://", StringComparison.Ordinal)) return "/" + location;
+
+        if (!Uri.TryCreate(location, UriKind.Absolute, out var uri)) return null;
+        var scheme = isTls ? Uri.UriSchemeHttps : Uri.UriSchemeHttp;
+        if (uri.Scheme != scheme || uri.Port != port) return null;
+        var host = uri.Host.Trim('[', ']');
+        return hosts.Any(h => string.Equals(h, host, StringComparison.OrdinalIgnoreCase)) ? uri.PathAndQuery : null;
+    }
+
+    /// <summary>Combines the identification of the first response (a redirect) with the page it redirected to.</summary>
+    public static ServiceIdentification CombineRedirect(ServiceIdentification initial, ServiceIdentification target)
+    {
+        var extra = new Dictionary<string, string>(target.Extra);
+        foreach (var (key, value) in initial.Extra)
+        {
+            if (key is "http.status") extra["http.initialStatus"] = value;
+            else if (key is "http.missingHeaders") continue; // judged on the content page
+            else extra.TryAdd(key, value);
+        }
+
+        var useInitialProduct = target.Product is null && initial.Product is not null;
+        return target with
+        {
+            Product = useInitialProduct ? initial.Product : target.Product,
+            Vendor = useInitialProduct ? initial.Vendor : target.Vendor,
+            Version = useInitialProduct ? initial.Version : target.Version,
+            Cpe = useInitialProduct ? initial.Cpe : target.Cpe,
+            DistributionHint = target.DistributionHint ?? initial.DistributionHint,
+            OsHint = target.OsHint ?? initial.OsHint,
+            Confidence = Math.Max(target.Confidence, initial.Confidence),
             Extra = extra
         };
     }
@@ -207,6 +264,7 @@ public static partial class HttpFingerprinter
             ("Werkzeug", WerkzeugRx()),
             ("gunicorn", GunicornRx()),
             ("Kestrel", KestrelRx()),
+            ("MiniUPnPd", MiniUpnpdRx()),
         ];
 
         foreach (var (product, pattern) in rules)
@@ -218,8 +276,18 @@ public static partial class HttpFingerprinter
             }
         }
 
-        var generic = GenericRx().Match(server);
-        return generic.Success ? (generic.Groups[1].Value, generic.Groups[2].Value, distro) : (server.Split(' ')[0], null, distro);
+        // Unknown server: take the first "Name/version" token that is not a protocol or OS marker,
+        // e.g. "POSIX, UPnP/1.0, Intel MicroStack/1.0.2777" → MicroStack 1.0.2777. Without a version nothing is inferred –
+        // a bare word like "BH" or "Http Server" is kept only as the raw header.
+        foreach (Match m in GenericRx().Matches(server))
+        {
+            if (!NoiseTokens.Contains(m.Groups[1].Value))
+            {
+                return (m.Groups[1].Value, m.Groups[2].Value, distro);
+            }
+        }
+
+        return (null, null, distro);
     }
 
     private static List<string> MissingSecurityHeaders(HttpResponseInfo r, bool isTls)
@@ -253,7 +321,13 @@ public static partial class HttpFingerprinter
     [GeneratedRegex(@"Werkzeug(?:/(\d+(?:\.\d+)*))?", RegexOptions.IgnoreCase)] private static partial Regex WerkzeugRx();
     [GeneratedRegex(@"^gunicorn(?:/(\d+(?:\.\d+)*))?", RegexOptions.IgnoreCase)] private static partial Regex GunicornRx();
     [GeneratedRegex(@"^Kestrel", RegexOptions.IgnoreCase)] private static partial Regex KestrelRx();
-    [GeneratedRegex(@"^([A-Za-z][\w\-.]*)/(\d[\w.\-]*)")] private static partial Regex GenericRx();
+    [GeneratedRegex(@"MiniUPnPd/(\d+(?:\.\d+)*)", RegexOptions.IgnoreCase)] private static partial Regex MiniUpnpdRx();
+    private static readonly HashSet<string> NoiseTokens = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "UPnP", "HTTP", "DLNADOC", "DLNA", "POSIX", "Linux", "Unix", "Windows", "WindowsNT", "Darwin", "Mozilla", "Platinum", "SDK"
+    };
+
+    [GeneratedRegex(@"(?<![\w.\-])([A-Za-z][\w\-.]*)/(\d+(?:\.\d+)*[a-z]?)")] private static partial Regex GenericRx();
     [GeneratedRegex(@"<input[^>]+type\s*=\s*[""']?password", RegexOptions.IgnoreCase)] private static partial Regex LoginForm();
     [GeneratedRegex(@"\b(log ?in|sign ?in|logowanie|admin|administration)\b", RegexOptions.IgnoreCase)] private static partial Regex LoginTitle();
 }

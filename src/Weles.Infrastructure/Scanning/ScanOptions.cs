@@ -25,6 +25,10 @@ public sealed class ScanOptions
 
     public bool UseIcmp { get; set; } = true;
 
+    /// <summary>Ask the local segment over mDNS/DNS-SD which services devices advertise (finds e.g. Android wireless debugging).</summary>
+    public bool UseMdns { get; set; } = true;
+    public int MdnsListenMs { get; set; } = 3000;
+
     /// <summary>TCP ports used to decide whether a host is alive when ICMP is blocked.</summary>
     public int[] LivenessPorts { get; set; } = [22, 53, 80, 135, 139, 443, 445, 3389, 8080];
 }

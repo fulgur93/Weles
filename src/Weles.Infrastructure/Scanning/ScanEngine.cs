@@ -97,8 +97,17 @@ public sealed class ScanEngine(
                 target.Entries.Where(e => !e.IsExclusion && e.Kind == ScanTargetEntryKind.Cidr).Select(e => (e.Value, (string?)null))
                     .Concat(interfaces.Select(i => (i.NetworkCidr, i.Gateway))));
             var gateways = localNetwork.GetGateways();
+            // The machine running WELES is not in its own ARP table – take its MAC from the local interface.
+            var localMachine = interfaces.Where(i => IPAddress.TryParse(i.Address, out _))
+                .GroupBy(i => IPAddress.Parse(i.Address)).ToDictionary(g => g.Key, g => g.First().MacAddress);
 
             await using var gate = new ConnectionGate(options.MaxConcurrentConnections, options.ConnectionsPerSecond);
+
+            // mDNS runs in parallel with host discovery; it only reaches the local link.
+            var localAddresses = interfaces.Select(i => IPAddress.Parse(i.Address)).Where(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork).ToList();
+            var mdnsTask = options.UseMdns && localAddresses.Count > 0
+                ? DiscoverMdnsSafelyAsync(localAddresses, options.MdnsListenMs, cancellationToken)
+                : Task.FromResult<IReadOnlyDictionary<IPAddress, MdnsHost>>(new Dictionary<IPAddress, MdnsHost>());
 
             // Phase 1: which hosts exist?
             progress.Phase = ScanPhase.HostDiscovery;
@@ -126,18 +135,39 @@ public sealed class ScanEngine(
                 }
             }
 
-            progress.AddAlive(arpOnly);
+            var scopeMdns = (await mdnsTask).Where(m => scopeSet.Contains(m.Key)).ToDictionary(m => m.Key, m => m.Value);
+            var mdnsOnly = 0;
+            foreach (var (address, host) in scopeMdns)
+            {
+                if (alive.TryGetValue(address, out var known))
+                {
+                    alive[address] = known with { Methods = known.Methods | DiscoveryMethod.Mdns };
+                }
+                else
+                {
+                    alive[address] = new LivenessResult(true, DiscoveryMethod.Mdns, null, null, []);
+                    mdnsOnly++;
+                }
+            }
+
+            if (scopeMdns.Count > 0)
+            {
+                await writer.AddEventAsync(scanId, ScanEventLevel.Info,
+                    $"mDNS: {scopeMdns.Count} urządzeń w zakresie ogłasza {scopeMdns.Sum(m => m.Value.Services.Count)} usług.");
+            }
+
+            progress.AddAlive(arpOnly + mdnsOnly);
             await writer.AddEventAsync(scanId, ScanEventLevel.Info,
                 $"Wykrywanie hostów zakończone: {alive.Count} aktywnych z {scope.Addresses.Count} adresów" + (arpOnly > 0 ? $" (w tym {arpOnly} wyłącznie z tablicy ARP)." : "."));
 
             // Phase 2: ports and services per live host.
             progress.Phase = ScanPhase.PortScan;
-            progress.SetPortsTotal(alive.Count * ports.Count);
+            progress.SetPortsTotal(alive.Sum(a => ports.Count + (scopeMdns.TryGetValue(a.Key, out var m) ? m.Services.Count(s => s.Port is not null) : 0)));
             var prober = new ServiceProber(options);
             await Parallel.ForEachAsync(alive.OrderBy(a => Ipv4Sort(a.Key)), new ParallelOptions { MaxDegreeOfParallelism = options.ParallelHostScans, CancellationToken = cancellationToken },
                 async (entry, ct) =>
                 {
-                    var result = await ScanHostAsync(entry.Key, entry.Value, ports, arp, gateways, prober, gate, options, progress, ct);
+                    var result = await ScanHostAsync(entry.Key, entry.Value, ports, arp, gateways, localMachine, scopeMdns.GetValueOrDefault(entry.Key), prober, gate, options, progress, ct);
                     await writer.SaveHostAsync(scanId, result);
                     progress.HostCompleted();
                 });
@@ -161,13 +191,17 @@ public sealed class ScanEngine(
 
     private async Task<HostScanResult> ScanHostAsync(
         IPAddress address, LivenessResult liveness, IReadOnlyList<int> ports, IReadOnlyDictionary<IPAddress, string> arp,
-        IReadOnlySet<IPAddress> gateways, ServiceProber prober, ConnectionGate gate, ScanOptions options, ScanProgress progress, CancellationToken ct)
+        IReadOnlySet<IPAddress> gateways, IReadOnlyDictionary<IPAddress, string?> localMachine, MdnsHost? mdns, ServiceProber prober, ConnectionGate gate, ScanOptions options, ScanProgress progress, CancellationToken ct)
     {
         progress.Activity = $"Skanowanie portów {address}";
         var open = new ConcurrentDictionary<int, string>();
         foreach (var known in liveness.OpenPorts.Where(ports.Contains)) open[known] = "syn-ack";
 
-        await Parallel.ForEachAsync(ports, new ParallelOptions { MaxDegreeOfParallelism = 64, CancellationToken = ct }, async (port, token) =>
+        // Ports advertised over mDNS (e.g. Android wireless debugging on a random port) are always checked.
+        var announcedPorts = mdns?.Services.Where(s => s.Port is > 0).Select(s => s.Port!.Value) ?? [];
+        var portsToCheck = ports.Concat(announcedPorts).Distinct().ToList();
+
+        await Parallel.ForEachAsync(portsToCheck, new ParallelOptions { MaxDegreeOfParallelism = 64, CancellationToken = ct }, async (port, token) =>
         {
             if (open.ContainsKey(port))
             {
@@ -181,7 +215,7 @@ public sealed class ScanEngine(
             progress.PortChecked(result.State == PortState.Open);
         });
 
-        var hostname = await NetworkProbe.ReverseDnsAsync(address, options.DnsTimeoutMs, ct);
+        var hostname = await NetworkProbe.ReverseDnsAsync(address, options.DnsTimeoutMs, ct) ?? mdns?.Hostname;
 
         progress.Activity = $"Rozpoznawanie usług {address}";
         var services = new ConcurrentBag<PortScanResult>();
@@ -194,21 +228,62 @@ public sealed class ScanEngine(
                     probe = await prober.ProbeAsync(address, port.Key, hostname, token);
                 }
 
+                if (mdns?.Services.FirstOrDefault(s => s.Port == port.Key) is { } announced)
+                {
+                    probe = probe with { Identification = WithMdnsHint(probe.Identification, announced) };
+                }
+
                 if (probe.Identification.Method != "port-hint") progress.ServiceIdentified();
                 services.Add(new PortScanResult(port.Key, port.Value, probe));
             });
 
-        var mac = arp.GetValueOrDefault(address);
+        var isLocal = localMachine.TryGetValue(address, out var localMac) || IPAddress.IsLoopback(address);
+        var mac = arp.GetValueOrDefault(address) ?? localMac;
         var vendor = oui.Lookup(mac);
         var isGateway = gateways.Contains(address);
         var portList = services.OrderBy(s => s.Port).ToList();
         var classification = AssetClassifier.Classify(new HostEvidence(
             portList.Select(p => p.Port).ToList(),
             portList.Select(p => p.Service!.Identification).ToList(),
-            vendor, liveness.Ttl, isGateway, hostname));
+            vendor, liveness.Ttl, isGateway, hostname,
+            IsLocalMachine: isLocal,
+            HasRandomizedMac: OuiDatabase.TryParseMac(mac, out var macBytes) && OuiDatabase.IsLocallyAdministered(macBytes),
+            MdnsServiceTypes: mdns?.Services.Select(s => s.Type).ToList()));
 
         var methods = liveness.Methods | (mac is not null ? DiscoveryMethod.Arp : DiscoveryMethod.None) | (hostname is not null ? DiscoveryMethod.Dns : DiscoveryMethod.None);
-        return new HostScanResult(address, methods, liveness.RoundTripMs, liveness.Ttl, hostname, mac, vendor, isGateway, classification, portList);
+        return new HostScanResult(address, methods, liveness.RoundTripMs, liveness.Ttl, hostname, mac, vendor, isGateway, classification, portList, mdns?.Services);
+    }
+
+    /// <summary>The device's own announcement names a service that did not identify itself to the probes.</summary>
+    internal static Core.Models.ServiceIdentification WithMdnsHint(Core.Models.ServiceIdentification id, MdnsService announced)
+    {
+        var entry = MdnsServiceCatalog.Find(announced.Type);
+        id.Extra["mdns.service"] = entry?.Label ?? announced.Type;
+        id.Extra["mdns.instance"] = announced.Instance;
+        if (announced.Txt.Count > 0) id.Extra["mdns.txt"] = string.Join("; ", announced.Txt.Take(8)) is var t && t.Length > 300 ? t[..300] : t;
+        if (entry?.IsRisky == true) id.Extra["mdns.risky"] = "true";
+
+        var weak = id.Method is "port-hint" or "banner-unrecognized" or "tls-handshake";
+        return !weak || entry is null ? id : id with
+        {
+            ServiceName = id.IsTls && !entry.ServiceName.Contains("tls") ? $"ssl/{entry.ServiceName}" : entry.ServiceName,
+            OsHint = id.OsHint ?? entry.Os,
+            Confidence = Math.Max(id.Confidence, 70),
+            Method = id.Method + "+mdns"
+        };
+    }
+
+    private async Task<IReadOnlyDictionary<IPAddress, MdnsHost>> DiscoverMdnsSafelyAsync(IReadOnlyList<IPAddress> local, int listenMs, CancellationToken ct)
+    {
+        try
+        {
+            return await MdnsDiscovery.DiscoverAsync(local, listenMs, ct);
+        }
+        catch (Exception ex) when (ex is System.Net.Sockets.SocketException or IOException)
+        {
+            logger.LogWarning(ex, "mDNS discovery failed – continuing without it");
+            return new Dictionary<IPAddress, MdnsHost>();
+        }
     }
 
     private static async Task<IReadOnlyList<IPAddress>> ResolveDomainAsync(string domain, CancellationToken ct) =>

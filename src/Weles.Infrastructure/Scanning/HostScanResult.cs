@@ -16,4 +16,5 @@ public sealed record HostScanResult(
     string? Vendor,
     bool IsGateway,
     HostClassification Classification,
-    IReadOnlyList<PortScanResult> OpenPorts);
+    IReadOnlyList<PortScanResult> OpenPorts,
+    IReadOnlyList<MdnsService>? AnnouncedServices = null);

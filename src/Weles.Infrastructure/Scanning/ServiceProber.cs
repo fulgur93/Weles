@@ -68,13 +68,15 @@ public sealed partial class ServiceProber(ScanOptions options)
     }
 
     /// <summary>Client-speaks-first protocols probed only on their registered ports, to avoid sending foreign bytes to unknown services.</summary>
-    private static readonly Dictionary<int, string> ProtocolProbePorts = new() { [6379] = "redis", [5432] = "postgresql", [3389] = "rdp" };
+    private static readonly Dictionary<int, string> ProtocolProbePorts = new() { [6379] = "redis", [5432] = "postgresql", [3389] = "rdp", [53] = "dns", [5555] = "adb" };
 
     internal Task<ServiceIdentification?> ProbeProtocolAsync(string protocol, IPAddress address, int port, CancellationToken ct) => protocol switch
     {
         "redis" => ProbeRedisAsync(address, port, ct),
         "postgresql" => ProbePostgresAsync(address, port, ct),
         "rdp" => ProbeRdpAsync(address, port, ct),
+        "dns" => ProbeDnsAsync(address, port, ct),
+        "adb" => ProbeAdbAsync(address, port, ct),
         _ => Task.FromResult<ServiceIdentification?>(null)
     };
 
@@ -162,22 +164,68 @@ public sealed partial class ServiceProber(ScanOptions options)
         };
     }
 
-    private async Task<ServiceIdentification?> TryHttpAsync(IPAddress address, int port, string? hostname, CancellationToken ct)
+    private async Task<ServiceIdentification?> ProbeAdbAsync(IPAddress address, int port, CancellationToken ct)
     {
         using var client = await NetworkProbe.OpenAsync(address, port, options.ConnectTimeoutMs, ct);
         if (client is null) return null;
-        var raw = await SendHttpRequestAsync(client.GetStream(), address, port, hostname, ct);
-        return HttpResponseParser.TryParse(raw, out var response) ? HttpFingerprinter.Identify(response, isTls: false) : null;
+        return AdbHandshake.Parse(await ExchangeAsync(client.GetStream(), AdbHandshake.BuildConnect(), ct));
     }
 
-    private async Task<ServiceProbeResult?> TryTlsAsync(IPAddress address, int port, string? hostname, CancellationToken ct)
+    private async Task<ServiceIdentification?> ProbeDnsAsync(IPAddress address, int port, CancellationToken ct)
     {
         using var client = await NetworkProbe.OpenAsync(address, port, options.ConnectTimeoutMs, ct);
+        if (client is null) return null;
+        var id = (ushort)Random.Shared.Next(1, ushort.MaxValue);
+        return DnsVersionProbe.Parse(await ExchangeAsync(client.GetStream(), DnsVersionProbe.BuildQuery(id), ct), id);
+    }
+
+    private async Task<ServiceIdentification?> TryHttpAsync(IPAddress address, int port, string? hostname, CancellationToken ct)
+    {
+        var first = await HttpGetAsync(address, port, hostname, "/", ct);
+        if (first is null) return null;
+        var initial = HttpFingerprinter.Identify(first, isTls: false);
+        if (RedirectPath(first, address, port, hostname, isTls: false) is not { } path) return initial;
+
+        var target = await HttpGetAsync(address, port, hostname, path, ct);
+        return target is null ? initial : HttpFingerprinter.CombineRedirect(initial, HttpFingerprinter.Identify(target, isTls: false));
+    }
+
+    private async Task<HttpResponseInfo?> HttpGetAsync(IPAddress address, int port, string? hostname, string path, CancellationToken ct)
+    {
+        using var client = await NetworkProbe.OpenAsync(address, port, options.ConnectTimeoutMs, ct);
+        if (client is null) return null;
+        var raw = await SendHttpRequestAsync(client.GetStream(), address, port, hostname, path, ct);
+        return HttpResponseParser.TryParse(raw, out var response) ? response : null;
+    }
+
+    /// <summary>One redirect hop is followed, and only within the same scheme, host and port (the approved target).</summary>
+    private static string? RedirectPath(HttpResponseInfo response, IPAddress address, int port, string? hostname, bool isTls) =>
+        response.StatusCode is >= 300 and < 400
+            ? HttpFingerprinter.SameOriginRedirectPath(response.Header("Location"), hostname is null ? [address.ToString()] : [address.ToString(), hostname], port, isTls)
+            : null;
+
+    private sealed class TlsSession(TcpClient client, SslStream stream, X509Certificate2? certificate, SslPolicyErrors errors) : IAsyncDisposable
+    {
+        public SslStream Stream => stream;
+        public X509Certificate2? Certificate => certificate;
+        public SslPolicyErrors Errors => errors;
+
+        public async ValueTask DisposeAsync()
+        {
+            await stream.DisposeAsync();
+            certificate?.Dispose();
+            client.Dispose();
+        }
+    }
+
+    private async Task<TlsSession?> OpenTlsAsync(IPAddress address, int port, string? hostname, CancellationToken ct)
+    {
+        var client = await NetworkProbe.OpenAsync(address, port, options.ConnectTimeoutMs, ct);
         if (client is null) return null;
 
         X509Certificate2? certificate = null;
         var policyErrors = SslPolicyErrors.None;
-        await using var ssl = new SslStream(client.GetStream(), leaveInnerStreamOpen: false);
+        var ssl = new SslStream(client.GetStream(), leaveInnerStreamOpen: false);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(options.ProbeTimeoutMs);
         try
@@ -189,41 +237,56 @@ public sealed partial class ServiceProber(ScanOptions options)
                 // The certificate is recorded and assessed, never trusted: WELES does not send credentials.
                 RemoteCertificateValidationCallback = (_, cert, _, errors) =>
                 {
-                    if (cert is not null) certificate = X509CertificateLoader.LoadCertificate(cert.GetRawCertData());
+                    if (cert is not null) certificate ??= X509CertificateLoader.LoadCertificate(cert.GetRawCertData());
                     policyErrors = errors;
                     return true;
                 }
             }, timeout.Token);
+            return new TlsSession(client, ssl, certificate, policyErrors);
         }
         catch (Exception ex) when (ex is AuthenticationException or IOException or SocketException or System.ComponentModel.Win32Exception || (ex is OperationCanceledException && !ct.IsCancellationRequested))
         {
+            await ssl.DisposeAsync();
             certificate?.Dispose();
+            client.Dispose();
             return null;
         }
+    }
 
-        using (certificate)
+    private async Task<ServiceProbeResult?> TryTlsAsync(IPAddress address, int port, string? hostname, CancellationToken ct)
+    {
+        await using var session = await OpenTlsAsync(address, port, hostname, ct);
+        if (session is null) return null;
+
+        var ssl = session.Stream;
+        var snapshot = session.Certificate is null ? null : CertificateSnapshot.From(session.Certificate, hostname, ssl.SslProtocol.ToString(), ssl.NegotiatedCipherSuite.ToString(), session.Errors);
+
+        ServiceIdentification identification;
+        var raw = await SendHttpRequestAsync(ssl, address, port, hostname, "/", ct);
+        if (HttpResponseParser.TryParse(raw, out var response))
         {
-            var snapshot = certificate is null ? null : CertificateSnapshot.From(certificate, hostname, ssl.SslProtocol.ToString(), ssl.NegotiatedCipherSuite.ToString(), policyErrors);
-
-            ServiceIdentification identification;
-            var raw = await SendHttpRequestAsync(ssl, address, port, hostname, ct);
-            if (HttpResponseParser.TryParse(raw, out var response))
+            identification = HttpFingerprinter.Identify(response, isTls: true, snapshot?.Subject);
+            if (RedirectPath(response, address, port, hostname, isTls: true) is { } path)
             {
-                identification = HttpFingerprinter.Identify(response, isTls: true);
+                await using var second = await OpenTlsAsync(address, port, hostname, ct);
+                if (second is not null && HttpResponseParser.TryParse(await SendHttpRequestAsync(second.Stream, address, port, hostname, path, ct), out var target))
+                {
+                    identification = HttpFingerprinter.CombineRedirect(identification, HttpFingerprinter.Identify(target, isTls: true, snapshot?.Subject));
+                }
             }
-            else
-            {
-                var hint = ServiceIdentification.FromPortOnly(port);
-                identification = hint with { ServiceName = $"ssl/{hint.ServiceName}", IsTls = true, Method = "tls-handshake", Confidence = Math.Max(hint.Confidence, 40) };
-            }
-
-            identification.Extra["tls.protocol"] = ssl.SslProtocol.ToString();
-            identification.Extra["tls.cipher"] = ssl.NegotiatedCipherSuite.ToString();
-            if (policyErrors != SslPolicyErrors.None) identification.Extra["tls.validation"] = policyErrors.ToString();
-            if (await AcceptsLegacyTlsAsync(address, port, hostname, ct)) identification.Extra["tls.legacy"] = "TLS 1.0/1.1 accepted";
-
-            return new ServiceProbeResult(identification, snapshot);
         }
+        else
+        {
+            var hint = ServiceIdentification.FromPortOnly(port);
+            identification = hint with { ServiceName = $"ssl/{hint.ServiceName}", IsTls = true, Method = "tls-handshake", Confidence = Math.Max(hint.Confidence, 40) };
+        }
+
+        identification.Extra["tls.protocol"] = ssl.SslProtocol.ToString();
+        identification.Extra["tls.cipher"] = ssl.NegotiatedCipherSuite.ToString();
+        if (session.Errors != SslPolicyErrors.None) identification.Extra["tls.validation"] = session.Errors.ToString();
+        if (await AcceptsLegacyTlsAsync(address, port, hostname, ct)) identification.Extra["tls.legacy"] = "TLS 1.0/1.1 accepted";
+
+        return new ServiceProbeResult(identification, snapshot);
     }
 
     /// <summary>
@@ -255,11 +318,11 @@ public sealed partial class ServiceProber(ScanOptions options)
         }
     }
 
-    private async Task<byte[]> SendHttpRequestAsync(Stream stream, IPAddress address, int port, string? hostname, CancellationToken ct)
+    private async Task<byte[]> SendHttpRequestAsync(Stream stream, IPAddress address, int port, string? hostname, string path, CancellationToken ct)
     {
         var host = hostname ?? (address.AddressFamily == AddressFamily.InterNetworkV6 ? $"[{address}]" : address.ToString());
         if (port is not (80 or 443)) host += $":{port}";
-        var request = $"GET / HTTP/1.1\r\nHost: {host}\r\nUser-Agent: {UserAgent}\r\nAccept: text/html,*/*\r\nConnection: close\r\n\r\n";
+        var request = $"GET {path} HTTP/1.1\r\nHost: {host}\r\nUser-Agent: {UserAgent}\r\nAccept: text/html,*/*\r\nConnection: close\r\n\r\n";
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);

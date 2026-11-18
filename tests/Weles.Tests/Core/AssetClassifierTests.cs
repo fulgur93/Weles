@@ -82,4 +82,39 @@ public class AssetClassifierTests
         Assert.Equal(AssetType.Unknown, c.Type);
         Assert.Equal(0, c.Confidence);
     }
+
+    [Fact]
+    public void Local_machine_is_identified_with_its_real_os()
+    {
+        var c = AssetClassifier.Classify(new HostEvidence([], [], null, null, false, "laptop", IsLocalMachine: true));
+        Assert.Contains(c.Reasons, r => r.Contains("WELES"));
+        Assert.Equal(OperatingSystem.IsWindows() ? "Windows" : OperatingSystem.IsMacOS() ? "macOS" : "Linux", c.OsFamily);
+    }
+
+    [Theory]
+    [InlineData("Tenda Technology Co.,Ltd.Dongguan branch", AssetType.NetworkDevice)]
+    [InlineData("Advanced Digital Broadcast SA", AssetType.IoTDevice)]
+    [InlineData("Frontier Silicon Ltd", AssetType.IoTDevice)]
+    public void Vendors_seen_on_a_real_network_are_classified(string vendor, AssetType expected)
+    {
+        Assert.Equal(expected, Classify([80, 8080], vendor: vendor).Type);
+    }
+
+    [Fact]
+    public void Randomized_mac_adds_an_explanation_but_no_guess()
+    {
+        var c = AssetClassifier.Classify(new HostEvidence([], [], null, null, false, null, HasRandomizedMac: true));
+        Assert.Equal(AssetType.Unknown, c.Type);
+        Assert.Contains(c.Reasons, r => r.Contains("Losowy adres MAC"));
+    }
+
+    [Fact]
+    public void Upnp_only_device_is_a_low_confidence_iot_guess()
+    {
+        var svc = new ServiceIdentification { ServiceName = "http", Method = "test" };
+        svc.Extra["http.upnp"] = "true";
+        var c = Classify([8080], [svc]);
+        Assert.Equal(AssetType.IoTDevice, c.Type);
+        Assert.True(c.Confidence < 50);
+    }
 }

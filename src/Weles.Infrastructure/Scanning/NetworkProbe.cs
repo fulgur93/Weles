@@ -83,7 +83,8 @@ public static class NetworkProbe
         {
             var entry = await Dns.GetHostEntryAsync(address.ToString(), timeout.Token);
             var name = entry.HostName?.TrimEnd('.');
-            return string.IsNullOrWhiteSpace(name) || IPAddress.TryParse(name, out _) ? null : name.ToLowerInvariant();
+            // systemd-resolved synthesizes "_gateway" (and "_outbound") – they are not real host names.
+            return string.IsNullOrWhiteSpace(name) || name.StartsWith('_') || IPAddress.TryParse(name, out _) ? null : name.ToLowerInvariant();
         }
         catch (Exception ex) when (ex is SocketException || (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
         {

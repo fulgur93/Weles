@@ -6,6 +6,18 @@ public static class PortSpecification
 {
     public const string Quick = "quick";
     public const string Standard = "standard";
+    public const string Mobile = "mobile";
+
+    /// <summary>
+    /// Services that phones and tablets expose when a debugging or sharing feature is left on:
+    /// ADB over TCP (5555), file-sharing FTP servers (2121, 2221 – e.g. Xiaomi ShareMe/Mi File Manager), Termux SSH (8022),
+    /// AirDroid (8888/8889), KDE Connect (1714–1764), iPhone sync (62078), AirPlay (7000).
+    /// Android "wireless debugging" uses a random port – it is found through mDNS, not through this list.
+    /// </summary>
+    public static readonly IReadOnlyList<int> MobileOnlyPorts =
+    [
+        5555, 5037, 2121, 2221, 8022, 2222, 8888, 8889, 7000, 62078, 8080, 8000, 9090, 1234, 12345, .. Enumerable.Range(1714, 51)
+    ];
 
     /// <summary>The ports named in the product requirements plus common IoT/admin ports.</summary>
     public static readonly IReadOnlyList<int> QuickPorts =
@@ -41,6 +53,9 @@ public static class PortSpecification
             case Standard:
                 ports = Sorted(StandardPorts);
                 return true;
+            case Mobile:
+                ports = Sorted([.. QuickPorts, .. MobileOnlyPorts]);
+                return true;
             case "":
                 error = "Nie podano portów.";
                 return false;
@@ -49,9 +64,9 @@ public static class PortSpecification
         var set = new SortedSet<int>();
         foreach (var token in spec.Split([',', ' ', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
-            if (token is Quick or Standard)
+            if (token is Quick or Standard or Mobile)
             {
-                set.UnionWith(token == Quick ? QuickPorts : StandardPorts);
+                set.UnionWith(token switch { Quick => QuickPorts, Standard => StandardPorts, _ => [.. QuickPorts, .. MobileOnlyPorts] });
                 continue;
             }
 

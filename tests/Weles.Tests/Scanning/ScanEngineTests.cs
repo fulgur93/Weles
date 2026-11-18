@@ -86,7 +86,7 @@ public class ScanEngineTests
 
         var asset = await db.Assets.SingleAsync();
         Assert.Equal(host.AssetId, asset.Id);
-        Assert.Equal("Linux", asset.OsFamily);
+        Assert.Contains("WELES", asset.ClassificationReasons); // loopback = the machine running WELES
     }
 
     [Fact]
@@ -163,6 +163,25 @@ public class ScanEngineTests
         Assert.Equal(ScanStatus.Cancelled, scan.Status);
         Assert.NotNull(scan.CompletedAt);
         Assert.Contains(scan.Events, e => e.Message.Contains("zatrzymany"));
+    }
+}
+
+public class ScanResultWriterTests
+{
+    [Fact]
+    public async Task Segment_keeps_gateway_when_the_same_cidr_comes_from_scope_and_interface()
+    {
+        // Regression from a real scan: the scope entry (no gateway) shadowed the interface (with gateway).
+        await using var testDb = await TestDatabase.CreateAsync();
+        var writer = new ScanResultWriter(testDb, TimeProvider.System);
+
+        await writer.EnsureSegmentsAsync([("192.168.0.0/24", null), ("192.168.0.0/24", "192.168.0.1"), ("10.0.0.0/24", null)]);
+        await writer.EnsureSegmentsAsync([("192.168.0.0/24", null)]);
+
+        await using var db = testDb.CreateDbContext();
+        var segments = await db.NetworkSegments.OrderBy(s => s.Cidr).ToListAsync();
+        Assert.Equal(2, segments.Count);
+        Assert.Equal("192.168.0.1", segments.Single(s => s.Cidr == "192.168.0.0/24").Gateway);
     }
 }
 

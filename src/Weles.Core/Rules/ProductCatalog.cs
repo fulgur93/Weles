@@ -40,6 +40,11 @@ public static class ProductCatalog
         ["Redis"] = new("Redis", "redis", "redis"),
         ["PostgreSQL"] = new("PostgreSQL", "postgresql", "postgresql"),
         ["Apache Tomcat"] = new("Apache Tomcat", "apache", "tomcat"),
+        ["dnsmasq"] = new("dnsmasq", "thekelleys", "dnsmasq"),
+        ["Unbound"] = new("Unbound", "nlnetlabs", "unbound"),
+        ["BIND"] = new("BIND", "isc", "bind"),
+        ["PowerDNS Recursor"] = new("PowerDNS Recursor", "powerdns", "recursor"),
+        ["MiniUPnPd"] = new("MiniUPnPd", "miniupnp_project", "miniupnpd"),
         ["Kestrel"] = new("Kestrel", "microsoft", "asp.net_core"),
     };
 

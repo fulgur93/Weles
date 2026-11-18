@@ -4,23 +4,23 @@ using System.Text;
 namespace Weles.Infrastructure.Discovery;
 
 /// <summary>
-/// Vendor lookup by MAC prefix using the bundled IEEE MA-L registry (refresh with deploy/tools/update-oui.sh).
+/// Vendor lookup by MAC prefix using the bundled IEEE MA-L registry oui.txt (refresh with deploy/tools/update-oui.sh).
 /// Loaded lazily on first use; works offline.
 /// </summary>
 public sealed class OuiDatabase
 {
     private readonly Lazy<Dictionary<uint, string>> _entries;
 
-    public OuiDatabase() : this(() => typeof(OuiDatabase).Assembly.GetManifestResourceStream("Weles.oui.csv.gz")
+    public OuiDatabase() : this(() => typeof(OuiDatabase).Assembly.GetManifestResourceStream("Weles.oui.txt.gz")
                                       ?? throw new InvalidOperationException("Embedded OUI registry is missing."))
     {
     }
 
-    public OuiDatabase(Func<Stream> gzipCsvSource)
+    public OuiDatabase(Func<Stream> gzipRegistrySource)
     {
         _entries = new Lazy<Dictionary<uint, string>>(() =>
         {
-            using var gz = new GZipStream(gzipCsvSource(), CompressionMode.Decompress);
+            using var gz = new GZipStream(gzipRegistrySource(), CompressionMode.Decompress);
             using var reader = new StreamReader(gz, Encoding.UTF8);
             return Parse(reader);
         });
@@ -66,49 +66,23 @@ public sealed class OuiDatabase
         return bytes.Any(b => b != 0) && bytes.Any(b => b != 0xFF);
     }
 
+    /// <summary>Parses the IEEE oui.txt registry: lines of the form "00-22-61   (hex)\t\tFrontier Silicon Ltd".</summary>
     internal static Dictionary<uint, string> Parse(TextReader reader)
     {
         var result = new Dictionary<uint, string>(40_000);
-        reader.ReadLine(); // header: Registry,Assignment,Organization Name,Organization Address
         while (reader.ReadLine() is { } line)
         {
-            var fields = SplitCsv(line, 3);
-            if (fields.Count < 3 || fields[0] != "MA-L" || fields[1].Length != 6) continue;
-            if (uint.TryParse(fields[1], System.Globalization.NumberStyles.HexNumber, null, out var prefix))
+            var marker = line.IndexOf("(hex)", StringComparison.Ordinal);
+            if (marker < 8) continue;
+            var hex = line[..marker].Trim().Replace("-", "");
+            var name = line[(marker + 5)..].Trim();
+            if (hex.Length == 6 && name.Length > 0 && uint.TryParse(hex, System.Globalization.NumberStyles.HexNumber, null, out var prefix))
             {
-                result.TryAdd(prefix, fields[2].Trim());
+                result.TryAdd(prefix, name);
             }
         }
 
         return result;
-    }
-
-    private static List<string> SplitCsv(string line, int maxFields)
-    {
-        var fields = new List<string>(maxFields);
-        var sb = new StringBuilder();
-        var quoted = false;
-        for (var i = 0; i < line.Length && fields.Count < maxFields; i++)
-        {
-            var c = line[i];
-            if (c == '"')
-            {
-                if (quoted && i + 1 < line.Length && line[i + 1] == '"') { sb.Append('"'); i++; }
-                else quoted = !quoted;
-            }
-            else if (c == ',' && !quoted)
-            {
-                fields.Add(sb.ToString());
-                sb.Clear();
-            }
-            else
-            {
-                sb.Append(c);
-            }
-        }
-
-        if (fields.Count < maxFields) fields.Add(sb.ToString());
-        return fields;
     }
 
     /// <summary>Virtualization prefixes that are not (or not clearly) in the IEEE registry.</summary>

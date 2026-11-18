@@ -55,6 +55,9 @@ public sealed class ScanResultWriter(IDbContextFactory<WelesDbContext> contextFa
                 AssetTypeGuess = result.Classification.Type,
                 ClassificationConfidence = result.Classification.Confidence,
                 ClassificationReasons = Truncate(string.Join('\n', result.Classification.Reasons), 2000),
+                AnnouncedServicesJson = result.AnnouncedServices is { Count: > 0 } announced
+                    ? Truncate(JsonSerializer.Serialize(announced.Take(30).Select(a => new { a.Type, a.Instance, a.Port })), 4000)
+                    : null,
                 DiscoveredAt = now,
                 Ports = result.OpenPorts.Select(p => ToEntity(p)).ToList()
             };
@@ -104,7 +107,8 @@ public sealed class ScanResultWriter(IDbContextFactory<WelesDbContext> contextFa
         {
             await using var db = await contextFactory.CreateDbContextAsync();
             var now = Now;
-            foreach (var (cidr, gateway) in segments.DistinctBy(s => s.Cidr))
+            // The same CIDR can come from the scope (no gateway) and from a local interface (with gateway) – keep the gateway.
+            foreach (var (cidr, gateway) in segments.GroupBy(s => s.Cidr).Select(g => (g.Key, g.Select(x => x.Gateway).FirstOrDefault(x => x is not null))))
             {
                 var existing = await db.NetworkSegments.SingleOrDefaultAsync(s => s.Cidr == cidr);
                 if (existing is null)

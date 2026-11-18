@@ -166,4 +166,54 @@ public class ServiceProberTests
         var (success, _, _) = await NetworkProbe.PingAsync(IPAddress.Loopback, 2000);
         Assert.True(success);
     }
+
+    [Fact]
+    public async Task Same_host_redirect_is_followed_once_to_read_the_title()
+    {
+        var paths = new List<string>();
+        await using var server = new FakeServer(async (s, ct) =>
+        {
+            var buf = new byte[4096];
+            var read = await s.ReadAsync(buf, ct);
+            var path = Encoding.ASCII.GetString(buf, 0, read).Split(' ')[1];
+            lock (paths) paths.Add(path);
+            var reply = path == "/"
+                ? "HTTP/1.0 302 Redirect\r\nServer: Http Server\r\nLocation: /main.html\r\n\r\n"
+                : "HTTP/1.0 302 Again\r\nLocation: /third.html\r\n\r\n<title>Main page</title>";
+            await s.WriteAsync(Encoding.ASCII.GetBytes(reply), ct);
+        });
+
+        var result = await Probe(server.Port);
+
+        Assert.Equal("Main page", result.Identification.Extra["http.title"]);
+        Assert.Equal(["/", "/main.html"], paths); // exactly one hop
+    }
+
+    [Fact]
+    public async Task Redirect_to_another_host_is_not_followed()
+    {
+        var requests = 0;
+        await using var server = FakeServer.RequestResponse(_ =>
+        {
+            Interlocked.Increment(ref requests);
+            return "HTTP/1.1 301 Moved\r\nLocation: http://evil.example/\r\n\r\n"u8.ToArray();
+        });
+
+        var result = await Probe(server.Port);
+
+        Assert.Equal("http://evil.example/", result.Identification.Extra["http.location"]);
+        Assert.Equal(1, requests);
+    }
+
+    [Fact]
+    public async Task Dns_over_tcp_is_confirmed_with_version_query()
+    {
+        await using var server = FakeServer.RequestResponse(req =>
+            req.Length > 14 ? Weles.Tests.Core.DnsVersionProbeTests.Response(req, 0, "dnsmasq-2.90") : null);
+
+        var id = await Prober.ProbeProtocolAsync("dns", IPAddress.Loopback, server.Port, CancellationToken.None);
+
+        Assert.Equal(("dns", "dnsmasq", "2.90"), (id!.ServiceName, id.Product, id.Version));
+        Assert.Equal("cpe:2.3:a:thekelleys:dnsmasq:2.90:*:*:*:*:*:*:*", id.Cpe);
+    }
 }

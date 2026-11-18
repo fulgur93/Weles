@@ -102,6 +102,16 @@ else
                                         {
                                             <div class="reasons"><strong>Dlaczego @Labels.Of(h.AssetTypeGuess).ToLowerInvariant()?</strong> @string.Join(" · ", h.ClassificationReasons.Split('\n'))</div>
                                         }
+                                        @if (Announced(h) is { Count: > 0 } announced)
+                                        {
+                                            <div class="reasons">
+                                                <strong>Usługi ogłaszane przez urządzenie (mDNS):</strong>
+                                                @foreach (var a in announced)
+                                                {
+                                                    <span class="chip" title="@a.Type">@(Weles.Core.Rules.MdnsServiceCatalog.Find(a.Type)?.Label ?? a.Type)@(a.Port is { } ap ? $" :{ap}" : "") · @a.Instance</span>
+                                                }
+                                            </div>
+                                        }
                                         @if (h.Ports.Count > 0)
                                         {
                                             <table class="table table-inner">
@@ -236,8 +246,20 @@ else
         catch (JsonException) { return []; }
     }
 
-    private static string MethodLabel(string? method) => method switch
+    private sealed record Announcement(string Type, string Instance, int? Port);
+
+    private static List<Announcement> Announced(DiscoveredHost h)
     {
+        if (string.IsNullOrEmpty(h.AnnouncedServicesJson)) return [];
+        try { return JsonSerializer.Deserialize<List<Announcement>>(h.AnnouncedServicesJson) ?? []; }
+        catch (JsonException) { return []; }
+    }
+
+    private static string MethodLabel(string? method) => method is not null && method.EndsWith("+mdns", StringComparison.Ordinal)
+        ? MethodLabel(method[..^5]) + " + ogłoszenie mDNS"
+        : method switch
+    {
+        "adb-handshake" => "powitanie ADB (bez autoryzacji)",
         "banner" => "baner usługi",
         "banner-unrecognized" => "baner (nierozpoznany)",
         "http-request" => "żądanie HTTP",
@@ -247,6 +269,7 @@ else
         "redis-ping" => "Redis PING",
         "postgres-sslrequest" => "PostgreSQL SSLRequest",
         "rdp-negotiation" => "negocjacja RDP",
+        "dns-version-query" => "zapytanie DNS (version.bind)",
         "port-hint" => "tylko numer portu",
         null => "—",
         _ => method
@@ -278,6 +301,21 @@ else
         if (x.TryGetValue("rdp.security", out var rdp)) yield return ($"Zabezpieczenie RDP: {rdp}", !rdp.StartsWith("NLA", StringComparison.Ordinal));
         if (x.TryGetValue("postgresql.ssl", out var pgSsl)) yield return (pgSsl == "supported" ? "PostgreSQL obsługuje SSL" : "PostgreSQL bez obsługi SSL", pgSsl != "supported");
         if (x.TryGetValue("mysql.access", out _)) yield return ("Serwer odrzuca połączenia z tego hosta", false);
+        if (x.TryGetValue("adb.auth", out var adbAuth))
+        {
+            yield return (adbAuth == "none"
+                ? "ADB przez sieć BEZ autoryzacji – pełny dostęp do urządzenia dla każdego w sieci"
+                : "ADB przez sieć włączone (wymaga zatwierdzenia na urządzeniu) – wyłącz, jeśli nieużywane", true);
+            if (x.TryGetValue("adb.model", out var model)) yield return ($"Model: {model}", false);
+        }
+
+        if (x.TryGetValue("mdns.service", out var mdnsService))
+            yield return ($"Ogłaszane przez mDNS: {mdnsService}" + (x.TryGetValue("mdns.instance", out var inst) ? $" („{inst}”)" : ""), x.ContainsKey("mdns.risky"));
+        if (x.TryGetValue("dns.rcode", out var rcode)) yield return ($"DNS potwierdzony (odpowiedź {rcode})", false);
+        if (x.TryGetValue("dns.version", out var dnsVersion)) yield return ($"Ujawniona wersja: {dnsVersion}", true);
+        if (x.ContainsKey("dns.versionNote")) yield return ("Wersja może należeć do serwera nadrzędnego (przekazywanie zapytań) – wymaga weryfikacji", false);
+        if (x.ContainsKey("http.upnp")) yield return ("Usługa UPnP dostępna w sieci", true);
+        if (x.TryGetValue("http.initialStatus", out var initial)) yield return ($"Strona po przekierowaniu (pierwsza odpowiedź HTTP {initial})", false);
         if (x.TryGetValue("rfb.version", out var rfb)) yield return ($"Protokół RFB {rfb}", false);
         if (svc?.ServiceName == "telnet") yield return ("Telnet przesyła dane bez szyfrowania", true);
         if (svc?.DetectionMethod == "port-hint") yield return ("Usługa nie odpowiedziała na sondy – nazwa wynika tylko z numeru portu", false);

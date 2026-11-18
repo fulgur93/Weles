@@ -253,6 +253,10 @@ namespace Weles.Infrastructure.Database.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("AnnouncedServicesJson")
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("AssetId")
                         .HasColumnType("INTEGER");
 

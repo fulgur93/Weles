@@ -162,6 +162,7 @@
                             <select class="input input-sm" @bind="_profiles[t.Id]">
                                 <option value="@Weles.Core.Networking.PortSpecification.Quick">Szybki (@Weles.Core.Networking.PortSpecification.QuickPorts.Count portów)</option>
                                 <option value="@Weles.Core.Networking.PortSpecification.Standard">Standardowy (@Weles.Core.Networking.PortSpecification.StandardPorts.Distinct().Count() portów)</option>
+                                <option value="@Weles.Core.Networking.PortSpecification.Mobile">Urządzenia mobilne (szybki + ADB, udostępnianie plików, KDE Connect…)</option>
                                 <option value="custom">Własna lista portów…</option>
                             </select>
                             @if (_profiles[t.Id] == "custom")
