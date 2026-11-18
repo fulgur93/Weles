@@ -42,11 +42,23 @@ internal sealed class ScanConfiguration : IEntityTypeConfiguration<Scan>
     {
         b.Property(x => x.PortSpecification).HasMaxLength(1000);
         b.Property(x => x.ErrorMessage).HasMaxLength(2000);
+        b.Property(x => x.ScopeSnapshot).HasMaxLength(8000);
+        b.Property(x => x.SettingsJson).HasMaxLength(2000);
+        b.HasMany(x => x.Events).WithOne(x => x.Scan).HasForeignKey(x => x.ScanId).OnDelete(DeleteBehavior.Cascade);
         b.HasIndex(x => new { x.Status, x.StartedAt });
         b.HasIndex(x => x.CreatedAt);
         b.HasMany(x => x.Hosts).WithOne(x => x.Scan).HasForeignKey(x => x.ScanId).OnDelete(DeleteBehavior.Cascade);
         b.HasMany(x => x.Findings).WithOne(x => x.Scan).HasForeignKey(x => x.ScanId).OnDelete(DeleteBehavior.Cascade);
         b.HasMany(x => x.RiskScores).WithOne(x => x.Scan).HasForeignKey(x => x.ScanId).OnDelete(DeleteBehavior.Cascade);
         b.ToTable(t => t.HasCheckConstraint("CK_Scan_Counters", "HostsAlive >= 0 AND OpenPorts >= 0"));
+    }
+}
+
+internal sealed class ScanEventConfiguration : IEntityTypeConfiguration<ScanEvent>
+{
+    public void Configure(EntityTypeBuilder<ScanEvent> b)
+    {
+        b.Property(x => x.Message).HasMaxLength(1000);
+        b.HasIndex(x => new { x.ScanId, x.Timestamp });
     }
 }

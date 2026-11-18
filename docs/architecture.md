@@ -152,7 +152,7 @@ Kluczowa decyzja: **rozdzielenie tożsamości od obserwacji**.
 
 | Encja | Etap | Zarys |
 |-------|------|-------|
-| `NetworkInterface` | 2 | `AssetId`, `MacAddress`, `IpAddress`, `Name` – urządzenia z wieloma adresami |
+| `NetworkInterface` | 3 | `AssetId`, `MacAddress`, `IpAddress`, `Name` – urządzenia z wieloma adresami (przesunięte z Etapu 2: korelacja MAC/IP w `Asset` wystarcza do discovery) |
 | `SoftwareVersion` | 4 | znormalizowany katalog `(Vendor, Product, Version, Cpe)` współdzielony przez usługi; do tego czasu pola leżą w `DiscoveredService` |
 | `NetworkRelationship` | 7 | `SourceAssetId`, `TargetAssetId`, `Kind` (same‑segment, gateway, reachable‑service), `Evidence`, `Confidence`, `ScanId` |
 | `AttackPath` + `AttackPathStep` | 7 | uporządkowane kroki z `Justification` i `Confidence`, `IsHypothetical = true` zawsze, dopóki nie ma dowodu |
@@ -161,7 +161,41 @@ Kluczowa decyzja: **rozdzielenie tożsamości od obserwacji**.
 | `AIConversation`, `AIMessage` | 6 | rozmowy + wiadomości (`Role`, `Content`, `ContextSnapshotJson`, `Model`, `TokensIn/Out`) |
 | `Agent`, `AgentScan` | 10 | `Name`, `TokenHash` (nigdy jawny token), `Status`, `LastSeenAt`, `RevokedAt`, dozwolone zakresy |
 
-## 5. Bezpieczeństwo aplikacji (Etap 1)
+### 4.4. Zmiany w Etapie 2 (migracja `Stage2Discovery`)
+
+- `ScanEvent` – dziennik skanu (start, fazy, ostrzeżenia, zatrzymanie, błędy), kaskadowo z `Scan`.
+- `Scan`: `HostsTargeted`, `HostsProbed`, `PortCount`, `ScopeSnapshot` (zakres w chwili skanu – zakres można później edytować), `SettingsJson` (użyte limity).
+- `DiscoveredHost`: `IsGateway`, `AssetTypeGuess`, `ClassificationConfidence`, `ClassificationReasons`; `Asset.ClassificationReasons`; `ScanTarget.UpdatedAt`.
+- Zapisywane są wyłącznie porty **otwarte**; zamknięcie portu w Monitoringu = brak portu w kolejnym skanie.
+
+## 5. Silnik discovery (Etap 2)
+
+```
+ScanTargetService.StartScanAsync ──► ScanCoordinator (kolejka, stop, postęp) ──► ScanWorker (BackgroundService, 1 skan naraz)
+                                                                                    │
+                                                                                    ▼
+ScanEngine: ScopeResolver ─► wykrywanie hostów ─► tablica ARP ─► porty ─► reverse DNS ─► ServiceProber ─► AssetClassifier ─► ScanResultWriter
+```
+
+| Faza | Technika | Uprawnienia |
+|------|----------|-------------|
+| Zakres | `TargetParser` (IP, CIDR ≤ /16, zakres, IPv6, domena), wykluczenia wygrywają, adresy publiczne tylko ze zgodą, zarezerwowane/multicast nigdy, limit `MaxHostsPerScan` | – |
+| Hosty | ICMP (`Ping`, na Linuksie przez systemowy `ping`) **lub** TCP connect na porty sondujące – RST też dowodzi istnienia hosta; następnie odczyt tablicy ARP (`/proc/net/arp`, `GetIpNetTable`) – hosty bez odpowiedzi, ale z wpisem ARP, są oznaczane metodą ARP | brak |
+| Porty | TCP connect, `ConnectionGate` = limit równoległości + token bucket (połączenia/s), zamknięcie RST (bez TIME_WAIT) | brak |
+| Usługi | baner pasywny → sondy protokołów tylko na ich portach (Redis `PING`/`INFO server`, PostgreSQL `SSLRequest`, RDP X.224 z wykrywaniem NLA) → `GET /` → TLS (certyfikat, protokół, szyfr, próba TLS 1.0/1.1) → HTTP po TLS | brak |
+| Producent | Rejestr IEEE MA-L osadzony w aplikacji (`oui.csv.gz`, ~26,5 tys. wpisów, odświeżanie `deploy/tools/update-oui.sh`) + prefiksy wirtualizacji; MAC losowe/lokalne oznaczane | – |
+| Klasyfikacja | `AssetClassifier` – typ i system z listą powodów (banery, porty, TTL, producent, brama, interfejs WWW) | – |
+
+Zasady rozpoznawania:
+- **Numer portu nigdy nie daje produktu ani wersji** (`port-hint`, pewność ≤ 25).
+- Pewność: baner/protokół z wersją 90–95, produkt bez wersji 70–85, rozpoznany protokół 60–70, nierozpoznany baner 25.
+- CPE tworzony tylko przy znanym produkcie **i** wersji (`8.9p1` → `8.9:p1` jak w NVD).
+- Sufiks dystrybucji (`Ubuntu-3ubuntu0.10`, `+deb12u3`, `(Ubuntu)`) zapisywany jako `distribution` – podstawa statusu „Wymaga weryfikacji” w Etapie 4.
+- Brak udanego handshake TLS 1.0/1.1 jest **niejednoznaczny** (polityka OpenSSL klienta) – raportowana jest tylko potwierdzona akceptacja.
+
+Ograniczenia znane po Etapie 2: brak UDP (SNMP, mDNS, NetBIOS-NS), brak SMB negotiate (wersja SMB/SMBv1 – Etap 5), brak STARTTLS dla SMTP/IMAP, MongoDB rozpoznawane tylko z portu.
+
+## 6. Bezpieczeństwo aplikacji (Etap 1)
 
 - Kestrel nasłuchuje **wyłącznie** na `127.0.0.1` (port 5080 albo pierwszy wolny).
 - `HostFiltering`: akceptowane tylko `127.0.0.1`, `localhost` (ochrona przed DNS rebinding).
@@ -169,12 +203,12 @@ Kluczowa decyzja: **rozdzielenie tożsamości od obserwacji**.
 - Plik instancji (`instance.json`: PID, port, token) – pozwala drugiemu uruchomieniu otworzyć istniejące okno zamiast startować drugi serwer; na Linuksie uprawnienia `0600`.
 - Logi nie zawierają tokenu (logowany jest jedynie adres bez parametrów).
 
-## 6. Plan realizacji
+## 7. Plan realizacji
 
 | Etap | Zakres | Demo MVP? |
 |------|--------|-----------|
 | 1 | Fundament: solution, Blazor, EF Core + SQLite, migracje, ścieżki danych, Serilog z rotacją, bezpieczny hosting localhost, layout, dashboard (dane z bazy), ustawienia | ✅ |
-| 2 | Network Discovery: interfejsy, CIDR, zakresy z zatwierdzaniem, ICMP/TCP/ARP, porty, banery, TLS, HTTP, zapis do bazy, postęp na żywo, zatrzymanie | ✅ |
+| 2 | Network Discovery: interfejsy, CIDR, zakresy z zatwierdzaniem, ICMP/TCP/ARP, porty, banery, TLS, HTTP, zapis do bazy, postęp na żywo, zatrzymanie | ✅ (laboratorium demo → Etap 4) |
 | 3 | Assets: tabela (szukanie, sortowanie, filtry, paginacja, kolumny), szczegóły, historia | ✅ |
 | 4 | Vulnerability Intelligence: NVD/KEV/EPSS, snapshot offline, matcher wersji ze statusami | ✅ |
 | 5 | Risk Engine: reguły, scoring z wyjaśnieniem, Security Posture Score, trend | ✅ |
@@ -188,7 +222,7 @@ Kluczowa decyzja: **rozdzielenie tożsamości od obserwacji**.
 **Konieczne do pierwszej demonstracji:** etapy 1–6, porównanie skanów z etapu 7, PDF z etapu 9, paczki ZIP/TAR.GZ z etapu 11, laboratorium demo.
 **Można odłożyć:** topologia i ścieżki ataku (efektowne, ale nie w krytycznej ścieżce 2‑minutowego scenariusza), external attack surface, import audytu, agenci, instalatory MSI/DEB, aktualizator.
 
-## 7. Dziennik decyzji
+## 8. Dziennik decyzji
 
 | Data | Decyzja |
 |------|---------|
@@ -199,3 +233,9 @@ Kluczowa decyzja: **rozdzielenie tożsamości od obserwacji**.
 | 2026‑11‑18 | Content root = katalog aplikacji (`AppContext.BaseDirectory`), nie bieżący katalog – inaczej uruchomienie ze skrótu gubi `appsettings.json` i `wwwroot` (wykryte w teście uruchomieniowym). |
 | 2026‑11‑18 | Plik wykonywalny nazywa się `Weles` / `Weles.exe` (`AssemblyName`), przestrzenie nazw pozostają `Weles.App`. |
 | 2026‑11‑18 | Paczka self-contained linux-x64 bez AI: 53 MB (tar.gz), ReadyToRun; zweryfikowane uruchomienie bez systemowego .NET. |
+| 2026‑11‑18 | Ping z domyślnym buforem: bez `CAP_NET_RAW` .NET na Linuksie używa systemowego `ping`, który odrzuca własny bufor (`PlatformNotSupportedException`) – wykryte przy skanie na żywo, dodany test regresji. |
+| 2026‑11‑18 | CUPS nie oznacza drukarki (serwer wydruku na większości desktopów Linux/macOS) – wykryte przy skanie na żywo. |
+| 2026‑11‑18 | Wykluczenie CIDR obejmuje całą sieć (również adres sieci i broadcast). `Apache-Coyote` = Tomcat, nie Apache httpd. |
+| 2026‑11‑18 | Sondy wysyłające dane (Redis, PostgreSQL, RDP) tylko na ich standardowych portach – nie wysyłamy obcych protokołów do nieznanych usług. |
+| 2026‑11‑18 | Skany wykonywane sekwencyjnie (jeden naraz) – przewidywalne obciążenie sieci i SQLite; równoległość wewnątrz skanu ograniczona `ConnectionGate`. |
+| 2026‑11‑18 | Laboratorium demo (Docker) przesunięte do Etapu 4 – wtedy stare wersje usług dają widoczne dopasowania CVE; na maszynie deweloperskiej brak Dockera. |

@@ -20,6 +20,12 @@ public class DiscoveredHost
     public double? RoundTripMs { get; set; }
     public int? Ttl { get; set; }
     public string? OsGuess { get; set; }
+    public bool IsGateway { get; set; }
+    public AssetType AssetTypeGuess { get; set; }
+    public int ClassificationConfidence { get; set; }
+
+    /// <summary>Newline-separated reasons behind the OS/type guess.</summary>
+    public string? ClassificationReasons { get; set; }
     public DateTime DiscoveredAt { get; set; }
 
     public List<DiscoveredPort> Ports { get; set; } = [];

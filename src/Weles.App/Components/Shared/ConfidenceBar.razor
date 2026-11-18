@@ -1,0 +1,10 @@
+<span class="confidence" title="Pewność identyfikacji: @Value%">
+    <span class="confidence-track"><span class="confidence-fill @Tone" style="width:@(Math.Clamp(Value, 0, 100))%"></span></span>
+    <span class="confidence-value">@Value%</span>
+</span>
+
+@code {
+    [Parameter] public int Value { get; set; }
+
+    private string Tone => Value switch { >= 85 => "high", >= 60 => "mid", _ => "low" };
+}

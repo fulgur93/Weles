@@ -28,6 +28,7 @@ internal sealed class AssetConfiguration : IEntityTypeConfiguration<Asset>
         b.Property(x => x.OsFamily).HasMaxLength(100);
         b.Property(x => x.OsDetails).HasMaxLength(500);
         b.Property(x => x.Notes).HasMaxLength(4000);
+        b.Property(x => x.ClassificationReasons).HasMaxLength(2000);
         b.HasIndex(x => x.MacAddress);
         b.HasIndex(x => x.PrimaryIpAddress);
         b.HasIndex(x => x.LastSeenAt);
@@ -47,6 +48,7 @@ internal sealed class DiscoveredHostConfiguration : IEntityTypeConfiguration<Dis
         b.Property(x => x.MacAddress).HasMaxLength(17);
         b.Property(x => x.Vendor).HasMaxLength(255);
         b.Property(x => x.OsGuess).HasMaxLength(255);
+        b.Property(x => x.ClassificationReasons).HasMaxLength(2000);
         b.HasIndex(x => new { x.ScanId, x.IpAddress }).IsUnique();
         b.HasIndex(x => x.AssetId);
         b.HasMany(x => x.Ports).WithOne(x => x.Host).HasForeignKey(x => x.DiscoveredHostId).OnDelete(DeleteBehavior.Cascade);

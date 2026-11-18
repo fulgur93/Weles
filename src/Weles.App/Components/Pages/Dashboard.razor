@@ -31,10 +31,8 @@ else if (!_summary.HasAnyScan)
                 <li><span class="step-no">3</span><div><strong>Przeanalizuj ryzyko</strong><span>podatności, priorytety napraw i wyjaśnienia lokalnego AI</span></div></li>
             </ol>
             <div class="hero-actions">
-                <button class="btn btn-primary" disabled title="Moduł Network Discovery – Etap 2">
-                    <Icon Name="play" Size="16" /> Rozpocznij pierwszy audyt
-                </button>
-                <span class="muted small">Moduł skanowania jest w realizacji (Etap 2).</span>
+                <a class="btn btn-primary" href="discovery"><Icon Name="play" Size="16" /> Rozpocznij pierwszy audyt</a>
+                <span class="muted small">WELES zaproponuje zakres na podstawie sieci tego komputera.</span>
             </div>
         </div>
         <div class="hero-visual" aria-hidden="true">
@@ -66,6 +64,7 @@ else
                 <dt>Aktywne hosty</dt><dd>@last.HostsAlive</dd>
                 <dt>Otwarte porty</dt><dd>@last.OpenPorts</dd>
             </dl>
+            <a class="btn btn-ghost btn-sm" href="scans/@last.Id">Szczegóły skanu</a>
         </section>
     }
 }

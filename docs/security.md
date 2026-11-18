@@ -11,6 +11,19 @@ WELES służy do legalnych audytów infrastruktury, do której masz uprawnienia.
   jest oddzielone od aktywnego testowania.
 - AI nie może uruchamiać skanów ani operacji sieciowych bez zatwierdzenia użytkownika i nie ma dostępu do powłoki.
 
+## Kontrole skanowania (zaimplementowane w Etapie 2)
+
+| Wymaganie | Realizacja |
+|-----------|------------|
+| Jawny zakres, zatwierdzenie | `ScanTargetService.ApproveAsync` wymaga potwierdzenia uprawnień; `ScanEngine` ponownie sprawdza zatwierdzenie tuż przed startem. Edycja zakresu cofa zatwierdzenie. |
+| Allowlista / wykluczenia | IP, CIDR (≤ /16), zakresy, domeny; wykluczenia mają pierwszeństwo i obejmują całą sieć. |
+| Adresy publiczne | Odrzucane przy zapisie zakresu i pomijane przy skanie bez flagi `AllowPublicAddresses`; dotyczy też domen rozwiązujących się na adresy publiczne. Adresy zarezerwowane/multicast nigdy nie są skanowane. |
+| Limity | `MaxHostsPerScan`, `MaxConcurrentConnections`, `ConnectionsPerSecond` (token bucket), timeouty połączeń/banerów/sond. |
+| Zatrzymanie | Przycisk „Zatrzymaj skan” anuluje wszystkie sondy; zebrane wyniki są zapisywane, status `Zatrzymany`. |
+| Audyt | `ScanEvent` (dziennik w bazie) + logi aplikacji: start, fazy, ostrzeżenia, zakończenie, błędy. |
+| Brak testów ofensywnych | Tylko: TCP connect, ICMP echo, odczyt banera, `GET /`, handshake TLS, `PING`/`INFO server` (Redis, tylko gdy bez hasła – metadane), `SSLRequest` (PostgreSQL), negocjacja RDP. Bez logowania, bez brute force, bez exploitów. Sondy z danymi tylko na portach ich protokołów. |
+| Dane z sieci są niezaufane | Banery i nagłówki są sanityzowane (drukowalne ASCII, limit długości), regexy z timeoutem, rozmiary odpowiedzi ograniczone. |
+
 ## Ochrona lokalnego panelu (zaimplementowane w Etapie 1)
 
 | Zagrożenie | Mechanizm |

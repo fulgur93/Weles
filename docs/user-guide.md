@@ -12,7 +12,7 @@ otwiera istniejącą sesję zamiast startować drugi serwer.
 |--------|---------------|------------|
 | Dashboard | Security Posture Score, urządzenia, usługi, podatności, ostatni skan, status AI | Etap 1 (dane po pierwszym skanie) |
 | Assets | inwentarz urządzeń i ich historia | Etap 3 |
-| Network Discovery / Scans | zakresy, wykrywanie urządzeń, porty, usługi | Etap 2 |
+| Network Discovery / Scans | zakresy, wykrywanie urządzeń, porty, usługi, historia skanów | ✅ Etap 2 |
 | Attack Surface | domeny, DNS, certyfikaty, usługi publiczne | Etap 8 |
 | Vulnerabilities | dopasowania CVE (NVD, KEV, EPSS) | Etap 4 |
 | Risk Assessment | ocena ryzyka z uzasadnieniem | Etap 5 |
@@ -24,6 +24,24 @@ otwiera istniejącą sesję zamiast startować drugi serwer.
 
 Moduły jeszcze niezaimplementowane są oznaczone w menu numerem etapu (np. `E4`) i otwierają opis planowanego zakresu –
 nie pokazują pustych ani pozornie działających ekranów.
+
+## Pierwszy audyt (Network Discovery)
+
+1. **Network Discovery → Sieci tego komputera** – WELES pokazuje wykryte interfejsy, sieci i bramy. Przycisk
+   „Utwórz zakres …” wypełnia formularz siecią lokalną (duże sieci są zawężane do /24 wokół Twojego adresu).
+2. **Zakres** – wpisz adresy (IP, CIDR do /16, zakres `10.0.0.10-50`, domena) oraz wykluczenia. „Podgląd zakresu”
+   pokazuje, ile adresów zostanie sprawdzonych. Adresy publiczne wymagają osobnej zgody.
+3. **Zatwierdź…** – potwierdź, że masz uprawnienia do zasobów. Każda edycja zakresu cofa zatwierdzenie.
+4. Wybierz profil portów: *Szybki* (39 portów), *Standardowy* (~130) albo własną listę (`22,80,8000-8100`) i **Uruchom skan**.
+5. Strona skanu pokazuje postęp na żywo (fazy, hosty, porty, usługi) i przycisk **Zatrzymaj skan** – zebrane wyniki zostają zapisane.
+6. Kliknij host, aby zobaczyć usługi: produkt i wersję, **pewność identyfikacji** i metodę (baner, HTTP, TLS…),
+   tytuł strony, wykryte panele administracyjne, certyfikat TLS (ważność, wystawca, zgodność nazwy), brakujące nagłówki
+   bezpieczeństwa, uwierzytelnianie Redis, warstwę bezpieczeństwa RDP (NLA).
+
+„Dlaczego taki typ urządzenia?” – pod rozwiniętym hostem widać listę powodów klasyfikacji.
+Wersja z dopiskiem dystrybucji (np. Ubuntu) może zawierać poprawki bezpieczeństwa bez zmiany numeru – WELES to zaznacza.
+
+Limity (równoległość, tempo, timeouty, maks. liczba hostów) są w `appsettings.json`, sekcja `Weles:Scanning`.
 
 ## Motyw
 

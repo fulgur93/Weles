@@ -18,6 +18,7 @@ public class Asset
     public string? OsDetails { get; set; }
     public AssetCriticality Criticality { get; set; } = AssetCriticality.Medium;
     public string? Notes { get; set; }
+    public string? ClassificationReasons { get; set; }
 
     public int? NetworkSegmentId { get; set; }
     public NetworkSegment? NetworkSegment { get; set; }

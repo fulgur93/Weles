@@ -18,6 +18,17 @@ public class Scan
     public DateTime? StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
 
+    /// <summary>Number of addresses in the resolved scope at scan time.</summary>
+    public int HostsTargeted { get; set; }
+    public int HostsProbed { get; set; }
+    public int PortCount { get; set; }
+
+    /// <summary>Scope entries as they were when the scan started – the target may be edited later.</summary>
+    public string? ScopeSnapshot { get; set; }
+
+    /// <summary>Limits (concurrency, rate, timeouts) used for this scan.</summary>
+    public string? SettingsJson { get; set; }
+
     public int HostsAlive { get; set; }
     public int OpenPorts { get; set; }
     public string? ErrorMessage { get; set; }
@@ -25,6 +36,7 @@ public class Scan
     public bool IsDemo { get; set; }
 
     public List<DiscoveredHost> Hosts { get; set; } = [];
+    public List<ScanEvent> Events { get; set; } = [];
     public List<RiskFinding> Findings { get; set; } = [];
     public List<RiskScore> RiskScores { get; set; } = [];
 }

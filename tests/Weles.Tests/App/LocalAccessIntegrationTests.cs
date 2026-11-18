@@ -119,3 +119,36 @@ public class LocalAccessIntegrationTests(WelesAppFactory factory) : IClassFixtur
         Assert.Equal(HttpStatusCode.BadRequest, (await client.SendAsync(request)).StatusCode);
     }
 }
+
+public class ScanWorkerIntegrationTests(WelesAppFactory factory) : IClassFixture<WelesAppFactory>
+{
+    [Fact]
+    public async Task Queued_scan_is_executed_by_the_background_worker_and_visible_in_ui()
+    {
+        await using var ssh = Weles.Tests.Support.FakeServer.Banner("SSH-2.0-OpenSSH_9.6p1\r\n");
+        var targets = factory.Services.GetRequiredService<Weles.Infrastructure.Scanning.ScanTargetService>();
+        var queries = factory.Services.GetRequiredService<Weles.Infrastructure.Queries.ScanQueries>();
+
+        var id = (await targets.CreateAsync(new("Loopback", null, "127.0.0.1", null, false))).Id!.Value;
+        await targets.ApproveAsync(id, confirmedAuthorization: true);
+        var scanId = (await targets.StartScanAsync(id, ssh.Port.ToString())).Id!.Value;
+
+        Weles.Infrastructure.Queries.ScanDetail? detail = null;
+        for (var i = 0; i < 100; i++)
+        {
+            detail = await queries.GetAsync(scanId);
+            if (detail!.Summary.Status is Weles.Core.Enums.ScanStatus.Completed or Weles.Core.Enums.ScanStatus.Failed) break;
+            await Task.Delay(200);
+        }
+
+        Assert.Equal(Weles.Core.Enums.ScanStatus.Completed, detail!.Summary.Status);
+        Assert.Equal("OpenSSH", detail.Hosts.Single().Ports.Single().Service!.Product);
+
+        var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, BaseAddress = new Uri("http://localhost") });
+        var token = factory.Services.GetRequiredService<LocalAccessToken>().Value;
+        await client.GetAsync($"/auth?token={Uri.EscapeDataString(token)}");
+        var html = System.Net.WebUtility.HtmlDecode(await client.GetStringAsync($"/scans/{scanId}"));
+        Assert.Contains("127.0.0.1", html);
+        Assert.Contains("Zakończony", html);
+    }
+}

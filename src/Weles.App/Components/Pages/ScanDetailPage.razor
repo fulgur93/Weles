@@ -1,0 +1,297 @@
+@page "/scans/{ScanId:int}"
+@using System.Text.Json
+@using Weles.Core.Entities
+@using Weles.Infrastructure.Queries
+@using Weles.Infrastructure.Scanning
+@implements IAsyncDisposable
+@inject ScanQueries Queries
+@inject ScanCoordinator Coordinator
+@inject ScanTargetService Targets
+
+<PageTitle>Skan #@ScanId · WELES</PageTitle>
+
+@if (_detail is null)
+{
+    <div class="card loading">@(_notFound ? "Skan nie istnieje." : "Wczytywanie…")</div>
+}
+else
+{
+    var s = _detail.Summary;
+    <div class="page-header">
+        <div>
+            <a class="back-link" href="scans"><Icon Name="arrow-left" Size="14" /> Scans</a>
+            <h1>Skan #@s.Id · @s.TargetName</h1>
+            <p class="page-subtitle">Porty: <span class="mono">@s.PortSpecification</span> (@_detail.PortCount) · rozpoczęty @Labels.Local(s.StartedAt ?? s.CreatedAt) · czas @Labels.Duration(s.StartedAt, s.CompletedAt)</p>
+        </div>
+        <div class="header-actions">
+            <ScanStatusPill Status="s.Status" />
+            @if (IsActive)
+            {
+                <button class="btn btn-danger" disabled="@(_progress?.StopRequested == true)" @onclick="Stop">@(_progress?.StopRequested == true ? "Zatrzymywanie…" : "Zatrzymaj skan")</button>
+            }
+        </div>
+    </div>
+
+    @if (s.ErrorMessage is not null)
+    {
+        <div class="alert alert-bad">@s.ErrorMessage</div>
+    }
+
+    @if (IsActive && _progress is { } p)
+    {
+        <section class="card progress-card">
+            <div class="progress-head">
+                <strong>@Labels.Of(p.Phase)</strong>
+                <span class="muted small">@p.Activity</span>
+                <span class="progress-pct">@p.PercentComplete.ToString("0")%</span>
+            </div>
+            <div class="progress"><div class="progress-fill" style="width:@p.PercentComplete.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)%"></div></div>
+            <div class="progress-stats">
+                <span>Sprawdzone adresy <strong>@p.HostsProbed / @p.HostsTotal</strong></span>
+                <span>Aktywne hosty <strong>@p.HostsAlive</strong></span>
+                <span>Przeskanowane hosty <strong>@p.HostsCompleted</strong></span>
+                <span>Otwarte porty <strong>@p.OpenPorts</strong></span>
+                <span>Rozpoznane usługi <strong>@p.ServicesIdentified</strong></span>
+            </div>
+        </section>
+    }
+
+    <section class="kpi-grid kpi-grid-4">
+        <div class="kpi card"><div class="kpi-label">Adresy w zakresie</div><div class="kpi-value">@s.HostsTargeted</div></div>
+        <div class="kpi card"><div class="kpi-label">Aktywne hosty</div><div class="kpi-value">@_detail.Hosts.Count</div></div>
+        <div class="kpi card"><div class="kpi-label">Otwarte porty</div><div class="kpi-value">@_detail.Hosts.Sum(h => h.Ports.Count)</div></div>
+        <div class="kpi card"><div class="kpi-label">Rozpoznane usługi</div><div class="kpi-value">@_detail.Hosts.SelectMany(h => h.Ports).Count(p => p.Service is { DetectionMethod: not "port-hint" })</div><div class="kpi-hint">na podstawie odpowiedzi usługi, nie numeru portu</div></div>
+    </section>
+
+    <section class="card">
+        <div class="card-title"><Icon Name="assets" /> Wykryte hosty</div>
+        @if (_detail.Hosts.Count == 0)
+        {
+            <p class="muted">@(IsActive ? "Wyniki pojawią się po przeskanowaniu pierwszych hostów." : "Nie wykryto aktywnych hostów w tym zakresie.")</p>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Adres IP</th><th>Nazwa hosta</th><th>MAC / producent</th><th>Typ / system</th><th>Wykryty przez</th><th>Otwarte porty</th></tr></thead>
+                    <tbody>
+                        @foreach (var h in _detail.Hosts)
+                        {
+                            var expanded = _expanded.Contains(h.Id);
+                            <tr class="clickable @(expanded ? "expanded" : "")" @onclick="() => Toggle(h.Id)">
+                                <td class="mono"><strong>@h.IpAddress</strong> @if (h.IsGateway) { <span class="tag">brama</span> }</td>
+                                <td>@(h.Hostname ?? "—")</td>
+                                <td><span class="mono small">@(h.MacAddress ?? "—")</span><div class="muted small">@h.Vendor</div></td>
+                                <td title="@h.ClassificationReasons">@Labels.Of(h.AssetTypeGuess)<div class="muted small">@(h.OsGuess ?? "system nieznany")</div></td>
+                                <td class="small">@Labels.Of(h.DiscoveryMethods)@if (h.RoundTripMs is { } rtt) { <div class="muted small">@rtt.ToString("0") ms@(h.Ttl is { } ttl ? $" · TTL {ttl}" : "")</div> }</td>
+                                <td>
+                                    <div class="chips">
+                                        @foreach (var port in h.Ports.OrderBy(p => p.Port))
+                                        {
+                                            <span class="chip mono" title="@port.Service?.ServiceName">@port.Port</span>
+                                        }
+                                        @if (h.Ports.Count == 0) { <span class="muted small">brak</span> }
+                                    </div>
+                                </td>
+                            </tr>
+                            @if (expanded)
+                            {
+                                <tr class="detail-row">
+                                    <td colspan="6">
+                                        @if (!string.IsNullOrEmpty(h.ClassificationReasons))
+                                        {
+                                            <div class="reasons"><strong>Dlaczego @Labels.Of(h.AssetTypeGuess).ToLowerInvariant()?</strong> @string.Join(" · ", h.ClassificationReasons.Split('\n'))</div>
+                                        }
+                                        @if (h.Ports.Count > 0)
+                                        {
+                                            <table class="table table-inner">
+                                                <thead><tr><th>Port</th><th>Usługa</th><th>Oprogramowanie</th><th>Pewność</th><th>Metoda</th><th>Szczegóły</th></tr></thead>
+                                                <tbody>
+                                                    @foreach (var port in h.Ports.OrderBy(p => p.Port))
+                                                    {
+                                                        var svc = port.Service;
+                                                        var extra = Extra(svc);
+                                                        <tr>
+                                                            <td class="mono">@port.Port/tcp</td>
+                                                            <td>@(svc?.ServiceName ?? "—") @if (svc?.IsTls == true) { <span class="tag tag-tls">TLS</span> }</td>
+                                                            <td>
+                                                                @if (svc?.Product is not null)
+                                                                {
+                                                                    <strong>@svc.Product</strong> <span class="mono">@svc.Version</span>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <span class="muted">nierozpoznane</span>
+                                                                }
+                                                                @if (extra.TryGetValue("distribution", out var distro))
+                                                                {
+                                                                    <div class="muted small" title="Dystrybucje często łatają podatności bez zmiany numeru wersji (backporty).">pakiet dystrybucji: @distro – wersja może zawierać poprawki</div>
+                                                                }
+                                                            </td>
+                                                            <td>@if (svc is not null) { <ConfidenceBar Value="svc.Confidence" /> }</td>
+                                                            <td class="small muted">@MethodLabel(svc?.DetectionMethod)</td>
+                                                            <td class="small">
+                                                                @foreach (var line in Details(extra, svc))
+                                                                {
+                                                                    <div class="@(line.Warn ? "detail-warn" : "")">@line.Text</div>
+                                                                }
+                                                                @if (svc?.Banner is { Length: > 0 } banner && svc.DetectionMethod is "banner" or "banner-unrecognized")
+                                                                {
+                                                                    <div class="mono muted banner" title="Baner usługi">@banner</div>
+                                                                }
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <section class="card">
+        <div class="card-title"><Icon Name="clock" /> Dziennik skanu</div>
+        <ul class="events">
+            @foreach (var e in _detail.Events)
+            {
+                <li class="event event-@e.Level.ToString().ToLowerInvariant()"><span class="mono muted">@e.Timestamp.ToLocalTime().ToString("HH:mm:ss")</span> @e.Message</li>
+            }
+        </ul>
+    </section>
+}
+
+@code {
+    [Parameter] public int ScanId { get; set; }
+
+    private ScanDetail? _detail;
+    private ScanProgress? _progress;
+    private bool _notFound;
+    private readonly HashSet<int> _expanded = [];
+    private PeriodicTimer? _timer;
+    private Task? _pollTask;
+    private readonly CancellationTokenSource _cts = new();
+
+    private bool IsActive => _detail?.Summary.Status is ScanStatus.Pending or ScanStatus.Running;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+        if (IsActive && _timer is null)
+        {
+            _timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            _pollTask = PollAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _detail = await Queries.GetAsync(ScanId);
+        _notFound = _detail is null;
+        _progress = Coordinator.GetProgress(ScanId);
+    }
+
+    private async Task PollAsync()
+    {
+        var tick = 0;
+        try
+        {
+            while (await _timer!.WaitForNextTickAsync(_cts.Token))
+            {
+                _progress = Coordinator.GetProgress(ScanId);
+                if (++tick % 3 == 0 || !Coordinator.IsActive(ScanId))
+                {
+                    await LoadAsync();
+                }
+
+                await InvokeAsync(StateHasChanged);
+                if (!IsActive) break;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void Stop()
+    {
+        Targets.StopScan(ScanId);
+        _progress = Coordinator.GetProgress(ScanId);
+    }
+
+    private void Toggle(int hostId)
+    {
+        if (!_expanded.Remove(hostId)) _expanded.Add(hostId);
+    }
+
+    private static Dictionary<string, string> Extra(DiscoveredService? svc)
+    {
+        if (string.IsNullOrEmpty(svc?.ExtraInfoJson)) return [];
+        try { return JsonSerializer.Deserialize<Dictionary<string, string>>(svc.ExtraInfoJson) ?? []; }
+        catch (JsonException) { return []; }
+    }
+
+    private static string MethodLabel(string? method) => method switch
+    {
+        "banner" => "baner usługi",
+        "banner-unrecognized" => "baner (nierozpoznany)",
+        "http-request" => "żądanie HTTP",
+        "https-request" => "żądanie HTTPS",
+        "tls-handshake" => "uzgadnianie TLS",
+        "mysql-handshake" => "powitanie MySQL",
+        "redis-ping" => "Redis PING",
+        "postgres-sslrequest" => "PostgreSQL SSLRequest",
+        "rdp-negotiation" => "negocjacja RDP",
+        "port-hint" => "tylko numer portu",
+        null => "—",
+        _ => method
+    };
+
+    private static IEnumerable<(string Text, bool Warn)> Details(Dictionary<string, string> x, DiscoveredService? svc)
+    {
+        if (x.TryGetValue("http.title", out var title)) yield return ($"Tytuł: {title}", false);
+        if (x.TryGetValue("http.panel", out var panel)) yield return ($"Panel: {panel} (dostępny bez logowania do strony startowej)", true);
+        if (x.TryGetValue("http.status", out var status)) yield return ($"HTTP {status}" + (x.TryGetValue("http.location", out var loc) ? $" → {loc}" : ""), false);
+        if (x.ContainsKey("http.redirectsToHttps")) yield return ("Przekierowanie na HTTPS", false);
+        if (x.TryGetValue("http.poweredBy", out var powered)) yield return ($"X-Powered-By: {powered}", true);
+        if (x.TryGetValue("http.auth", out var auth)) yield return ($"Wymaga uwierzytelnienia: {auth}", false);
+        if (x.TryGetValue("http.missingHeaders", out var missing)) yield return ($"Brak nagłówków: {missing.Replace(",", ", ")}", true);
+        if (x.TryGetValue("tls.protocol", out var proto)) yield return ($"TLS: {proto}" + (x.TryGetValue("tls.cipher", out var c) ? $" · {c}" : ""), false);
+        if (x.TryGetValue("tls.legacy", out _)) yield return ("Akceptuje przestarzałe TLS 1.0/1.1", true);
+        if (x.TryGetValue("tls.validation", out var validation)) yield return ($"Certyfikat nie przechodzi weryfikacji: {validation}", true);
+        if (svc?.Certificates.FirstOrDefault() is { } cert)
+        {
+            var days = (cert.NotAfter - DateTime.UtcNow).TotalDays;
+            yield return ($"Certyfikat: {cert.Subject} · wystawca {cert.Issuer}", false);
+            yield return (days < 0 ? $"Certyfikat WYGASŁ {cert.NotAfter.ToLocalTime():d}" : $"Ważny do {cert.NotAfter.ToLocalTime():d} ({days:0} dni)", days < 30);
+            if (cert.IsSelfSigned) yield return ("Certyfikat samopodpisany", true);
+            if (cert.HostnameMatches == false) yield return ("Nazwa w certyfikacie nie pasuje do nazwy hosta", true);
+            if (cert.KeySize is { } size && cert.KeyAlgorithm?.Contains("RSA") == true && size < 2048) yield return ($"Słaby klucz RSA {size} bit", true);
+        }
+
+        if (x.TryGetValue("redis.auth", out var redisAuth)) yield return (redisAuth == "none" ? "Redis bez uwierzytelniania" : "Redis wymaga uwierzytelnienia", redisAuth == "none");
+        if (x.TryGetValue("rdp.security", out var rdp)) yield return ($"Zabezpieczenie RDP: {rdp}", !rdp.StartsWith("NLA", StringComparison.Ordinal));
+        if (x.TryGetValue("postgresql.ssl", out var pgSsl)) yield return (pgSsl == "supported" ? "PostgreSQL obsługuje SSL" : "PostgreSQL bez obsługi SSL", pgSsl != "supported");
+        if (x.TryGetValue("mysql.access", out _)) yield return ("Serwer odrzuca połączenia z tego hosta", false);
+        if (x.TryGetValue("rfb.version", out var rfb)) yield return ($"Protokół RFB {rfb}", false);
+        if (svc?.ServiceName == "telnet") yield return ("Telnet przesyła dane bez szyfrowania", true);
+        if (svc?.DetectionMethod == "port-hint") yield return ("Usługa nie odpowiedziała na sondy – nazwa wynika tylko z numeru portu", false);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync();
+        _timer?.Dispose();
+        if (_pollTask is not null)
+        {
+            try { await _pollTask; } catch (OperationCanceledException) { }
+        }
+
+        _cts.Dispose();
+    }
+}

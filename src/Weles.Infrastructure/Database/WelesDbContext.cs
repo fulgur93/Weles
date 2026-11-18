@@ -10,6 +10,7 @@ public class WelesDbContext(DbContextOptions<WelesDbContext> options) : DbContex
     public DbSet<ScanTarget> ScanTargets => Set<ScanTarget>();
     public DbSet<ScanTargetEntry> ScanTargetEntries => Set<ScanTargetEntry>();
     public DbSet<Scan> Scans => Set<Scan>();
+    public DbSet<ScanEvent> ScanEvents => Set<ScanEvent>();
     public DbSet<NetworkSegment> NetworkSegments => Set<NetworkSegment>();
     public DbSet<Asset> Assets => Set<Asset>();
     public DbSet<DiscoveredHost> DiscoveredHosts => Set<DiscoveredHost>();

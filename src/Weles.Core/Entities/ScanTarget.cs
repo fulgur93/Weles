@@ -20,6 +20,7 @@ public class ScanTarget
 
     public bool IsDemo { get; set; }
     public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
 
     public List<ScanTargetEntry> Entries { get; set; } = [];
     public List<Scan> Scans { get; set; } = [];

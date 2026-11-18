@@ -37,5 +37,6 @@ pwsh deploy/windows/publish.ps1 -Rid win-x64 # artifacts/weles-<ver>-win-x64.zip
 | Etap | Zakres | Status |
 |------|--------|--------|
 | 1 | Fundament: solution, Blazor, EF Core + SQLite, logowanie, bezpieczny hosting, layout | ✅ |
-| 2 | Network Discovery | ⏳ następny |
-| 3–11 | Assets, Vulnerability Intelligence, Risk Engine, AI, Monitoring/Topology, External, Raporty, Agenci, Pakowanie | planowane |
+| 2 | Network Discovery: zakresy z zatwierdzaniem, ICMP/TCP/ARP, porty, banery, HTTP, TLS, klasyfikacja, historia, postęp na żywo | ✅ |
+| 3 | Assets | ⏳ następny |
+| 4–11 | Vulnerability Intelligence, Risk Engine, AI, Monitoring/Topology, External, Raporty, Agenci, Pakowanie | planowane |

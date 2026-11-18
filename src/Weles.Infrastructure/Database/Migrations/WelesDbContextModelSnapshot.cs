@@ -44,6 +44,10 @@ namespace Weles.Infrastructure.Database.Migrations
                     b.Property<int>("AssetType")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("ClassificationReasons")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("Criticality")
                         .HasColumnType("INTEGER");
 
@@ -252,6 +256,16 @@ namespace Weles.Infrastructure.Database.Migrations
                     b.Property<int?>("AssetId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("AssetTypeGuess")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ClassificationConfidence")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ClassificationReasons")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("DiscoveredAt")
                         .HasColumnType("TEXT");
 
@@ -266,6 +280,9 @@ namespace Weles.Infrastructure.Database.Migrations
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsGateway")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("MacAddress")
                         .HasMaxLength(17)
@@ -540,10 +557,19 @@ namespace Weles.Infrastructure.Database.Migrations
                     b.Property<int>("HostsAlive")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("HostsProbed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("HostsTargeted")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("IsDemo")
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("OpenPorts")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("PortCount")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("PortSpecification")
@@ -553,6 +579,14 @@ namespace Weles.Infrastructure.Database.Migrations
 
                     b.Property<int>("ScanTargetId")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("ScopeSnapshot")
+                        .HasMaxLength(8000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SettingsJson")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("StartedAt")
                         .HasColumnType("TEXT");
@@ -575,6 +609,33 @@ namespace Weles.Infrastructure.Database.Migrations
                         {
                             t.HasCheckConstraint("CK_Scan_Counters", "HostsAlive >= 0 AND OpenPorts >= 0");
                         });
+                });
+
+            modelBuilder.Entity("Weles.Core.Entities.ScanEvent", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Level")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ScanId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ScanId", "Timestamp");
+
+                    b.ToTable("ScanEvents");
                 });
 
             modelBuilder.Entity("Weles.Core.Entities.ScanTarget", b =>
@@ -605,6 +666,9 @@ namespace Weles.Infrastructure.Database.Migrations
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
@@ -905,6 +969,17 @@ namespace Weles.Infrastructure.Database.Migrations
                     b.Navigation("ScanTarget");
                 });
 
+            modelBuilder.Entity("Weles.Core.Entities.ScanEvent", b =>
+                {
+                    b.HasOne("Weles.Core.Entities.Scan", "Scan")
+                        .WithMany("Events")
+                        .HasForeignKey("ScanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Scan");
+                });
+
             modelBuilder.Entity("Weles.Core.Entities.ScanTargetEntry", b =>
                 {
                     b.HasOne("Weles.Core.Entities.ScanTarget", "ScanTarget")
@@ -956,6 +1031,8 @@ namespace Weles.Infrastructure.Database.Migrations
 
             modelBuilder.Entity("Weles.Core.Entities.Scan", b =>
                 {
+                    b.Navigation("Events");
+
                     b.Navigation("Findings");
 
                     b.Navigation("Hosts");
