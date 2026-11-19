@@ -85,7 +85,20 @@ public class LocalAccessIntegrationTests(WelesAppFactory factory) : IClassFixtur
     {
         var client = await AuthenticatedClientAsync();
         var language = factory.Services.GetRequiredService<Weles.App.Localization.LanguageState>();
-        await language.SetAsync("en");
+
+        // The switch is a plain link: the server stores the choice and redirects back to a local path only.
+        var switchResponse = await client.GetAsync("/language/en?returnUrl=%2Fassets%3Fnet%3Dall");
+        Assert.Equal(HttpStatusCode.Redirect, switchResponse.StatusCode);
+        Assert.Equal("/assets?net=all", switchResponse.Headers.Location!.OriginalString);
+        Assert.Equal("en", language.Code);
+        foreach (var evil in (string[])["https://evil.example/", "//evil.example", "/\\evil.example"])
+        {
+            var r = await client.GetAsync($"/language/en?returnUrl={Uri.EscapeDataString(evil)}");
+            Assert.Equal("/", r.Headers.Location!.OriginalString);
+        }
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await NewClient().GetAsync("/language/pl")).StatusCode); // no session, no change
+        Assert.Equal("en", language.Code);
         try
         {
             foreach (var path in (string[])["/", "/assets", "/discovery", "/scans", "/vulnerabilities", "/settings", "/risk", "/ai", "/assets/999999", "/scans/999999", "/vulnerabilities/CVE-2099-0001", "/no-such-page"])

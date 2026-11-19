@@ -331,12 +331,15 @@ code, .mono { font-family: var(--font-mono); font-size: .92em; }
 .icon-button:hover { color: var(--text); background: var(--surface-hover); }
 
 .segmented { display: inline-flex; padding: 3px; gap: 3px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); margin-bottom: 12px; }
-.segmented button {
-    display: inline-flex; align-items: center; gap: 7px;
+.segmented button, .segmented a {
+    display: inline-flex; align-items: center; gap: 7px; text-decoration: none;
     border: 0; background: transparent; color: var(--text-muted);
     padding: 7px 14px; border-radius: 7px; font: inherit; font-weight: 550; cursor: pointer;
 }
-.segmented button.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, .15); }
+.segmented button.active, .segmented a.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, .15); }
+.segmented a:hover { color: var(--text); }
+.segmented.segmented-sm { margin: 0 8px 0 0; padding: 2px; }
+.segmented.segmented-sm a { padding: 4px 9px; font-size: 12px; }
 
 /* ---------- Planned module ---------- */
 .planned-card { max-width: 820px; }

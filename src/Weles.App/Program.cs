@@ -5,6 +5,7 @@ using Serilog;
 using Serilog.Events;
 using Weles.App.Components;
 using Weles.App.Hosting;
+using Weles.App.Localization;
 using Weles.App.Services;
 using Weles.Infrastructure;
 using Weles.Infrastructure.Database;
@@ -112,6 +113,7 @@ app.UseAntiforgery();
 
 app.MapStaticAssets();
 app.MapLogEndpoints();
+app.MapLanguageEndpoints();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

@@ -1,12 +1,14 @@
-@* Switching reloads the page: Blazor takes the culture from the request that opens the circuit. *@
+@* Plain links to /language/{code}: the server stores the choice and reloads the page (see LanguageEndpoints).
+   target="_top" keeps the Blazor router from intercepting them as in-app navigation. *@
 @inject LanguageState Language
 @inject NavigationManager Navigation
+@implements IDisposable
 
 <div class="segmented @Class" role="radiogroup" aria-label="@L.T("Język")">
     @foreach (var (lang, name, _) in LanguageState.Languages)
     {
-        <button class="@(Language.Code == lang ? "active" : "")" role="radio" aria-checked="@(Language.Code == lang)" lang="@lang"
-                title="@name" @onclick="() => SwitchAsync(lang)">@(Compact ? lang.ToUpperInvariant() : name)</button>
+        <a class="@(Language.Code == lang ? "active" : "")" role="radio" aria-checked="@(Language.Code == lang)" lang="@lang" hreflang="@lang"
+           title="@name" target="_top" href="@($"language/{lang}?returnUrl={Uri.EscapeDataString(ReturnUrl)}")">@(Compact ? lang.ToUpperInvariant() : name)</a>
     }
 </div>
 
@@ -14,10 +16,12 @@
     [Parameter] public bool Compact { get; set; }
     [Parameter] public string? Class { get; set; }
 
-    private async Task SwitchAsync(string code)
-    {
-        if (code == Language.Code) return;
-        await Language.SetAsync(code);
-        Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
-    }
+    private string ReturnUrl => "/" + Navigation.ToBaseRelativePath(Navigation.Uri);
+
+    // The switch lives in the layout, which does not re-render on navigation – keep the return path current.
+    protected override void OnInitialized() => Navigation.LocationChanged += OnLocationChanged;
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e) => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
 }
