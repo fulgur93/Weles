@@ -21,12 +21,15 @@ internal sealed class AssetConfiguration : IEntityTypeConfiguration<Asset>
     public void Configure(EntityTypeBuilder<Asset> b)
     {
         b.Property(x => x.DisplayName).HasMaxLength(255);
+        b.Property(x => x.CustomName).HasMaxLength(255);
+        b.Ignore(x => x.EffectiveType);
         b.Property(x => x.Hostname).HasMaxLength(255);
         b.Property(x => x.PrimaryIpAddress).HasMaxLength(64);
         b.Property(x => x.MacAddress).HasMaxLength(17);
         b.Property(x => x.Vendor).HasMaxLength(255);
         b.Property(x => x.OsFamily).HasMaxLength(100);
         b.Property(x => x.OsDetails).HasMaxLength(500);
+        b.Property(x => x.Model).HasMaxLength(128);
         b.Property(x => x.Notes).HasMaxLength(4000);
         b.Property(x => x.ClassificationReasons).HasMaxLength(2000);
         b.HasIndex(x => x.MacAddress);

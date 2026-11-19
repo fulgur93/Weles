@@ -75,6 +75,32 @@ public enum AssetCriticality
     Critical = 4
 }
 
+/// <summary>Presence of an asset relative to the latest completed scan that covered its address.</summary>
+public enum AssetStatus
+{
+    /// <summary>First observed in that scan.</summary>
+    New = 0,
+    /// <summary>Observed in that scan and earlier.</summary>
+    Active = 1,
+    /// <summary>The scan covered its address but did not find it.</summary>
+    Missing = 2,
+    /// <summary>No completed scan covered its address.</summary>
+    NotCovered = 3
+}
+
+public enum AssetChangeKind
+{
+    AddressChanged,
+    HostnameChanged,
+    MacChanged,
+    PortOpened,
+    PortClosed,
+    ServiceChanged,
+    VersionChanged,
+    CertificateChanged,
+    TypeChanged
+}
+
 public enum RiskLevel
 {
     Informational = 0,

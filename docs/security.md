@@ -18,7 +18,7 @@ WELES służy do legalnych audytów infrastruktury, do której masz uprawnienia.
 | Jawny zakres, zatwierdzenie | `ScanTargetService.ApproveAsync` wymaga potwierdzenia uprawnień; `ScanEngine` ponownie sprawdza zatwierdzenie tuż przed startem. Edycja zakresu cofa zatwierdzenie. |
 | Allowlista / wykluczenia | IP, CIDR (≤ /16), zakresy, domeny; wykluczenia mają pierwszeństwo i obejmują całą sieć. |
 | Adresy publiczne | Odrzucane przy zapisie zakresu i pomijane przy skanie bez flagi `AllowPublicAddresses`; dotyczy też domen rozwiązujących się na adresy publiczne. Adresy zarezerwowane/multicast nigdy nie są skanowane. |
-| Limity | `MaxHostsPerScan`, `MaxConcurrentConnections`, `ConnectionsPerSecond` (token bucket), timeouty połączeń/banerów/sond. |
+| Limity | `MaxHostsPerScan`, `MaxConcurrentConnections`, `ConnectionsPerSecond` (token bucket), na każdy host osobno `MaxConcurrentConnectionsPerHost` i `ConnectionsPerSecondPerHost`, timeouty połączeń/banerów/sond. Połączenia zamykane zwykłym FIN – zerwanie RST potrafi zawiesić usługi tanich routerów. |
 | Zatrzymanie | Przycisk „Zatrzymaj skan” anuluje wszystkie sondy; zebrane wyniki są zapisywane, status `Zatrzymany`. |
 | Audyt | `ScanEvent` (dziennik w bazie) + logi aplikacji: start, fazy, ostrzeżenia, zakończenie, błędy. |
 | Brak testów ofensywnych | Tylko: TCP connect, ICMP echo, odczyt banera, `GET /`, handshake TLS, `PING`/`INFO server` (Redis, tylko gdy bez hasła – metadane), `SSLRequest` (PostgreSQL), negocjacja RDP. `CNXN` (ADB – bez odpowiedzi na wyzwanie AUTH), zapytanie DNS `version.bind` (CHAOS TXT), zapytania mDNS/DNS-SD (tylko sieć lokalna, wyniki filtrowane do zakresu). Bez logowania, bez brute force, bez exploitów. Sondy z danymi tylko na portach ich protokołów. |

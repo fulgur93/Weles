@@ -43,6 +43,7 @@ internal sealed class ScanConfiguration : IEntityTypeConfiguration<Scan>
         b.Property(x => x.PortSpecification).HasMaxLength(1000);
         b.Property(x => x.ErrorMessage).HasMaxLength(2000);
         b.Property(x => x.ScopeSnapshot).HasMaxLength(8000);
+        b.Property(x => x.NetworkFingerprint).HasMaxLength(200);
         b.Property(x => x.SettingsJson).HasMaxLength(2000);
         b.HasMany(x => x.Events).WithOne(x => x.Scan).HasForeignKey(x => x.ScanId).OnDelete(DeleteBehavior.Cascade);
         b.HasIndex(x => new { x.Status, x.StartedAt });

@@ -40,6 +40,12 @@ public sealed partial class ServiceProber(ScanOptions options)
                 if (await TryTlsAsync(address, port, hostname, cancellationToken) is { } tlsAfterAlert) return tlsAfterAlert;
             }
 
+            // Some embedded servers answer before receiving a request (e.g. a TP-Link router pushes "301 Moved" on connect).
+            if (PushedHttpResponse(banner) is { } pushed)
+            {
+                return new ServiceProbeResult(HttpFingerprinter.Identify(pushed, isTls: false) with { Method = "http-banner" }, null);
+            }
+
             if (BannerParser.Parse(banner, port) is { } fromBanner)
             {
                 return new ServiceProbeResult(fromBanner, null);
@@ -65,6 +71,13 @@ public sealed partial class ServiceProber(ScanOptions options)
         }
 
         return new ServiceProbeResult(ServiceIdentification.FromPortOnly(port), null);
+    }
+
+    internal static HttpResponseInfo? PushedHttpResponse(byte[] banner)
+    {
+        var length = banner.Length;
+        while (length > 0 && banner[length - 1] == 0) length--; // NUL padding after the response
+        return HttpResponseParser.TryParse(banner[..length], out var response) ? response : null;
     }
 
     /// <summary>Client-speaks-first protocols probed only on their registered ports, to avoid sending foreign bytes to unknown services.</summary>

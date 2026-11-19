@@ -54,6 +54,48 @@ public static class Labels
         _ => type.ToString()
     };
 
+    public static string Of(AssetStatus status) => status switch
+    {
+        AssetStatus.New => "Nowe",
+        AssetStatus.Active => "Aktywne",
+        AssetStatus.Missing => "Nieobecne",
+        AssetStatus.NotCovered => "Poza ostatnimi skanami",
+        _ => status.ToString()
+    };
+
+    public static string Tone(AssetStatus status) => status switch
+    {
+        AssetStatus.New => "info",
+        AssetStatus.Active => "ok",
+        AssetStatus.Missing => "warn",
+        _ => "muted"
+    };
+
+    public static string Describe(AssetStatus status) => status switch
+    {
+        AssetStatus.New => "Wykryte po raz pierwszy w ostatnim skanie obejmującym jego adres",
+        AssetStatus.Active => "Wykryte w ostatnim skanie obejmującym jego adres (w tym nowe)",
+        AssetStatus.Missing => "Ostatni skan jego sieci obejmujący jego adres nie znalazł urządzenia (skany innych sieci z tym samym zakresem adresów się nie liczą)",
+        AssetStatus.NotCovered => "Żaden zakończony skan nie obejmował ostatnio jego adresu",
+        _ => ""
+    };
+
+    public static string Of(AssetCriticality criticality) => criticality switch
+    {
+        AssetCriticality.Low => "Niska",
+        AssetCriticality.Medium => "Średnia",
+        AssetCriticality.High => "Wysoka",
+        AssetCriticality.Critical => "Krytyczna",
+        _ => criticality.ToString()
+    };
+
+    public static string Tone(AssetChangeKind kind) => kind switch
+    {
+        AssetChangeKind.PortOpened or AssetChangeKind.ServiceChanged or AssetChangeKind.MacChanged => "warn",
+        AssetChangeKind.PortClosed => "ok",
+        _ => "info"
+    };
+
     public static string Of(DiscoveryMethod methods)
     {
         var parts = new List<string>();

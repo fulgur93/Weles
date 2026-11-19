@@ -152,7 +152,7 @@ Kluczowa decyzja: **rozdzielenie tożsamości od obserwacji**.
 
 | Encja | Etap | Zarys |
 |-------|------|-------|
-| `NetworkInterface` | 3 | `AssetId`, `MacAddress`, `IpAddress`, `Name` – urządzenia z wieloma adresami (przesunięte z Etapu 2: korelacja MAC/IP w `Asset` wystarcza do discovery) |
+| `NetworkInterface` | – | **Nie tworzona.** Historia adresów urządzenia wynika z niezmiennych obserwacji (`DiscoveredHost`) – oś czasu pokazuje zmiany IP/MAC; osobna encja nie wnosiłaby danych. Wróci, jeśli agenci (Etap 10) zaczną raportować wiele interfejsów jednego hosta. |
 | `SoftwareVersion` | 4 | znormalizowany katalog `(Vendor, Product, Version, Cpe)` współdzielony przez usługi; do tego czasu pola leżą w `DiscoveredService` |
 | `NetworkRelationship` | 7 | `SourceAssetId`, `TargetAssetId`, `Kind` (same‑segment, gateway, reachable‑service), `Evidence`, `Confidence`, `ScanId` |
 | `AttackPath` + `AttackPathStep` | 7 | uporządkowane kroki z `Justification` i `Confidence`, `IsHypothetical = true` zawsze, dopóki nie ma dowodu |
@@ -182,7 +182,7 @@ ScanEngine: ScopeResolver ─► wykrywanie hostów ─► tablica ARP ─► po
 |------|----------|-------------|
 | Zakres | `TargetParser` (IP, CIDR ≤ /16, zakres, IPv6, domena), wykluczenia wygrywają, adresy publiczne tylko ze zgodą, zarezerwowane/multicast nigdy, limit `MaxHostsPerScan` | – |
 | Hosty | ICMP (`Ping`, na Linuksie przez systemowy `ping`) **lub** TCP connect na porty sondujące – RST też dowodzi istnienia hosta; następnie odczyt tablicy ARP (`/proc/net/arp`, `GetIpNetTable`) – hosty bez odpowiedzi, ale z wpisem ARP, są oznaczane metodą ARP | brak |
-| Porty | TCP connect, `ConnectionGate` = limit równoległości + token bucket (połączenia/s), zamknięcie RST (bez TIME_WAIT) | brak |
+| Porty | TCP connect, `ConnectionGate` globalnie (równoległość + token bucket) **i osobno na każdy host** (domyślnie 10 równoległych, 20 połączeń/s); zamknięcie zwykłym FIN, nigdy RST (zob. dziennik decyzji 2026‑11‑19) | brak |
 | Usługi | baner pasywny → sondy protokołów tylko na ich portach (Redis `PING`/`INFO server`, PostgreSQL `SSLRequest`, RDP X.224 z wykrywaniem NLA) → `GET /` → TLS (certyfikat, protokół, szyfr, próba TLS 1.0/1.1) → HTTP po TLS | brak |
 | Producent | Rejestr IEEE MA-L osadzony w aplikacji (`oui.csv.gz`, ~26,5 tys. wpisów, odświeżanie `deploy/tools/update-oui.sh`) + prefiksy wirtualizacji; MAC losowe/lokalne oznaczane | – |
 | Klasyfikacja | `AssetClassifier` – typ i system z listą powodów (banery, porty, TTL, producent, brama, interfejs WWW) | – |
@@ -198,6 +198,10 @@ Weryfikacja na prawdziwej sieci (192.168.0.0/24, 2026‑11‑18, za zgodą wła�
 (router TP‑Link, punkt dostępowy Tenda, 2 dekodery ADB, radio internetowe Frontier Silicon, Chromecast/Android TV,
 telefony z losowym MAC, komputer z WELES), skan Szybki ~18 s, Standardowy ~21 s; 3 kolejne skany → 33 obserwacje,
 11 zasobów (korelacja bez duplikatów). Dekodery bez odpowiedzi ICMP wykryte przez TCP + ARP.
+Druga sieć (przewodowa, 2026‑11‑19, za zgodą): 3 urządzenia (router TP‑Link TL‑WR841N v9, telefon z losowym MAC,
+komputer z WELES); 4 skany (Szybki, Standardowy, Mobilny, Standardowy fragmentu .1–.50) → 3 zasoby, statusy poprawne
+(fragment sieci nie oznaczył pozostałych jako nieobecnych). Test ujawnił zawieszanie usług routera przez zamykanie
+połączeń RST – naprawione (dziennik decyzji).
 
 Zasada dla DNS: wersja z `version.bind` może należeć do serwera nadrzędnego (router przekazujący zapytania) – pewność 55
 i flaga `dns.versionNote`; Etap 4 musi traktować dopasowania o pewności < 70 jako „Wymaga weryfikacji”.
@@ -221,6 +225,37 @@ i flaga `dns.versionNote`; Etap 4 musi traktować dopasowania o pewności < 70 j
 
 Ograniczenia znane po Etapie 2: brak UDP poza mDNS (SNMP, NetBIOS-NS, SSDP), brak SMB negotiate (wersja SMB/SMBv1 – Etap 5), brak STARTTLS dla SMTP/IMAP, MongoDB rozpoznawane tylko z portu.
 
+## 5a. Inwentarz urządzeń (Etap 3)
+
+- **Pola ręczne** (`CustomName`, `UserAssetType`, `Criticality`, `Notes`, migracja `Stage3Assets`) nigdy nie są
+  nadpisywane przez skan. `DisplayName` = nazwa użytkownika albo nazwa automatyczna (host → „producent (IP)” → IP).
+  Wykryty typ (`AssetType`) nadal się aktualizuje, a obowiązuje `EffectiveType = UserAssetType ?? AssetType`.
+- **Status urządzenia** (`AssetStatusRules`) liczony względem *ostatniego zakończonego skanu, który objął jego adres*
+  (zakres odtwarzany ze `ScopeSnapshot`) lub w którym urządzenie zaobserwowano: Nowe / Aktywne / Nieobecne /
+  Poza ostatnimi skanami. Skan innej sieci nie czyni urządzenia „nieobecnym”; skany przerwane i zatrzymane się nie liczą.
+  „Aktywne” obejmuje też „Nowe” (urządzenie widziane po raz pierwszy jest obecne).
+- **Tożsamość sieci** (`NetworkIdentity`, `Scan.NetworkFingerprint`, migracja `Stage3NetworkIdentity`) – adres MAC bramy
+  sieci, w której wykonano skan. Zakresy prywatne się powtarzają (192.168.0.0/24 w domu i w biurze), więc skan obejmuje
+  urządzenie tylko w jego własnej sieci, a dopasowanie „po IP i nazwie” (urządzenia bez MAC) też wymaga tej samej sieci.
+  Migracja uzupełnia odcisk starych skanów z bramy zaobserwowanej w danym skanie. Nieznany odcisk = sieci nierozróżnialne.
+- **Ten komputer** – znaleziony pod adresem sieciowym (nie 127.0.0.1) jest jednym zasobem niezależnie od karty
+  (Wi‑Fi / kabel): zasoby z adresami MAC jego interfejsów są łączone w najstarszy (obserwacje, ustalenia, pola ręczne
+  zachowane). Skan 127.0.0.1 pozostaje osobnym zasobem – usługi nasłuchujące tylko lokalnie to inna powierzchnia ataku.
+- **Model urządzenia** (`DeviceModel`, pole `Asset.Model`, migracja `Stage3DeviceModel`) – tylko gdy urządzenie samo go
+  podaje (realm HTTP Basic, nagłówek UPnP `TL-WR841N/9.0`, tytuł, ADB). Liczba po modelu w nagłówku UPnP to wersja
+  sprzętu, a nie oprogramowania – nie trafia do pola wersji, żeby nie zafałszować dopasowań CVE w Etapie 4. Nazwa
+  automatyczna: host → „model (IP)” → „skrócony producent (IP)” → IP.
+- **Stan portów** (`ObservationComparer.Replay`) – każdy port ma stan z ostatniego skanu, który go *sprawdzał*
+  (profil portów skanu). Skan Szybki po Standardowym nie „zamyka” portów spoza swojej listy, a kolejny Standardowy nie
+  ogłasza ich jako „nowych”; aktualne usługi i liczba portów na liście łączą obserwacje według tej samej zasady.
+- **Historia zmian** (`ObservationComparer`) – porównanie kolejnych obserwacji: IP, nazwa hosta, MAC, typ, otwarte
+  i zamknięte porty, zmiana produktu, zmiana wersji, nowy certyfikat; oś czasu zawiera też skany, które objęły adres
+  i nie znalazły urządzenia.
+- **Lista** (`AssetQueries` + `AssetListEngine`) – dane ładowane raz, filtrowanie/sortowanie w pamięci: wyszukiwanie
+  wielu słów (AND) po nazwie, IP, MAC, producencie, systemie, segmencie, produktach i numerze portu, bez wielkości liter
+  i polskich znaków (z jawnym ł → l); facety z licznikami; sortowanie wielokolumnowe (Shift+klik); paginacja; wybór
+  kolumn zapisany w `ApplicationSetting` (`ui.assets.columns`).
+
 ## 6. Bezpieczeństwo aplikacji (Etap 1)
 
 - Kestrel nasłuchuje **wyłącznie** na `127.0.0.1` (port 5080 albo pierwszy wolny).
@@ -235,7 +270,7 @@ Ograniczenia znane po Etapie 2: brak UDP poza mDNS (SNMP, NetBIOS-NS, SSDP), bra
 |------|--------|-----------|
 | 1 | Fundament: solution, Blazor, EF Core + SQLite, migracje, ścieżki danych, Serilog z rotacją, bezpieczny hosting localhost, layout, dashboard (dane z bazy), ustawienia | ✅ |
 | 2 | Network Discovery: interfejsy, CIDR, zakresy z zatwierdzaniem, ICMP/TCP/ARP, porty, banery, TLS, HTTP, zapis do bazy, postęp na żywo, zatrzymanie | ✅ (laboratorium demo → Etap 4) |
-| 3 | Assets: tabela (szukanie, sortowanie, filtry, paginacja, kolumny), szczegóły, historia | ✅ |
+| 3 | Assets: tabela (szukanie, sortowanie, filtry, paginacja, kolumny), szczegóły, historia, pola ręczne, status obecności | ✅ |
 | 4 | Vulnerability Intelligence: NVD/KEV/EPSS, snapshot offline, matcher wersji ze statusami | ✅ |
 | 5 | Risk Engine: reguły, scoring z wyjaśnieniem, Security Posture Score, trend | ✅ |
 | 6 | AI Security Analyst: Ollama jako proces potomny, model, czat ze strumieniowaniem, kontekst z bazy | ✅ |
@@ -269,3 +304,12 @@ Ograniczenia znane po Etapie 2: brak UDP poza mDNS (SNMP, NetBIOS-NS, SSDP), bra
 | 2026‑11‑18 | Jedno przekierowanie HTTP w obrębie tego samego schematu/hosta/portu (walidacja `Location` – brak znaków sterujących, limit długości); inne hosty nigdy. |
 | 2026‑11‑18 | Nieznany nagłówek `Server` bez wersji nie tworzy produktu (np. „BH”, „Http Server”); w nagłówkach UPnP pomijane są znaczniki protokołu/systemu. UPnP nie jest „panelem administracyjnym”. |
 | 2026‑11‑18 | Wskazówki z certyfikatu TLS (np. `CN=tplinkwifi.net`, `OU=Widevine`) używane do rozpoznania urządzenia; własny komputer rozpoznawany po adresach interfejsów; nazwy `_gateway` z systemd-resolved odrzucane. |
+| 2026‑11‑19 | Lista urządzeń filtrowana/sortowana w pamięci – SQLite `LIKE` nie obsługuje polskich znaków bez wielkości liter, a skala lokalnego inwentarza (do kilkudziesięciu tysięcy) na to pozwala. |
+| 2026‑11‑19 | „Nieobecne” tylko wtedy, gdy skan obejmował adres urządzenia; wyszukiwanie mapuje ł → l (ł nie ma w Unicode znaku łączonego, więc zwykłe pomijanie diakrytyków go nie obejmuje) – wykryte testem. |
+| 2026‑11‑19 | Interfejs WWW urządzenia lub serwer wydruku (np. CUPS) opisywany neutralnie; ostrzeżenie tylko dla paneli administracyjnych, DevOps i stron logowania. |
+| 2026‑11‑19 | Połączenia zamykane FIN zamiast RST (`SO_LINGER 0`). Zmierzone na routerze TP‑Link TL‑WR841N v9: jedno połączenie zerwane RST tuż po nawiązaniu wyłączało jego serwer UPnP na ~18 s (powtarzalnie, 2/2), a przekierowanie na porcie 80 przestało odpowiadać na ponad 10 minut; zamknięcie FIN – 0 awarii (2/2). Samo tempo nie było przyczyną (90 zamkniętych portów przy 20/s – 0 awarii). TIME_WAIT powstaje tylko dla otwartych portów, więc jest nieistotny. |
+| 2026‑11‑19 | Limit połączeń na pojedynczy host (`MaxConcurrentConnectionsPerHost` 10, `ConnectionsPerSecondPerHost` 20) obok limitu globalnego – tanie urządzenia nie dostają serii setek połączeń naraz. Skan Standardowy jednego hosta trwa przez to ~19 s. |
+| 2026‑11‑19 | Odpowiedź HTTP wysłana przez serwer przed żądaniem (z dopełnieniem NUL) rozpoznawana jako HTTP (`http-banner`); realm `WWW-Authenticate` uwzględniany przy rozpoznawaniu panelu; panel za 401 opisywany jako „wymaga logowania”, a HTTP Basic bez TLS oznaczany jako przesyłanie hasła jawnym tekstem. Treść bez deklaracji kodowania, będąca poprawnym UTF‑8, dekodowana jako UTF‑8. |
+| 2026‑11‑19 | Porównanie obserwacji uwzględnia listę portów sprawdzonych przez skan – wcześniej skan profilem Mobilnym po Standardowym raportował porty 81/1900/49152 routera jako zamknięte, a następny Standardowy jako nowe (wykryte na prawdziwej sieci). |
+| 2026‑11‑19 | Zakładka „Aktywne” pokazuje też urządzenia nowe – po pierwszym skanie była pusta (zgłoszone przez użytkownika). |
+| 2026‑11‑19 | Sieć skanu identyfikowana adresem MAC bramy: skan sieci przewodowej 192.168.0.0/24 oznaczał 12 urządzeń z domowej sieci 192.168.0.0/24 jako nieobecne. Komputer z WELES widziany przez Wi‑Fi i kabel występował jako dwa zasoby – teraz jeden. |

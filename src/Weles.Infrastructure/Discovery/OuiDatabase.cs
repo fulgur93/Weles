@@ -46,7 +46,7 @@ public sealed class OuiDatabase
             return vendor;
         }
 
-        return IsLocallyAdministered(bytes) ? "Adres losowy / administrowany lokalnie" : null;
+        return IsLocallyAdministered(bytes) ? Weles.Core.Rules.AssetNaming.RandomMacVendor : null;
     }
 
     /// <summary>Locally administered addresses (e.g. phone MAC randomization) have no registered vendor.</summary>

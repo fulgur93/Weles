@@ -17,4 +17,9 @@ public sealed record HostScanResult(
     bool IsGateway,
     HostClassification Classification,
     IReadOnlyList<PortScanResult> OpenPorts,
-    IReadOnlyList<MdnsService>? AnnouncedServices = null);
+    IReadOnlyList<MdnsService>? AnnouncedServices = null,
+    IReadOnlySet<string>? LocalMacAddresses = null)
+{
+    /// <summary>The machine running WELES, reached on a network address (not loopback).</summary>
+    public bool IsLocalMachine => LocalMacAddresses is not null;
+}

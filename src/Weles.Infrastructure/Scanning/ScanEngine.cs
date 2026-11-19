@@ -135,6 +135,10 @@ public sealed class ScanEngine(
                 }
             }
 
+            scan.NetworkFingerprint = NetworkFingerprint(interfaces, scope.Addresses, arp);
+            await db.SaveChangesAsync(CancellationToken.None);
+            var localMacs = localNetwork.GetLocalMacAddresses();
+
             var scopeMdns = (await mdnsTask).Where(m => scopeSet.Contains(m.Key)).ToDictionary(m => m.Key, m => m.Value);
             var mdnsOnly = 0;
             foreach (var (address, host) in scopeMdns)
@@ -167,7 +171,7 @@ public sealed class ScanEngine(
             await Parallel.ForEachAsync(alive.OrderBy(a => Ipv4Sort(a.Key)), new ParallelOptions { MaxDegreeOfParallelism = options.ParallelHostScans, CancellationToken = cancellationToken },
                 async (entry, ct) =>
                 {
-                    var result = await ScanHostAsync(entry.Key, entry.Value, ports, arp, gateways, localMachine, scopeMdns.GetValueOrDefault(entry.Key), prober, gate, options, progress, ct);
+                    var result = await ScanHostAsync(entry.Key, entry.Value, ports, arp, gateways, localMachine, localMacs, scopeMdns.GetValueOrDefault(entry.Key), prober, gate, options, progress, ct);
                     await writer.SaveHostAsync(scanId, result);
                     progress.HostCompleted();
                 });
@@ -191,9 +195,11 @@ public sealed class ScanEngine(
 
     private async Task<HostScanResult> ScanHostAsync(
         IPAddress address, LivenessResult liveness, IReadOnlyList<int> ports, IReadOnlyDictionary<IPAddress, string> arp,
-        IReadOnlySet<IPAddress> gateways, IReadOnlyDictionary<IPAddress, string?> localMachine, MdnsHost? mdns, ServiceProber prober, ConnectionGate gate, ScanOptions options, ScanProgress progress, CancellationToken ct)
+        IReadOnlySet<IPAddress> gateways, IReadOnlyDictionary<IPAddress, string?> localMachine, IReadOnlySet<string> localMacs, MdnsHost? mdns, ServiceProber prober, ConnectionGate gate, ScanOptions options, ScanProgress progress, CancellationToken ct)
     {
         progress.Activity = $"Skanowanie portów {address}";
+        // Per-host limits on top of the global gate, so no single device sees a connection flood.
+        await using var hostGate = new ConnectionGate(options.MaxConcurrentConnectionsPerHost, options.ConnectionsPerSecondPerHost);
         var open = new ConcurrentDictionary<int, string>();
         foreach (var known in liveness.OpenPorts.Where(ports.Contains)) open[known] = "syn-ack";
 
@@ -209,6 +215,7 @@ public sealed class ScanEngine(
                 return;
             }
 
+            using var host = await hostGate.AcquireAsync(token);
             using var _ = await gate.AcquireAsync(token);
             var result = await NetworkProbe.TcpConnectAsync(address, port, options.ConnectTimeoutMs, token);
             if (result.State == PortState.Open) open[port] = result.Reason;
@@ -223,6 +230,7 @@ public sealed class ScanEngine(
             async (port, token) =>
             {
                 ServiceProbeResult probe;
+                using (await hostGate.AcquireAsync(token))
                 using (await gate.AcquireAsync(token))
                 {
                     probe = await prober.ProbeAsync(address, port.Key, hostname, token);
@@ -251,7 +259,23 @@ public sealed class ScanEngine(
             MdnsServiceTypes: mdns?.Services.Select(s => s.Type).ToList()));
 
         var methods = liveness.Methods | (mac is not null ? DiscoveryMethod.Arp : DiscoveryMethod.None) | (hostname is not null ? DiscoveryMethod.Dns : DiscoveryMethod.None);
-        return new HostScanResult(address, methods, liveness.RoundTripMs, liveness.Ttl, hostname, mac, vendor, isGateway, classification, portList, mdns?.Services);
+        return new HostScanResult(address, methods, liveness.RoundTripMs, liveness.Ttl, hostname, mac, vendor, isGateway, classification, portList, mdns?.Services,
+            isLocal && !IPAddress.IsLoopback(address) ? localMacs : null);
+    }
+
+    /// <summary>Gateway MAC of every local interface whose network contains part of the scope.</summary>
+    internal static string? NetworkFingerprint(IReadOnlyList<LocalInterfaceInfo> interfaces, IReadOnlyList<IPAddress> scope, IReadOnlyDictionary<IPAddress, string> arp)
+    {
+        var scopeValues = scope.Where(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork).Select(Ipv4.ToUInt).ToList();
+        var macs = interfaces
+            .Where(i => i.Gateway is not null && IPAddress.TryParse(i.Address, out _))
+            .Where(i =>
+            {
+                var range = Ipv4.CidrRange(Ipv4.ToUInt(IPAddress.Parse(i.Address)), i.PrefixLength, hostsOnly: false);
+                return scopeValues.Any(range.Contains);
+            })
+            .Select(i => IPAddress.TryParse(i.Gateway, out var gw) ? arp.GetValueOrDefault(gw) : null);
+        return Core.Networking.NetworkIdentity.Fingerprint(macs);
     }
 
     /// <summary>The device's own announcement names a service that did not identify itself to the probes.</summary>

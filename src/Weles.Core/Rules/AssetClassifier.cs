@@ -67,6 +67,11 @@ public static class AssetClassifier
             if (why is not null) reasons.Add(why + " – niska pewność");
         }
 
+        if (e.Services.Select(s => s.Extra.GetValueOrDefault("device.model")).FirstOrDefault(m => m is not null) is { } model)
+        {
+            reasons.Add($"Model zgłoszony przez urządzenie: {model}");
+        }
+
         // --- Device type ---
         var deviceFromHttp = e.Services.Select(s => s.Extra.GetValueOrDefault("http.device")).FirstOrDefault(d => d is not null);
         AssetType type;
@@ -95,7 +100,13 @@ public static class AssetClassifier
         else if (deviceFromHttp is not null && Enum.TryParse<AssetType>(deviceFromHttp, out var httpType))
         {
             type = httpType; confidence = 80;
-            reasons.Add($"Interfejs WWW urządzenia: {e.Services.First(s => s.Extra.GetValueOrDefault("http.device") == deviceFromHttp).Extra["http.panel"]}");
+            var source = e.Services.First(s => s.Extra.GetValueOrDefault("http.device") == deviceFromHttp);
+            reasons.Add(source.Extra.TryGetValue("http.panel", out var panelName) ? $"Interfejs WWW urządzenia: {panelName}" : "Nagłówek usługi UPnP wskazuje producenta urządzenia");
+            if (e.IsGateway && type is AssetType.Router or AssetType.NetworkDevice)
+            {
+                confidence = 90;
+                reasons.Add("Brama domyślna segmentu sieci");
+            }
         }
         else if (ports.Overlaps([9100, 515, 631]) && (ports.Contains(9100) || ContainsAny(vendor, "HP", "Hewlett", "Brother", "Canon", "Epson", "Xerox", "Kyocera", "Lexmark", "Ricoh")))
         {

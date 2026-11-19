@@ -1,0 +1,250 @@
+@page "/assets/{AssetId:int}"
+@using Weles.Infrastructure.Assets
+@using Weles.Infrastructure.Queries
+@using Weles.Core.Rules
+@inject AssetQueries Queries
+@inject AssetService AssetEditor
+
+<PageTitle>@(_detail?.Asset.DisplayName ?? "Urządzenie") · WELES</PageTitle>
+
+@if (_detail is null)
+{
+    <div class="card loading">@(_notFound ? "Urządzenie nie istnieje." : "Wczytywanie…")</div>
+}
+else
+{
+    var a = _detail.Asset;
+    var latest = _detail.Latest;
+    <div class="page-header">
+        <div>
+            <a class="back-link" href="assets"><Icon Name="arrow-left" Size="14" /> Assets</a>
+            <h1>@a.DisplayName</h1>
+            <p class="page-subtitle">
+                <span class="mono">@a.PrimaryIpAddress</span> · @Labels.Of(a.EffectiveType)@(a.UserAssetType is not null ? " (ustawiony ręcznie)" : "")
+                · krytyczność: @Labels.Of(a.Criticality)
+            </p>
+        </div>
+        <div class="header-actions">
+            <span title="@Labels.Describe(_detail.Presence.Status)"><StatusPill Tone="@Labels.Tone(_detail.Presence.Status)">@Labels.Of(_detail.Presence.Status)</StatusPill></span>
+            <button class="btn btn-ghost" @onclick="StartEdit"><Icon Name="settings" Size="15" /> Edytuj</button>
+        </div>
+    </div>
+
+    @if (_message is not null)
+    {
+        <div class="alert @(_messageIsError ? "alert-bad" : "alert-ok")">@_message</div>
+    }
+
+    @if (_edit is not null)
+    {
+        <section class="card editor">
+            <div class="card-title"><Icon Name="settings" /> Dane urządzenia (wprowadzane ręcznie)</div>
+            <p class="muted small">Skany nigdy nie nadpisują tych pól. Krytyczność wpływa na ocenę ryzyka (Etap 5).</p>
+            <div class="form-grid">
+                <label class="field"><span>Nazwa</span><input class="input" maxlength="255" @bind="_edit.Name" placeholder="@AssetNaming.AutoName(a.Hostname, AssetNaming.Label(a.Model, a.Vendor), a.PrimaryIpAddress)" /><small class="muted">Puste pole = nazwa automatyczna.</small></label>
+                <label class="field">
+                    <span>Typ urządzenia</span>
+                    <select class="input" @bind="_edit.Type">
+                        <option value="">Automatycznie (@Labels.Of(a.AssetType))</option>
+                        @foreach (var t in Enum.GetValues<AssetType>().Where(t => t != AssetType.Unknown)) { <option value="@t">@Labels.Of(t)</option> }
+                    </select>
+                </label>
+                <label class="field">
+                    <span>Krytyczność dla organizacji</span>
+                    <select class="input" @bind="_edit.Criticality">
+                        @foreach (var c in Enum.GetValues<AssetCriticality>()) { <option value="@c">@Labels.Of(c)</option> }
+                    </select>
+                </label>
+                <label class="field"><span>Notatki</span><textarea class="input" rows="3" maxlength="4000" @bind="_edit.Notes" placeholder="np. właściciel, lokalizacja, rola"></textarea></label>
+            </div>
+            @if (_editErrors.Count > 0)
+            {
+                <div class="alert alert-bad"><ul>@foreach (var e in _editErrors) { <li>@e</li> }</ul></div>
+            }
+            <div class="actions">
+                <button class="btn btn-primary" @onclick="SaveAsync" disabled="@_saving">Zapisz</button>
+                <button class="btn btn-ghost" @onclick="() => _edit = null">Anuluj</button>
+            </div>
+        </section>
+    }
+
+    <section class="grid-2">
+        <div class="card">
+            <div class="card-title"><Icon Name="assets" /> Tożsamość</div>
+            <dl class="facts">
+                <dt>Adres IP</dt><dd class="mono">@(a.PrimaryIpAddress ?? "—")</dd>
+                <dt>Nazwa hosta</dt><dd>@(a.Hostname ?? "—")</dd>
+                <dt>Adres MAC</dt><dd class="mono">@(a.MacAddress ?? "—")</dd>
+                <dt>Producent</dt><dd>@(a.Vendor ?? "—")</dd>
+                @if (a.Model is not null) { <dt>Model</dt><dd>@a.Model</dd> }
+                <dt>System</dt><dd>@(a.OsFamily ?? "nierozpoznany")</dd>
+                <dt>Segment</dt><dd class="mono">@(a.NetworkSegment?.Cidr ?? "—")</dd>
+                <dt>Pierwsze wykrycie</dt><dd>@Labels.Local(a.FirstSeenAt)</dd>
+                <dt>Ostatnio widziane</dt><dd>@Labels.Local(a.LastSeenAt)</dd>
+                @if (latest is not null)
+                {
+                    <dt>Wykryte przez</dt><dd>@Labels.Of(latest.DiscoveryMethods)</dd>
+                }
+                <dt>Status</dt><dd>@Labels.Describe(_detail.Presence.Status)@(_detail.Presence.ReferenceScanId is { } rs ? $" (skan #{rs})" : "")</dd>
+            </dl>
+            @if (!string.IsNullOrEmpty(a.Notes))
+            {
+                <div class="notes"><strong>Notatki:</strong> @a.Notes</div>
+            }
+        </div>
+
+        <div class="card">
+            <div class="card-title"><Icon Name="info" /> Klasyfikacja</div>
+            <p>
+                <strong>@Labels.Of(a.AssetType)</strong>
+                @if (latest is not null) { <span class="muted small"> · pewność @latest.ClassificationConfidence%</span> }
+                @if (a.UserAssetType is { } user) { <span class="muted small"> · nadpisane ręcznie na: <strong>@Labels.Of(user)</strong></span> }
+            </p>
+            @if (!string.IsNullOrEmpty(a.ClassificationReasons))
+            {
+                <ul class="checklist">
+                    @foreach (var r in a.ClassificationReasons.Split('\n')) { <li><Icon Name="layers" Size="14" /> @r</li> }
+                </ul>
+            }
+            <div class="card-title" style="margin-top:18px"><Icon Name="risk" /> Ryzyko i podatności</div>
+            <dl class="facts">
+                <dt>Ocena ryzyka</dt><dd>@(a.CurrentRiskScore is { } score ? $"{score:0} ({a.CurrentRiskLevel})" : "brak – ocena ryzyka powstanie w Etapie 5")</dd>
+                <dt>Podatności</dt><dd>@(_detail.Vulnerabilities.Count > 0 ? $"{_detail.Vulnerabilities.Count(v => v.Status == FindingStatus.Open)} otwartych" : "brak dopasowań – baza podatności i dopasowanie wersji powstaną w Etapie 4")</dd>
+                <dt>Relacje</dt><dd class="muted">powiązania z innymi urządzeniami – Etap 7 (Network Topology)</dd>
+            </dl>
+        </div>
+    </section>
+
+    <section class="card">
+        <div class="card-title"><Icon Name="scans" /> Aktualne usługi
+            @if (latest is not null) { <span class="muted small">· ostatnia obserwacja: skan <a href="scans/@latest.ScanId">#@latest.ScanId</a> (@Labels.Local(latest.DiscoveredAt))</span> }
+        </div>
+        @if (latest is not null && _detail.CurrentPorts.Where(p => p.DiscoveredHostId != latest.Id).ToList() is { Count: > 0 } carried)
+        {
+            <p class="muted small">Porty @string.Join(", ", carried.Select(p => p.Port)) pochodzą z wcześniejszych skanów – ostatni skan ich nie sprawdzał (inny profil portów).</p>
+        }
+        @if (latest is null)
+        {
+            <p class="muted">Brak zakończonych obserwacji.</p>
+        }
+        else
+        {
+            <AnnouncedServices Host="latest" />
+            <ServiceTable Ports="_detail.CurrentPorts" ShowEmpty="true" />
+        }
+    </section>
+
+    @if (_detail.Vulnerabilities.Count > 0)
+    {
+        <section class="card">
+            <div class="card-title"><Icon Name="vulnerabilities" /> Podatności</div>
+            <table class="table">
+                <thead><tr><th>CVE</th><th>CVSS</th><th>KEV</th><th>Dopasowanie</th><th>Status</th></tr></thead>
+                <tbody>
+                    @foreach (var v in _detail.Vulnerabilities)
+                    {
+                        <tr><td class="mono">@v.Vulnerability!.CveId</td><td>@v.Vulnerability.CvssScore</td><td>@(v.Vulnerability.IsKnownExploited ? "tak" : "—")</td><td>@v.MatchStatus (@v.MatchConfidence%)</td><td>@v.Status</td></tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+    }
+
+    <section class="card">
+        <div class="card-title"><Icon Name="clock" /> Historia obserwacji i zmian</div>
+        <ol class="timeline">
+            @foreach (var item in Timeline())
+            {
+                <li class="timeline-item @(item.Absence is not null ? "absent" : "")">
+                    @if (item.Observation is { } o)
+                    {
+                        <div class="timeline-head">
+                            <a href="scans/@o.ScanId"><strong>Skan #@o.ScanId</strong></a> <span class="muted">· @o.ScanTargetName · @Labels.Local(o.ScanStartedAt)</span>
+                        </div>
+                        <div class="small muted">
+                            <span class="mono">@o.Host.IpAddress</span> · profil portów <span class="mono">@o.Host.Scan?.PortSpecification</span> · otwarte porty: @o.Host.Ports.Count@(o.Host.Ports.Count > 0 ? $" ({string.Join(", ", o.Host.Ports.OrderBy(p => p.Port).Select(p => p.Port))})" : "")
+                        </div>
+                        @if (o == _detail.Observations[^1])
+                        {
+                            <div class="change tone-info">Pierwsze wykrycie urządzenia</div>
+                        }
+                        else if (o.ChangesSincePrevious.Count == 0)
+                        {
+                            <div class="small muted">Bez zmian względem poprzedniej obserwacji</div>
+                        }
+                        @foreach (var c in o.ChangesSincePrevious)
+                        {
+                            <div class="change tone-@Labels.Tone(c.Kind)">@c.Description</div>
+                        }
+                    }
+                    else if (item.Absence is { } miss)
+                    {
+                        <div class="timeline-head"><a href="scans/@miss.ScanId"><strong>Skan #@miss.ScanId</strong></a> <span class="muted">· @Labels.Local(miss.StartedAt)</span></div>
+                        <div class="change tone-warn">Nie wykryto – adres był w zakresie skanu</div>
+                    }
+                </li>
+            }
+        </ol>
+    </section>
+}
+
+@code {
+    [Parameter] public int AssetId { get; set; }
+
+    private sealed class EditModel
+    {
+        public string? Name { get; set; }
+        public string Type { get; set; } = "";
+        public AssetCriticality Criticality { get; set; }
+        public string? Notes { get; set; }
+    }
+
+    private sealed record TimelineItem(DateTime At, AssetObservation? Observation, CompletedScanCoverage? Absence);
+
+    private AssetDetail? _detail;
+    private bool _notFound;
+    private EditModel? _edit;
+    private List<string> _editErrors = [];
+    private bool _saving;
+    private string? _message;
+    private bool _messageIsError;
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _detail = await Queries.GetAsync(AssetId);
+        _notFound = _detail is null;
+    }
+
+    private IEnumerable<TimelineItem> Timeline() =>
+        _detail!.Observations.Select(o => new TimelineItem(o.ScanStartedAt, o, null))
+            .Concat(_detail.Absences.Select(s => new TimelineItem(s.StartedAt, null, s)))
+            .OrderByDescending(i => i.At);
+
+    private void StartEdit()
+    {
+        var a = _detail!.Asset;
+        _edit = new EditModel { Name = a.CustomName, Type = a.UserAssetType?.ToString() ?? "", Criticality = a.Criticality, Notes = a.Notes };
+        _editErrors = [];
+        _message = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        var result = await AssetEditor.UpdateAsync(AssetId, new AssetEditInput(
+            _edit!.Name, Enum.TryParse<AssetType>(_edit.Type, out var t) ? t : null, _edit.Criticality, _edit.Notes));
+        _saving = false;
+        if (!result.Success)
+        {
+            _editErrors = [.. result.Errors];
+            return;
+        }
+
+        _edit = null;
+        _message = "Zapisano.";
+        _messageIsError = false;
+        await LoadAsync();
+    }
+}

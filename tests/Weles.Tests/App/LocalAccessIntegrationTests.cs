@@ -152,3 +152,45 @@ public class ScanWorkerIntegrationTests(WelesAppFactory factory) : IClassFixture
         Assert.Contains("Zakończony", html);
     }
 }
+
+public class AssetPagesIntegrationTests(WelesAppFactory factory) : IClassFixture<WelesAppFactory>
+{
+    [Fact]
+    public async Task Asset_list_and_detail_render_real_inventory()
+    {
+        await using var ssh = Weles.Tests.Support.FakeServer.Banner("SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.5\r\n");
+        var targets = factory.Services.GetRequiredService<Weles.Infrastructure.Scanning.ScanTargetService>();
+        var queries = factory.Services.GetRequiredService<Weles.Infrastructure.Queries.ScanQueries>();
+        var editor = factory.Services.GetRequiredService<Weles.Infrastructure.Assets.AssetService>();
+
+        var id = (await targets.CreateAsync(new("Loopback", null, "127.0.0.1", null, false))).Id!.Value;
+        await targets.ApproveAsync(id, confirmedAuthorization: true);
+        var scanId = (await targets.StartScanAsync(id, ssh.Port.ToString())).Id!.Value;
+        Weles.Infrastructure.Queries.ScanDetail? detail = null;
+        for (var i = 0; i < 100 && detail?.Summary.Status is not Weles.Core.Enums.ScanStatus.Completed; i++)
+        {
+            await Task.Delay(200);
+            detail = await queries.GetAsync(scanId);
+        }
+
+        var assetId = detail!.Hosts.Single().AssetId!.Value;
+        await editor.UpdateAsync(assetId, new("Mój serwer testowy", null, Weles.Core.Enums.AssetCriticality.High, null));
+
+        var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, BaseAddress = new Uri("http://localhost") });
+        await client.GetAsync($"/auth?token={Uri.EscapeDataString(factory.Services.GetRequiredService<LocalAccessToken>().Value)}");
+
+        var list = System.Net.WebUtility.HtmlDecode(await client.GetStringAsync("/assets"));
+        Assert.Contains("Mój serwer testowy", list);
+        Assert.Contains("OpenSSH 9.6p1", list);
+        Assert.Contains("Nowe", list);
+
+        var page = System.Net.WebUtility.HtmlDecode(await client.GetStringAsync($"/assets/{assetId}"));
+        Assert.Contains("Mój serwer testowy", page);
+        Assert.Contains("Historia obserwacji", page);
+        Assert.Contains("Pierwsze wykrycie urządzenia", page);
+        Assert.Contains("pakiet dystrybucji: Ubuntu", page);
+
+        Assert.Equal(System.Net.HttpStatusCode.OK, (await client.GetAsync("/assets/999999")).StatusCode);
+        Assert.Contains("nie istnieje", System.Net.WebUtility.HtmlDecode(await client.GetStringAsync("/assets/999999")));
+    }
+}

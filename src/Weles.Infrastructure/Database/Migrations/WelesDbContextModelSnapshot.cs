@@ -57,6 +57,10 @@ namespace Weles.Infrastructure.Database.Migrations
                     b.Property<double?>("CurrentRiskScore")
                         .HasColumnType("REAL");
 
+                    b.Property<string>("CustomName")
+                        .HasMaxLength(255)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("DisplayName")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -79,6 +83,10 @@ namespace Weles.Infrastructure.Database.Migrations
                         .HasMaxLength(17)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Model")
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("NetworkSegmentId")
                         .HasColumnType("INTEGER");
 
@@ -97,6 +105,9 @@ namespace Weles.Infrastructure.Database.Migrations
                     b.Property<string>("PrimaryIpAddress")
                         .HasMaxLength(64)
                         .HasColumnType("TEXT");
+
+                    b.Property<int?>("UserAssetType")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Vendor")
                         .HasMaxLength(255)
@@ -569,6 +580,10 @@ namespace Weles.Infrastructure.Database.Migrations
 
                     b.Property<bool>("IsDemo")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("NetworkFingerprint")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("OpenPorts")
                         .HasColumnType("INTEGER");

@@ -26,6 +26,9 @@ public class Scan
     /// <summary>Scope entries as they were when the scan started – the target may be edited later.</summary>
     public string? ScopeSnapshot { get; set; }
 
+    /// <summary>MAC address(es) of the scanned network's gateway – tells apart networks that reuse the same private range.</summary>
+    public string? NetworkFingerprint { get; set; }
+
     /// <summary>Limits (concurrency, rate, timeouts) used for this scan.</summary>
     public string? SettingsJson { get; set; }
 

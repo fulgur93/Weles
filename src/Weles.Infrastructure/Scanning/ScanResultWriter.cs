@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Weles.Core.Entities;
 using Weles.Core.Enums;
 using Weles.Core.Networking;
+using Weles.Core.Rules;
 using Weles.Infrastructure.Database;
 
 namespace Weles.Infrastructure.Scanning;
@@ -62,7 +63,11 @@ public sealed class ScanResultWriter(IDbContextFactory<WelesDbContext> contextFa
                 Ports = result.OpenPorts.Select(p => ToEntity(p)).ToList()
             };
 
-            var asset = await FindAssetAsync(db, ip, result.MacAddress, result.Hostname);
+            var network = await db.Scans.Where(s => s.Id == scanId).Select(s => s.NetworkFingerprint).SingleOrDefaultAsync();
+            var asset = result.IsLocalMachine
+                ? await ConsolidateLocalMachineAsync(db, result.LocalMacAddresses!, result.MacAddress)
+                : null;
+            asset ??= await FindAssetAsync(db, ip, result.MacAddress, result.Hostname, network);
             if (asset is null)
             {
                 asset = new Asset { DisplayName = ip, FirstSeenAt = now };
@@ -71,7 +76,8 @@ public sealed class ScanResultWriter(IDbContextFactory<WelesDbContext> contextFa
 
             asset.PrimaryIpAddress = ip;
             asset.Hostname = result.Hostname ?? asset.Hostname;
-            asset.MacAddress ??= result.MacAddress;
+            // This machine changes interfaces (Wi‑Fi / cable): keep the MAC of the interface it was found on now.
+            asset.MacAddress = result.IsLocalMachine ? result.MacAddress ?? asset.MacAddress : asset.MacAddress ?? result.MacAddress;
             asset.Vendor = result.Vendor ?? asset.Vendor;
             if (result.Classification.Confidence > 0)
             {
@@ -80,7 +86,11 @@ public sealed class ScanResultWriter(IDbContextFactory<WelesDbContext> contextFa
             }
 
             asset.OsFamily = result.Classification.OsFamily ?? asset.OsFamily;
-            asset.DisplayName = Truncate(asset.Hostname ?? (asset.Vendor is not null && !asset.Vendor.StartsWith("Adres losowy", StringComparison.Ordinal) ? $"{asset.Vendor} ({ip})" : ip), 255)!;
+            var model = result.OpenPorts.Select(p => p.Service?.Identification.Extra.GetValueOrDefault("device.model") ?? p.Service?.Identification.Extra.GetValueOrDefault("adb.model"))
+                .FirstOrDefault(m => !string.IsNullOrWhiteSpace(m));
+            asset.Model = model is null ? asset.Model : Truncate(model, 128);
+            // A name or type set by the user is never overwritten by a scan.
+            asset.DisplayName = AssetNaming.DisplayName(asset.CustomName, asset.Hostname, AssetNaming.Label(asset.Model, asset.Vendor), ip);
             asset.LastSeenAt = now;
             asset.NetworkSegmentId = await FindSegmentIdAsync(db, result.Address) ?? asset.NetworkSegmentId;
 
@@ -131,10 +141,10 @@ public sealed class ScanResultWriter(IDbContextFactory<WelesDbContext> contextFa
     }
 
     /// <summary>
-    /// Identity rules: same MAC → same asset. Without a MAC: same IP and no conflicting MAC/hostname.
-    /// Otherwise a new asset is created (a different device took the address).
+    /// Identity rules: same MAC → same asset. Without a MAC: same IP on the same network (gateway fingerprint) and no
+    /// conflicting MAC/hostname. Otherwise a new asset is created (a different device took the address).
     /// </summary>
-    internal static async Task<Asset?> FindAssetAsync(WelesDbContext db, string ip, string? mac, string? hostname)
+    internal static async Task<Asset?> FindAssetAsync(WelesDbContext db, string ip, string? mac, string? hostname, string? network = null)
     {
         if (mac is not null)
         {
@@ -143,9 +153,60 @@ public sealed class ScanResultWriter(IDbContextFactory<WelesDbContext> contextFa
         }
 
         var byIp = await db.Assets.Where(a => a.PrimaryIpAddress == ip).OrderByDescending(a => a.LastSeenAt).ToListAsync();
-        return byIp.FirstOrDefault(a =>
+        var candidates = byIp.Where(a =>
             (a.MacAddress is null || mac is null || a.MacAddress == mac) &&
-            (a.Hostname is null || hostname is null || string.Equals(a.Hostname, hostname, StringComparison.OrdinalIgnoreCase)));
+            (a.Hostname is null || hostname is null || string.Equals(a.Hostname, hostname, StringComparison.OrdinalIgnoreCase))).ToList();
+        if (candidates.Count == 0 || network is null) return candidates.FirstOrDefault();
+
+        var ids = candidates.Select(a => a.Id).ToList();
+        var networks = (await db.DiscoveredHosts
+                .Where(h => h.AssetId != null && ids.Contains(h.AssetId.Value))
+                .Select(h => new { AssetId = h.AssetId!.Value, h.DiscoveredAt, h.Scan!.NetworkFingerprint })
+                .ToListAsync())
+            .GroupBy(h => h.AssetId)
+            .ToDictionary(g => g.Key, g => g.OrderBy(h => h.DiscoveredAt).Last().NetworkFingerprint);
+        return candidates.FirstOrDefault(a => NetworkIdentity.SameNetwork(networks.GetValueOrDefault(a.Id), network));
+    }
+
+    /// <summary>
+    /// The machine running WELES is one asset whichever interface it was found on: assets carrying any of its MAC
+    /// addresses are merged into the oldest one (observations, findings and user-entered fields are kept).
+    /// </summary>
+    internal static async Task<Asset?> ConsolidateLocalMachineAsync(WelesDbContext db, IReadOnlySet<string> localMacs, string? currentMac)
+    {
+        var macs = localMacs.Select(m => m.ToLowerInvariant()).Append(currentMac?.ToLowerInvariant()).OfType<string>().Distinct().ToList();
+        var assets = await db.Assets.Where(a => a.MacAddress != null && macs.Contains(a.MacAddress.ToLower()))
+            .OrderBy(a => a.FirstSeenAt).ThenBy(a => a.Id).ToListAsync();
+        if (assets.Count <= 1) return assets.FirstOrDefault();
+
+        var target = assets[0];
+        foreach (var other in assets.Skip(1))
+        {
+            target.CustomName ??= other.CustomName;
+            target.UserAssetType ??= other.UserAssetType;
+            target.Notes = string.IsNullOrWhiteSpace(target.Notes) ? other.Notes
+                : string.IsNullOrWhiteSpace(other.Notes) ? target.Notes : Truncate($"{target.Notes}\n{other.Notes}", 4000);
+            if (other.Criticality > target.Criticality) target.Criticality = other.Criticality;
+            target.Model ??= other.Model;
+            if (other.LastSeenAt > target.LastSeenAt) target.LastSeenAt = other.LastSeenAt;
+
+            var otherId = other.Id;
+            await db.DiscoveredHosts.Where(h => h.AssetId == otherId).ExecuteUpdateAsync(u => u.SetProperty(h => h.AssetId, target.Id));
+            await db.RiskFindings.Where(f => f.AssetId == otherId).ExecuteUpdateAsync(u => u.SetProperty(f => f.AssetId, target.Id));
+            await db.RiskScores.Where(r => r.AssetId == otherId).ExecuteUpdateAsync(u => u.SetProperty(r => r.AssetId, target.Id));
+            var existing = await db.AssetVulnerabilities.Where(v => v.AssetId == target.Id).Select(v => new { v.VulnerabilityId, v.DiscoveredServiceId }).ToListAsync();
+            foreach (var v in await db.AssetVulnerabilities.Where(v => v.AssetId == otherId).ToListAsync())
+            {
+                if (existing.Any(e => e.VulnerabilityId == v.VulnerabilityId && e.DiscoveredServiceId == v.DiscoveredServiceId)) db.AssetVulnerabilities.Remove(v);
+                else v.AssetId = target.Id;
+            }
+
+            await db.SaveChangesAsync();
+            db.Assets.Remove(other);
+        }
+
+        await db.SaveChangesAsync();
+        return target;
     }
 
     private static async Task<int?> FindSegmentIdAsync(WelesDbContext db, IPAddress address)

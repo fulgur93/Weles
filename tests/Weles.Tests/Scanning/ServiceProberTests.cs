@@ -216,4 +216,17 @@ public class ServiceProberTests
         Assert.Equal(("dns", "dnsmasq", "2.90"), (id!.ServiceName, id.Product, id.Version));
         Assert.Equal("cpe:2.3:a:thekelleys:dnsmasq:2.90:*:*:*:*:*:*:*", id.Cpe);
     }
+
+    [Fact]
+    public async Task Http_response_pushed_before_the_request_is_identified_as_http()
+    {
+        // TP-Link TL-WR841N on port 80: answers immediately on connect, then pads with NUL bytes.
+        await using var server = FakeServer.Banner("HTTP/1.1 301 Moved\r\nLocation: http://192.168.0.1:81\r\n\r\n\0\0\0\0\0\0\0\0\0");
+        var result = await Probe(server.Port);
+
+        Assert.Equal("http", result.Identification.ServiceName);
+        Assert.Equal("http-banner", result.Identification.Method);
+        Assert.Equal("301", result.Identification.Extra["http.status"]);
+        Assert.Equal("http://192.168.0.1:81", result.Identification.Extra["http.location"]);
+    }
 }

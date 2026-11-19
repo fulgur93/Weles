@@ -90,6 +90,31 @@ public class ScanEngineTests
     }
 
     [Fact]
+    public async Task Connections_to_a_single_host_are_rate_limited()
+    {
+        // 30 closed ports at 10 connections/s per host (burst 2) cannot finish in under ~2.8 s.
+        await using var h = await Harness.CreateAsync(new ScanOptions
+        {
+            UseIcmp = false, UseMdns = false, ConnectTimeoutMs = 800, LivenessPorts = [1], ConnectionsPerSecondPerHost = 10
+        });
+        await using var alive = FakeServer.Banner("SSH-2.0-OpenSSH_9.6\r\n");
+        var target = await h.ApprovedTargetAsync();
+        var closed = Enumerable.Range(0, 29).Select(_ => FreePort()).Distinct().ToList();
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        await h.RunAsync(target, string.Join(",", closed.Append(alive.Port)));
+        Assert.True(sw.Elapsed >= TimeSpan.FromSeconds(2.2), $"Scan took {sw.Elapsed.TotalSeconds:0.00}s");
+    }
+
+    private static int FreePort()
+    {
+        var l = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+        l.Start();
+        var port = ((IPEndPoint)l.LocalEndpoint).Port;
+        l.Stop();
+        return port;
+    }
+
+    [Fact]
     public async Task Second_scan_keeps_history_and_reuses_the_same_asset()
     {
         await using var h = await Harness.CreateAsync();

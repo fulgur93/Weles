@@ -11,7 +11,7 @@ otwiera istniejącą sesję zamiast startować drugi serwer.
 | Sekcja | Przeznaczenie | Dostępność |
 |--------|---------------|------------|
 | Dashboard | Security Posture Score, urządzenia, usługi, podatności, ostatni skan, status AI | Etap 1 (dane po pierwszym skanie) |
-| Assets | inwentarz urządzeń i ich historia | Etap 3 |
+| Assets | inwentarz urządzeń, status obecności, historia zmian, nazwy i krytyczność | ✅ Etap 3 |
 | Network Discovery / Scans | zakresy, wykrywanie urządzeń, porty, usługi, historia skanów | ✅ Etap 2 |
 | Attack Surface | domeny, DNS, certyfikaty, usługi publiczne | Etap 8 |
 | Vulnerabilities | dopasowania CVE (NVD, KEV, EPSS) | Etap 4 |
@@ -45,6 +45,25 @@ nie pokazują pustych ani pozornie działających ekranów.
 Wersja z dopiskiem dystrybucji (np. Ubuntu) może zawierać poprawki bezpieczeństwa bez zmiany numeru – WELES to zaznacza.
 
 Limity (równoległość, tempo, timeouty, maks. liczba hostów) są w `appsettings.json`, sekcja `Weles:Scanning`.
+
+## Inwentarz urządzeń (Assets)
+
+- **Wyszukiwanie** – kilka słów naraz (wszystkie muszą pasować): nazwa, IP, MAC, producent, system, produkt
+  (np. `openssh`), numer otwartego portu (np. `3389`). Wielkość liter i polskie znaki nie mają znaczenia (`lodz` = `Łódź`).
+- **Filtry** – status, typ, segment, system, „z otwartymi portami”; liczby przy filtrach pokazują, ile urządzeń zostanie.
+- **Sortowanie** – klik w nagłówek; **Shift+klik** dodaje kolejny poziom (np. porty ↓, potem nazwa ↑).
+- **Kolumny** – przycisk „Kolumny”; wybór jest zapamiętywany.
+- **Status**: *Aktywne* – wykryte w ostatnim skanie obejmującym jego adres (w tym *Nowe* – wykryte po raz pierwszy);
+  *Nieobecne* – skan obejmował adres, ale urządzenia nie znalazł; *Poza ostatnimi skanami* – żaden ostatni skan nie
+  sprawdzał tego adresu. Liczą się tylko skany **tej samej sieci** (rozpoznawanej po adresie MAC routera): skan biura
+  192.168.0.0/24 nie zmienia statusu urządzeń z domowej sieci 192.168.0.0/24.
+- **Ten komputer** występuje raz, nawet jeśli łączył się raz przez Wi‑Fi, a raz kablem.
+- **Porty** – profil Szybki sprawdza mniej portów niż Standardowy; porty, których ostatni skan nie sprawdzał, zostają
+  pokazane z wcześniejszej obserwacji i nie są uznawane za zamknięte.
+- **Szczegóły urządzenia** – tożsamość, uzasadnienie klasyfikacji, aktualne usługi, oś czasu obserwacji ze zmianami
+  (porty, wersje, certyfikaty, adres IP) i nieobecnościami.
+- **Edytuj** – własna nazwa (np. „Telefon Xiaomi”), typ, krytyczność dla organizacji (użyta w ocenie ryzyka) i notatki.
+  Skany nie nadpisują tych pól.
 
 ## Telefony i tablety
 

@@ -50,13 +50,40 @@ public static partial class HttpResponseParser
             headers[name] = headers.TryGetValue(name, out var existing) ? $"{existing}, {value}" : value;
         }
 
-        if (headers.TryGetValue("Content-Type", out var contentType) && contentType.Contains("utf-8", StringComparison.OrdinalIgnoreCase))
+        // Declared UTF-8, or no charset at all but bytes that are valid UTF-8 (embedded servers often omit it:
+        // a TP-Link router's "Błąd logowania" page has a bare "Content-Type: text/html").
+        var declared = headers.TryGetValue("Content-Type", out var contentType) ? CharsetPattern().Match(contentType) : Match.Empty;
+        var isUtf8 = declared.Success
+            ? declared.Groups[1].Value.Equals("utf-8", StringComparison.OrdinalIgnoreCase) || declared.Groups[1].Value.Equals("utf8", StringComparison.OrdinalIgnoreCase)
+            : IsStrictUtf8(Encoding.Latin1.GetBytes(body));
+        if (isUtf8)
         {
             body = Encoding.UTF8.GetString(Encoding.Latin1.GetBytes(body));
         }
 
         response = new HttpResponseInfo(status, BannerParser.Sanitize(lines[0]), headers, body, ExtractTitle(body));
         return true;
+    }
+
+    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
+    private static bool IsStrictUtf8(byte[] bytes)
+    {
+        if (!bytes.Any(b => b >= 0x80)) return false;
+        // A body cut at the read limit may end inside a multi-byte sequence (at most 3 dangling bytes).
+        for (var cut = 0; cut <= Math.Min(3, bytes.Length - 1); cut++)
+        {
+            try
+            {
+                StrictUtf8.GetCharCount(bytes, 0, bytes.Length - cut);
+                return true;
+            }
+            catch (DecoderFallbackException)
+            {
+            }
+        }
+
+        return false;
     }
 
     public static string? ExtractTitle(string body)
@@ -69,6 +96,7 @@ public static partial class HttpResponseParser
 
     [GeneratedRegex(@"<title[^>]*>(.*?)</title>", RegexOptions.IgnoreCase | RegexOptions.Singleline)] private static partial Regex TitlePattern();
     [GeneratedRegex(@"\s+")] private static partial Regex WhitespacePattern();
+    [GeneratedRegex(@"charset\s*=\s*[""']?([\w\-]+)", RegexOptions.IgnoreCase)] private static partial Regex CharsetPattern();
 }
 
 /// <summary>Identifies HTTP servers, exposed admin panels and basic header misconfigurations – without logging in.</summary>
@@ -134,14 +162,28 @@ public static partial class HttpFingerprinter
             }
         }
 
-        if (response.Header("WWW-Authenticate") is { } auth)
+        var auth = response.Header("WWW-Authenticate");
+        if (auth is not null)
         {
             extra["http.auth"] = auth.Length > 120 ? auth[..120] : auth;
+            // HTTP Basic/Digest over plain HTTP: the browser sends the password (Basic: only base64-encoded) unencrypted.
+            if (!isTls && auth.StartsWith("Basic", StringComparison.OrdinalIgnoreCase)) extra["http.basicOverHttp"] = "true";
         }
+
+        var requiresAuth = auth is not null || response.StatusCode is 401 or 407;
+        if (requiresAuth) extra["http.requiresAuth"] = "true";
 
         if (server is not null && server.Contains("UPnP", StringComparison.OrdinalIgnoreCase)) extra["http.upnp"] = "true";
 
-        var haystack = $"{response.Title}\n{server}\n{response.Header("X-Powered-By")}\n{certificateSubject}\n{(response.Body.Length > 20_000 ? response.Body[..20_000] : response.Body)}";
+        // The authentication realm often names the device ("TP-LINK Wireless N Router WR841N").
+        var haystack = $"{response.Title}\n{server}\n{response.Header("X-Powered-By")}\n{auth}\n{certificateSubject}\n{(response.Body.Length > 20_000 ? response.Body[..20_000] : response.Body)}";
+        if (DeviceModel.Detect(haystack) is { } model)
+        {
+            extra["device.model"] = model.Name;
+            if (model.HardwareVersion is { } hw) extra["device.hardwareVersion"] = hw;
+            // A model token in a UPnP Server header ("TL-WR841N/9.0") carries the hardware revision, not a software version.
+            if (product is not null && model.Name.EndsWith(product, StringComparison.OrdinalIgnoreCase)) (product, version) = (null, null);
+        }
         var isUpnp = extra.ContainsKey("http.upnp");
         var panel = PanelRules.FirstOrDefault(r => r.Pattern.IsMatch(haystack));
         if (panel is not null && isUpnp)
@@ -154,6 +196,11 @@ public static partial class HttpFingerprinter
             extra["http.panel"] = panel.Label;
             extra["http.panelCategory"] = panel.Category;
             if (panel.Device is { } device) extra["http.device"] = device.ToString();
+        }
+        else if (!isUpnp && requiresAuth)
+        {
+            extra["http.panel"] = "Panel logowania";
+            extra["http.panelCategory"] = "login-page";
         }
         else if (!isUpnp && LoginForm().IsMatch(response.Body) || (response.Title is { } t && LoginTitle().IsMatch(t)))
         {
@@ -276,6 +323,13 @@ public static partial class HttpFingerprinter
             }
         }
 
+        // UPnP servers follow "OS/version UPnP/1.x product/version": the product is the token after the UPnP marker.
+        var upnp = UpnpProductRx().Match(server);
+        if (upnp.Success && !NoiseTokens.Contains(upnp.Groups[1].Value))
+        {
+            return (upnp.Groups[1].Value, upnp.Groups[2].Value, distro);
+        }
+
         // Unknown server: take the first "Name/version" token that is not a protocol or OS marker,
         // e.g. "POSIX, UPnP/1.0, Intel MicroStack/1.0.2777" → MicroStack 1.0.2777. Without a version nothing is inferred –
         // a bare word like "BH" or "Http Server" is kept only as the raw header.
@@ -328,6 +382,7 @@ public static partial class HttpFingerprinter
     };
 
     [GeneratedRegex(@"(?<![\w.\-])([A-Za-z][\w\-.]*)/(\d+(?:\.\d+)*[a-z]?)")] private static partial Regex GenericRx();
+    [GeneratedRegex(@"UPnP/\d+(?:\.\d+)?,?\s+(?:[\w\-]+/[\d.]+,?\s+)*?([A-Za-z][\w\-.]*)/(\d+(?:\.\d+)*[a-z]?)", RegexOptions.IgnoreCase)] private static partial Regex UpnpProductRx();
     [GeneratedRegex(@"<input[^>]+type\s*=\s*[""']?password", RegexOptions.IgnoreCase)] private static partial Regex LoginForm();
     [GeneratedRegex(@"\b(log ?in|sign ?in|logowanie|admin|administration)\b", RegexOptions.IgnoreCase)] private static partial Regex LoginTitle();
 }

@@ -1,0 +1,291 @@
+@page "/assets"
+@using Weles.Infrastructure.Queries
+@using Weles.Infrastructure.Settings
+@implements IDisposable
+@inject AssetQueries Queries
+@inject SettingsService Settings
+@inject NavigationManager Navigation
+
+<PageTitle>Assets · WELES</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>Assets</h1>
+        <p class="page-subtitle">Inwentarz urządzeń wykrytych w skanach. Status odnosi się do ostatniego skanu, który obejmował adres urządzenia.</p>
+    </div>
+    <a class="btn btn-primary" href="discovery"><Icon Name="play" Size="16" /> Nowy skan</a>
+</div>
+
+@if (_all is null)
+{
+    <div class="card loading">Wczytywanie…</div>
+}
+else if (_all.Count == 0)
+{
+    <section class="card empty">
+        <p>Inwentarz jest pusty. Urządzenia pojawią się po pierwszym skanie w <a href="discovery">Network Discovery</a>.</p>
+    </section>
+}
+else
+{
+    <section class="card">
+        <div class="toolbar">
+            <div class="search">
+                <Icon Name="discovery" Size="15" />
+                <input class="input" placeholder="Szukaj: nazwa, IP, MAC, producent, system, produkt, port…" @bind="_search" @bind:event="oninput" @bind:after="OnSearchChanged" />
+            </div>
+            <select class="input input-sm" @bind="_type" @bind:after="Refresh" aria-label="Typ urządzenia">
+                <option value="">Wszystkie typy</option>
+                @foreach (var (type, count) in _page!.TypeCounts.OrderByDescending(t => t.Value))
+                {
+                    <option value="@type">@Labels.Of(type) (@count)</option>
+                }
+            </select>
+            @if (_page.Segments.Count > 1)
+            {
+                <select class="input input-sm" @bind="_segment" @bind:after="Refresh" aria-label="Segment">
+                    <option value="">Wszystkie segmenty</option>
+                    @foreach (var (id, cidr) in _page.Segments) { <option value="@id">@cidr</option> }
+                </select>
+            }
+            @if (_page.OsFamilies.Count > 0)
+            {
+                <select class="input input-sm" @bind="_os" @bind:after="Refresh" aria-label="System">
+                    <option value="">Każdy system</option>
+                    @foreach (var os in _page.OsFamilies) { <option value="@os">@os</option> }
+                </select>
+            }
+            <label class="checkbox inline"><input type="checkbox" @bind="_openOnly" @bind:after="Refresh" /><span>Z otwartymi portami</span></label>
+            <button class="btn btn-ghost btn-sm" @onclick="() => _showColumns = !_showColumns"><Icon Name="settings" Size="14" /> Kolumny</button>
+        </div>
+
+        <div class="status-tabs">
+            <button class="@(_status is null ? "active" : "")" @onclick="() => SetStatus(null)">Wszystkie <span>@_page.AllStatusesCount</span></button>
+            @foreach (var st in Enum.GetValues<AssetStatus>())
+            {
+                <button class="@(_status == st ? "active" : "")" title="@Labels.Describe(st)" @onclick="() => SetStatus(st)">
+                    <span class="pill-dot tone-@Labels.Tone(st)"></span>@Labels.Of(st) <span>@_page.StatusCounts.GetValueOrDefault(st)</span>
+                </button>
+            }
+        </div>
+
+        @if (_showColumns)
+        {
+            <div class="column-picker">
+                @foreach (var c in Columns.Where(c => !c.Required))
+                {
+                    <label class="checkbox inline">
+                        <input type="checkbox" checked="@_visible.Contains(c.Key)" @onchange="e => ToggleColumn(c.Key, (bool)e.Value!)" />
+                        <span>@c.Label@(c.Note is null ? "" : $" ({c.Note})")</span>
+                    </label>
+                }
+            </div>
+        }
+
+        @if (_page.TotalCount == 0)
+        {
+            <p class="muted empty">Brak urządzeń spełniających kryteria.</p>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            @foreach (var c in VisibleColumns)
+                            {
+                                <th class="@(c.Sort is null ? "" : "sortable") @(c.AlignRight ? "right" : "")" title="@(c.Sort is null ? "" : "Kliknij, aby sortować · Shift+klik dodaje kolejny poziom sortowania")"
+                                    @onclick="e => SortBy(c, e.ShiftKey)">
+                                    @c.Label @SortIndicator(c)
+                                </th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var a in _page.Items)
+                        {
+                            <tr class="clickable" @onclick="@(() => Navigation.NavigateTo($"assets/{a.Id}"))">
+                                @foreach (var c in VisibleColumns)
+                                {
+                                    <td class="@(c.AlignRight ? "right" : "")">@c.Cell(a)</td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pager">
+                <span class="muted small">@(((_page.Page - 1) * _page.PageSize) + 1)–@(Math.Min(_page.Page * _page.PageSize, _page.TotalCount)) z @_page.TotalCount</span>
+                <div class="pager-buttons">
+                    <button class="btn btn-ghost btn-sm" disabled="@(_page.Page <= 1)" @onclick="() => GoTo(_page.Page - 1)">‹</button>
+                    @foreach (var n in PageWindow())
+                    {
+                        <button class="btn btn-sm @(n == _page.Page ? "btn-primary" : "btn-ghost")" @onclick="() => GoTo(n)">@n</button>
+                    }
+                    <button class="btn btn-ghost btn-sm" disabled="@(_page.Page >= _page.PageCount)" @onclick="() => GoTo(_page.Page + 1)">›</button>
+                </div>
+                <select class="input input-sm" @bind="_pageSize" @bind:after="Refresh" aria-label="Wierszy na stronę">
+                    @foreach (var size in new[] { 25, 50, 100 }) { <option value="@size">@size na stronę</option> }
+                </select>
+            </div>
+        }
+    </section>
+}
+
+@code {
+    private const string ColumnsSettingKey = "ui.assets.columns";
+
+    [SupplyParameterFromQuery(Name = "status")] public string? StatusParameter { get; set; }
+    [SupplyParameterFromQuery(Name = "q")] public string? SearchParameter { get; set; }
+
+    private sealed record Column(string Key, string Label, AssetSortColumn? Sort, bool DefaultVisible, RenderFragment<AssetListItem> Cell,
+        bool Required = false, bool AlignRight = false, string? Note = null);
+
+    private IReadOnlyList<AssetListItem>? _all;
+    private AssetListPage? _page;
+    private string _search = "";
+    private string _type = "";
+    private string _segment = "";
+    private string _os = "";
+    private bool _openOnly;
+    private AssetStatus? _status;
+    private int _pageNumber = 1;
+    private int _pageSize = 25;
+    private bool _showColumns;
+    private HashSet<string> _visible = [];
+    private readonly List<AssetSort> _sort = [new(AssetSortColumn.Ip, false)];
+    private CancellationTokenSource? _debounce;
+
+    private IEnumerable<Column> VisibleColumns => Columns.Where(c => c.Required || _visible.Contains(c.Key));
+
+    private IReadOnlyList<Column> Columns => _columns ??= BuildColumns();
+    private IReadOnlyList<Column>? _columns;
+
+    private List<Column> BuildColumns() =>
+    [
+        new("name", "Nazwa", AssetSortColumn.Name, true, a => @<span><strong>@a.DisplayName</strong>@if (a.HasCustomName && a.Hostname is not null) { <div class="muted small">@a.Hostname</div> }</span>, Required: true),
+        new("ip", "Adres IP", AssetSortColumn.Ip, true, a => @<span class="mono">@a.IpAddress</span>),
+        new("type", "Typ", AssetSortColumn.Type, true, a => @<span>@Labels.Of(a.Type)@if (a.TypeSetByUser) { <span class="tag" title="Typ ustawiony ręcznie">ręczny</span> }</span>),
+        new("os", "System", AssetSortColumn.Os, true, a => @<span>@(a.OsFamily ?? "—")</span>),
+        new("vendor", "Producent / MAC", AssetSortColumn.Vendor, true, a => @<span>@(a.Vendor ?? "—")<div class="mono muted small">@a.MacAddress</div></span>),
+        new("segment", "Segment", null, false, a => @<span class="mono small">@(a.SegmentCidr ?? "—")</span>),
+        new("ports", "Otwarte porty", AssetSortColumn.OpenPorts, true, a => @<div class="chips">@foreach (var p in a.OpenPorts.Take(6)) { <span class="chip mono">@p</span> }@if (a.OpenPorts.Count > 6) { <span class="muted small">+@(a.OpenPorts.Count - 6)</span> }@if (a.OpenPorts.Count == 0) { <span class="muted small">brak</span> }</div>),
+        new("services", "Oprogramowanie", null, true, a => @<span class="small">@(a.Products.Count == 0 ? "—" : string.Join(", ", a.Products.Take(3)) + (a.Products.Count > 3 ? "…" : ""))</span>),
+        new("vulns", "Podatności", AssetSortColumn.Vulnerabilities, false, a => @<span>@(a.OpenVulnerabilities == 0 ? "—" : a.OpenVulnerabilities.ToString())</span>, AlignRight: true, Note: "dane od Etapu 4"),
+        new("risk", "Ryzyko", AssetSortColumn.Risk, false, a => @<span>@(a.RiskScore?.ToString("0") ?? "—")</span>, AlignRight: true, Note: "dane od Etapu 5"),
+        new("criticality", "Krytyczność", AssetSortColumn.Criticality, false, a => @<span>@Labels.Of(a.Criticality)</span>),
+        new("status", "Status", AssetSortColumn.Status, true, a => @<span title="@Labels.Describe(a.Status)"><StatusPill Tone="@Labels.Tone(a.Status)">@Labels.Of(a.Status)</StatusPill></span>),
+        new("first", "Pierwsze wykrycie", AssetSortColumn.FirstSeen, false, a => @<span class="small">@Labels.Local(a.FirstSeenAt)</span>),
+        new("last", "Ostatnio widziane", AssetSortColumn.LastSeen, true, a => @<span class="small">@Labels.Local(a.LastSeenAt)</span>),
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _search = SearchParameter ?? "";
+        if (Enum.TryParse<AssetStatus>(StatusParameter, ignoreCase: true, out var st)) _status = st;
+
+        var stored = await Settings.GetAsync(ColumnsSettingKey);
+        _visible = stored is null
+            ? Columns.Where(c => c.DefaultVisible).Select(c => c.Key).ToHashSet()
+            : stored.Split(',', StringSplitOptions.RemoveEmptyEntries).ToHashSet();
+
+        _all = await Queries.LoadAllAsync();
+        Apply();
+    }
+
+    private void Apply()
+    {
+        if (_all is null) return;
+        _page = AssetListEngine.Apply(_all, new AssetListQuery
+        {
+            Search = _search,
+            Types = Enum.TryParse<AssetType>(_type, out var t) ? new HashSet<AssetType> { t } : new HashSet<AssetType>(),
+            Statuses = _status is { } s ? new HashSet<AssetStatus> { s } : new HashSet<AssetStatus>(),
+            SegmentId = int.TryParse(_segment, out var seg) ? seg : null,
+            OsFamily = string.IsNullOrEmpty(_os) ? null : _os,
+            OnlyWithOpenPorts = _openOnly,
+            Sort = _sort.ToList(),
+            Page = _pageNumber,
+            PageSize = _pageSize
+        });
+        _pageNumber = _page.Page;
+    }
+
+    private void Refresh()
+    {
+        _pageNumber = 1;
+        Apply();
+    }
+
+    private async Task OnSearchChanged()
+    {
+        _debounce?.Cancel();
+        _debounce = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(250, _debounce.Token);
+            Refresh();
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private void SetStatus(AssetStatus? status)
+    {
+        _status = status;
+        Refresh();
+    }
+
+    private void SortBy(Column column, bool addLevel)
+    {
+        if (column.Sort is not { } col) return;
+        var existing = _sort.FindIndex(s => s.Column == col);
+        if (addLevel)
+        {
+            if (existing >= 0) _sort[existing] = _sort[existing] with { Descending = !_sort[existing].Descending };
+            else _sort.Add(new AssetSort(col, false));
+        }
+        else
+        {
+            var descending = existing == 0 && _sort.Count == 1 && !_sort[0].Descending;
+            _sort.Clear();
+            _sort.Add(new AssetSort(col, descending));
+        }
+
+        Apply();
+    }
+
+    private RenderFragment SortIndicator(Column column) => builder =>
+    {
+        var index = column.Sort is { } col ? _sort.FindIndex(s => s.Column == col) : -1;
+        if (index < 0) return;
+        builder.OpenElement(0, "span");
+        builder.AddAttribute(1, "class", "sort-indicator");
+        builder.AddContent(2, (_sort[index].Descending ? "▼" : "▲") + (_sort.Count > 1 ? (index + 1).ToString() : ""));
+        builder.CloseElement();
+    };
+
+    private async Task ToggleColumn(string key, bool visible)
+    {
+        if (visible) _visible.Add(key); else _visible.Remove(key);
+        await Settings.SetAsync(ColumnsSettingKey, string.Join(',', _visible.Order()));
+    }
+
+    private void GoTo(int page)
+    {
+        _pageNumber = page;
+        Apply();
+    }
+
+    private IEnumerable<int> PageWindow()
+    {
+        var start = Math.Max(1, _page!.Page - 2);
+        var end = Math.Min(_page.PageCount, start + 4);
+        start = Math.Max(1, end - 4);
+        return Enumerable.Range(start, end - start + 1);
+    }
+
+    public void Dispose() => _debounce?.Cancel();
+}

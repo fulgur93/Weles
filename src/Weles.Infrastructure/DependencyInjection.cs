@@ -28,6 +28,8 @@ public static class DependencyInjection
         services.AddSingleton<SettingsService>();
         services.AddSingleton<DashboardQueries>();
         services.AddSingleton<ScanQueries>();
+        services.AddSingleton<AssetQueries>();
+        services.AddSingleton<Assets.AssetService>();
 
         services.Configure<ScanOptions>(configuration.GetSection(ScanOptions.SectionName));
         services.AddSingleton<OuiDatabase>();

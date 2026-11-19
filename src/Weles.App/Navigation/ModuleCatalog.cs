@@ -21,7 +21,7 @@ public static class ModuleCatalog
         new("Dashboard", "", "dashboard", "Przegląd", 1, true,
             "Stan bezpieczeństwa infrastruktury na podstawie rzeczywistych danych z bazy.", []),
 
-        new("Assets", "assets", "assets", "Rozpoznanie", 3, false,
+        new("Assets", "assets", "assets", "Rozpoznanie", 3, true,
             "Inwentarz urządzeń z historią obserwacji, usługami, podatnościami i oceną ryzyka.",
             ["Wyszukiwanie, sortowanie wielokolumnowe, filtry i paginacja", "Wybór kolumn", "Szczegóły urządzenia: porty, usługi, wersje, historia zmian", "Krytyczność zasobu ustawiana przez użytkownika"]),
         new("Network Discovery", "discovery", "discovery", "Rozpoznanie", 2, true,

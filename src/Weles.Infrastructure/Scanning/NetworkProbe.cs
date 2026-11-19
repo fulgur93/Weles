@@ -20,6 +20,7 @@ public static class NetworkProbe
         try
         {
             await socket.ConnectAsync(new IPEndPoint(address, port), timeout.Token);
+            CloseGracefully(socket);
             return new ConnectResult(PortState.Open, "syn-ack");
         }
         catch (SocketException ex) when (ex.SocketErrorCode == SocketError.ConnectionRefused)
@@ -44,7 +45,7 @@ public static class NetworkProbe
     /// <summary>Opens a connected stream or returns null. The caller owns the returned client.</summary>
     public static async Task<TcpClient?> OpenAsync(IPAddress address, int port, int timeoutMs, CancellationToken cancellationToken)
     {
-        var client = new TcpClient(address.AddressFamily) { NoDelay = true, LingerState = new LingerOption(true, 0) };
+        var client = new GracefulTcpClient(address.AddressFamily) { NoDelay = true };
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(timeoutMs);
         try
@@ -115,10 +116,44 @@ public static class NetworkProbe
     }
 
     private static Socket CreateSocket(IPAddress address) =>
-        new(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp)
+        new(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+
+    /// <summary>
+    /// Ends a connection with FIN, never RST. Measured on a TP-Link TL-WR841N: one connection reset right after the
+    /// handshake (SO_LINGER 0) made its UPnP web service stop answering for ~18 s, and its port-80 redirector for more
+    /// than 10 minutes; a normal FIN close had no effect. TIME_WAIT only arises for open ports, so it stays small.
+    /// Unread data must be drained first – Linux answers close() with RST while the receive buffer is not empty.
+    /// </summary>
+    internal static void CloseGracefully(Socket socket)
+    {
+        try
         {
-            NoDelay = true,
-            // Close with RST: avoids thousands of sockets in TIME_WAIT during a scan.
-            LingerState = new LingerOption(true, 0)
-        };
+            if (!socket.Connected) return;
+            socket.Shutdown(SocketShutdown.Send);
+            var buffer = new byte[4096];
+            var drained = 0;
+            while (socket.Available > 0 && drained < 256 * 1024)
+            {
+                var read = socket.Receive(buffer, SocketFlags.None);
+                if (read <= 0) break;
+                drained += read;
+            }
+        }
+        catch (SocketException)
+        {
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+    }
+
+    /// <summary>TcpClient whose disposal closes with FIN (see <see cref="CloseGracefully"/>), including on streams wrapped by TLS.</summary>
+    private sealed class GracefulTcpClient(AddressFamily family) : TcpClient(family)
+    {
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && Client is { } socket) CloseGracefully(socket);
+            base.Dispose(disposing);
+        }
+    }
 }

@@ -13,6 +13,15 @@ public sealed class ScanOptions
     /// <summary>New connection attempts per second (token bucket).</summary>
     public int ConnectionsPerSecond { get; set; } = 400;
 
+    /// <summary>
+    /// New connection attempts per second to a single host. Consumer routers treat bursts of SYNs as a flood: a TP-Link
+    /// TL-WR841N stopped answering its own web services for over 10 minutes after ~1000 connections at 400/s.
+    /// </summary>
+    public int ConnectionsPerSecondPerHost { get; set; } = 20;
+
+    /// <summary>Simultaneously open connections to a single host.</summary>
+    public int MaxConcurrentConnectionsPerHost { get; set; } = 10;
+
     public int ParallelHostDiscovery { get; set; } = 64;
     public int ParallelHostScans { get; set; } = 8;
     public int ParallelServiceProbesPerHost { get; set; } = 6;

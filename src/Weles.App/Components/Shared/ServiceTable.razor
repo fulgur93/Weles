@@ -1,0 +1,53 @@
+@using Weles.Core.Entities
+@if (Ports.Count > 0)
+{
+    <table class="table table-inner">
+        <thead><tr><th>Port</th><th>Usługa</th><th>Oprogramowanie</th><th>Pewność</th><th>Metoda</th><th>Szczegóły</th></tr></thead>
+        <tbody>
+            @foreach (var port in Ports.OrderBy(p => p.Port))
+            {
+                var svc = port.Service;
+                var extra = ServiceDetails.Extra(svc);
+                <tr>
+                    <td class="mono">@port.Port/@(port.Protocol == TransportProtocol.Tcp ? "tcp" : "udp")</td>
+                    <td>@(svc?.ServiceName ?? "—") @if (svc?.IsTls == true) { <span class="tag tag-tls">TLS</span> }</td>
+                    <td>
+                        @if (svc?.Product is not null)
+                        {
+                            <strong>@svc.Product</strong> <span class="mono">@svc.Version</span>
+                        }
+                        else
+                        {
+                            <span class="muted">nierozpoznane</span>
+                        }
+                        @if (extra.TryGetValue("distribution", out var distro))
+                        {
+                            <div class="muted small" title="Dystrybucje często łatają podatności bez zmiany numeru wersji (backporty).">pakiet dystrybucji: @distro – wersja może zawierać poprawki</div>
+                        }
+                    </td>
+                    <td>@if (svc is not null) { <ConfidenceBar Value="svc.Confidence" /> }</td>
+                    <td class="small muted">@ServiceDetails.MethodLabel(svc?.DetectionMethod)</td>
+                    <td class="small">
+                        @foreach (var line in ServiceDetails.Details(extra, svc))
+                        {
+                            <div class="@(line.Warn ? "detail-warn" : "")">@line.Text</div>
+                        }
+                        @if (svc?.Banner is { Length: > 0 } banner && svc.DetectionMethod is "banner" or "banner-unrecognized")
+                        {
+                            <div class="mono muted banner" title="Baner usługi">@banner</div>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+else if (ShowEmpty)
+{
+    <p class="muted">Brak otwartych portów w tej obserwacji.</p>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyCollection<DiscoveredPort> Ports { get; set; } = [];
+    [Parameter] public bool ShowEmpty { get; set; }
+}

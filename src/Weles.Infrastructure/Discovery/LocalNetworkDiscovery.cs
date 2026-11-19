@@ -99,4 +99,14 @@ public sealed class LocalNetworkDiscovery(OuiDatabase oui)
             })
             .Where(a => !a.Equals(IPAddress.Any) && !a.Equals(IPAddress.IPv6Any))
             .ToHashSet();
+
+    /// <summary>MAC addresses of every physical interface of this machine, also those currently down (Wi‑Fi vs cable).</summary>
+    public IReadOnlySet<string> GetLocalMacAddresses() =>
+        NetworkInterface.GetAllNetworkInterfaces()
+            .Where(n => n.NetworkInterfaceType is not (NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel))
+            .Select(n => n.GetPhysicalAddress().GetAddressBytes())
+            .Where(b => b.Length == 6 && b.Any(x => x != 0))
+            .Select(b => OuiDatabase.Normalize(Convert.ToHexString(b)))
+            .OfType<string>()
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 }

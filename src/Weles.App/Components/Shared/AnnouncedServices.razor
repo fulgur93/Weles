@@ -1,0 +1,15 @@
+@using Weles.Core.Entities
+@if (ServiceDetails.Announced(Host) is { Count: > 0 } announced)
+{
+    <div class="reasons">
+        <strong>Usługi ogłaszane przez urządzenie (mDNS):</strong>
+        @foreach (var a in announced)
+        {
+            <span class="chip" title="@a.Type">@(Weles.Core.Rules.MdnsServiceCatalog.Find(a.Type)?.Label ?? a.Type)@(a.Port is { } ap ? $" :{ap}" : "") · @a.Instance</span>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public DiscoveredHost Host { get; set; } = default!;
+}
