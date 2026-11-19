@@ -11,7 +11,9 @@ internal sealed class NetworkSegmentConfiguration : IEntityTypeConfiguration<Net
         b.Property(x => x.Cidr).HasMaxLength(64);
         b.Property(x => x.Name).HasMaxLength(200);
         b.Property(x => x.Gateway).HasMaxLength(64);
-        b.HasIndex(x => x.Cidr).IsUnique();
+        b.Property(x => x.GatewayMac).HasMaxLength(200);
+        b.Property(x => x.GatewayVendor).HasMaxLength(255);
+        b.HasIndex(x => new { x.Cidr, x.GatewayMac }).IsUnique();
         b.HasMany(x => x.Assets).WithOne(x => x.NetworkSegment).HasForeignKey(x => x.NetworkSegmentId).OnDelete(DeleteBehavior.SetNull);
     }
 }

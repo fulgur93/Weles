@@ -440,6 +440,14 @@ namespace Weles.Infrastructure.Database.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("GatewayMac")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("GatewayVendor")
+                        .HasMaxLength(255)
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("LastSeenAt")
                         .HasColumnType("TEXT");
 
@@ -449,7 +457,7 @@ namespace Weles.Infrastructure.Database.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Cidr")
+                    b.HasIndex("Cidr", "GatewayMac")
                         .IsUnique();
 
                     b.ToTable("NetworkSegments");

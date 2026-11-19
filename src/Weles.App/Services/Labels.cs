@@ -54,6 +54,10 @@ public static class Labels
         _ => type.ToString()
     };
 
+    /// <summary>Polish plural: 1 urządzenie, 2–4 urządzenia, 5+ urządzeń (12–14 urządzeń).</summary>
+    public static string Devices(int n) =>
+        n == 1 ? "urządzenie" : n % 10 is >= 2 and <= 4 && n % 100 is not (>= 12 and <= 14) ? "urządzenia" : "urządzeń";
+
     public static string Of(AssetStatus status) => status switch
     {
         AssetStatus.New => "Nowe",

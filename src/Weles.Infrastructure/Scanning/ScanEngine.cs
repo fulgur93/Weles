@@ -93,9 +93,6 @@ public sealed class ScanEngine(
             await db.SaveChangesAsync(CancellationToken.None);
 
             var interfaces = localNetwork.GetInterfaces();
-            await writer.EnsureSegmentsAsync(
-                target.Entries.Where(e => !e.IsExclusion && e.Kind == ScanTargetEntryKind.Cidr).Select(e => (e.Value, (string?)null))
-                    .Concat(interfaces.Select(i => (i.NetworkCidr, i.Gateway))));
             var gateways = localNetwork.GetGateways();
             // The machine running WELES is not in its own ARP table – take its MAC from the local interface.
             var localMachine = interfaces.Where(i => IPAddress.TryParse(i.Address, out _))
@@ -137,6 +134,15 @@ public sealed class ScanEngine(
 
             scan.NetworkFingerprint = NetworkFingerprint(interfaces, scope.Addresses, arp);
             await db.SaveChangesAsync(CancellationToken.None);
+            var scopeGatewayVendor = scan.NetworkFingerprint is { } fp ? oui.Lookup(fp.Split(',')[0]) : null;
+            await writer.EnsureSegmentsAsync(
+                target.Entries.Where(e => !e.IsExclusion && e.Kind == ScanTargetEntryKind.Cidr)
+                    .Select(e => new SegmentInfo(e.Value, null, scan.NetworkFingerprint, scopeGatewayVendor))
+                    .Concat(interfaces.Select(i =>
+                    {
+                        var mac = i.Gateway is not null && IPAddress.TryParse(i.Gateway, out var gw) ? arp.GetValueOrDefault(gw)?.ToLowerInvariant() : null;
+                        return new SegmentInfo(i.NetworkCidr, i.Gateway, mac, oui.Lookup(mac));
+                    })));
             var localMacs = localNetwork.GetLocalMacAddresses();
 
             var scopeMdns = (await mdnsTask).Where(m => scopeSet.Contains(m.Key)).ToDictionary(m => m.Key, m => m.Value);

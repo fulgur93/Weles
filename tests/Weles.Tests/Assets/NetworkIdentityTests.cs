@@ -8,6 +8,7 @@ using Weles.Core.Enums;
 using Weles.Core.Networking;
 using Weles.Core.Rules;
 using Weles.Infrastructure.Database;
+using Weles.Infrastructure.Discovery;
 using Weles.Infrastructure.Queries;
 using Weles.Infrastructure.Scanning;
 using Weles.Tests.Support;
@@ -169,6 +170,76 @@ public class NetworkIdentityTests
         {
             var networks = await db.Scans.OrderBy(s => s.Id).Select(s => s.NetworkFingerprint).ToListAsync();
             Assert.Equal([HomeGateway, null], networks);
+        }
+
+        SqliteConnection.ClearAllPools();
+    }
+
+    private sealed class FakeCurrentNetwork(params AttachedNetwork[] networks) : ICurrentNetworkProvider
+    {
+        public IReadOnlyList<AttachedNetwork> GetAttachedNetworks() => networks;
+    }
+
+    [Fact]
+    public async Task Current_network_view_hides_only_other_identified_networks()
+    {
+        var testDb = await TestDatabase.CreateAsync();
+        await using var _ = testDb;
+        var writer = new ScanResultWriter(testDb, TimeProvider.System);
+        await writer.EnsureSegmentsAsync([
+            new("192.168.0.0/24", "192.168.0.1", HomeGateway, "TP-LINK TECHNOLOGIES CO.,LTD."),
+            new("192.168.0.0/24", "192.168.0.1", OfficeGateway, "TP-LINK TECHNOLOGIES CO.,LTD."),
+            new("10.8.0.0/24", null, null, null)]);
+        int home, office, vpn;
+        await using (var db = testDb.CreateDbContext())
+        {
+            home = (await db.NetworkSegments.SingleAsync(s => s.GatewayMac == HomeGateway)).Id;
+            office = (await db.NetworkSegments.SingleAsync(s => s.GatewayMac == OfficeGateway)).Id;
+            vpn = (await db.NetworkSegments.SingleAsync(s => s.Cidr == "10.8.0.0/24")).Id;
+        }
+
+        var atOffice = await new AssetQueries(testDb, new FakeCurrentNetwork(new AttachedNetwork("192.168.0.0/24", OfficeGateway))).CurrentNetworkAsync();
+        Assert.Equal([home], atOffice.OtherNetworkSegmentIds);
+        Assert.Equal($"192.168.0.0/24 · TP-LINK {OfficeGateway}", atOffice.Description);
+
+        var atHome = await new AssetQueries(testDb, new FakeCurrentNetwork(new AttachedNetwork("192.168.0.0/24", HomeGateway))).CurrentNetworkAsync();
+        Assert.Equal([office], atHome.OtherNetworkSegmentIds);
+        Assert.DoesNotContain(vpn, atHome.OtherNetworkSegmentIds);
+
+        // Elsewhere (a café): both identified networks are "other"; without any interface nothing is hidden.
+        var cafe = await new AssetQueries(testDb, new FakeCurrentNetwork(new AttachedNetwork("172.20.10.0/28", "11:22:33:44:55:66"))).CurrentNetworkAsync();
+        Assert.Equal(new HashSet<int> { home, office }, cafe.OtherNetworkSegmentIds);
+        Assert.Empty((await new AssetQueries(testDb, new FakeCurrentNetwork()).CurrentNetworkAsync()).OtherNetworkSegmentIds);
+    }
+
+    [Fact]
+    public async Task Migration_splits_a_segment_shared_by_two_networks()
+    {
+        var testDb = await TestDatabase.CreateAsync();
+        await using var _ = testDb;
+        await using (var db = testDb.CreateDbContext())
+        {
+            await db.GetService<IMigrator>().MigrateAsync("20261119101255_Stage3NetworkIdentity");
+            await db.Database.ExecuteSqlRawAsync("""
+                INSERT INTO ScanTargets (Id, Name, IsApproved, AllowPublicAddresses, IsDemo, CreatedAt) VALUES (1, 't', 1, 0, 0, '2026-11-18');
+                INSERT INTO Scans (Id, ScanTargetId, Status, "Trigger", PortSpecification, CreatedAt, HostsTargeted, HostsProbed, PortCount, HostsAlive, OpenPorts, IsDemo, NetworkFingerprint) VALUES (1, 1, 2, 0, 'quick', '2026-11-18', 0, 0, 0, 0, 0, 0, '68:7f:f0:72:00:14');
+                INSERT INTO Scans (Id, ScanTargetId, Status, "Trigger", PortSpecification, CreatedAt, HostsTargeted, HostsProbed, PortCount, HostsAlive, OpenPorts, IsDemo, NetworkFingerprint) VALUES (2, 1, 2, 0, 'quick', '2026-11-19', 0, 0, 0, 0, 0, 0, 'c0:4a:00:ee:19:4a');
+                INSERT INTO NetworkSegments (Id, Cidr, Gateway, FirstSeenAt, LastSeenAt) VALUES (1, '192.168.0.0/24', '192.168.0.1', '2026-11-18', '2026-11-19');
+                INSERT INTO Assets (Id, DisplayName, PrimaryIpAddress, AssetType, Criticality, NetworkSegmentId, FirstSeenAt, LastSeenAt, IsDemo) VALUES (1, 'tv', '192.168.0.226', 0, 2, 1, '2026-11-18', '2026-11-18', 0);
+                INSERT INTO Assets (Id, DisplayName, PrimaryIpAddress, AssetType, Criticality, NetworkSegmentId, FirstSeenAt, LastSeenAt, IsDemo) VALUES (2, 'router', '192.168.0.1', 4, 2, 1, '2026-11-19', '2026-11-19', 0);
+                INSERT INTO DiscoveredHosts (ScanId, AssetId, IpAddress, MacAddress, Vendor, DiscoveryMethods, IsGateway, AssetTypeGuess, ClassificationConfidence, DiscoveredAt) VALUES (1, 1, '192.168.0.226', NULL, NULL, 1, 0, 0, 0, '2026-11-18');
+                INSERT INTO DiscoveredHosts (ScanId, AssetId, IpAddress, MacAddress, Vendor, DiscoveryMethods, IsGateway, AssetTypeGuess, ClassificationConfidence, DiscoveredAt) VALUES (2, 2, '192.168.0.1', 'c0:4a:00:ee:19:4a', 'TP-LINK TECHNOLOGIES CO.,LTD.', 1, 1, 4, 85, '2026-11-19');
+                """);
+            await db.Database.MigrateAsync();
+        }
+
+        await using (var db = testDb.CreateDbContext())
+        {
+            var segments = await db.NetworkSegments.OrderBy(s => s.GatewayMac).ToListAsync();
+            Assert.Equal([HomeGateway, OfficeGateway], segments.Select(s => s.GatewayMac));
+            Assert.Equal("TP-LINK TECHNOLOGIES CO.,LTD.", segments[1].GatewayVendor);
+            Assert.Equal(segments[0].Id, (await db.Assets.SingleAsync(a => a.Id == 1)).NetworkSegmentId);
+            Assert.Equal(segments[1].Id, (await db.Assets.SingleAsync(a => a.Id == 2)).NetworkSegmentId);
         }
 
         SqliteConnection.ClearAllPools();

@@ -57,6 +57,10 @@ Limity (równoległość, tempo, timeouty, maks. liczba hostów) są w `appsetti
   *Nieobecne* – skan obejmował adres, ale urządzenia nie znalazł; *Poza ostatnimi skanami* – żaden ostatni skan nie
   sprawdzał tego adresu. Liczą się tylko skany **tej samej sieci** (rozpoznawanej po adresie MAC routera): skan biura
   192.168.0.0/24 nie zmienia statusu urządzeń z domowej sieci 192.168.0.0/24.
+- **Sieć** – lista domyślnie pokazuje urządzenia sieci, do której komputer jest teraz podłączony (rozpoznawanej po
+  zakresie adresów i adresie MAC routera); urządzenia z innych sieci są ukryte z informacją, ile ich jest. Filtr
+  „Wszystkie sieci” lub wybór konkretnej sieci pokazuje resztę. Kolumna „Sieć” podaje np.
+  „192.168.0.0/24 · TP-LINK c0:4a:00:ee:19:4a”.
 - **Ten komputer** występuje raz, nawet jeśli łączył się raz przez Wi‑Fi, a raz kablem.
 - **Porty** – profil Szybki sprawdza mniej portów niż Standardowy; porty, których ostatni skan nie sprawdzał, zostają
   pokazane z wcześniejszej obserwacji i nie są uznawane za zamknięte.

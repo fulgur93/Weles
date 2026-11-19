@@ -200,13 +200,35 @@ public class ScanResultWriterTests
         await using var testDb = await TestDatabase.CreateAsync();
         var writer = new ScanResultWriter(testDb, TimeProvider.System);
 
-        await writer.EnsureSegmentsAsync([("192.168.0.0/24", null), ("192.168.0.0/24", "192.168.0.1"), ("10.0.0.0/24", null)]);
-        await writer.EnsureSegmentsAsync([("192.168.0.0/24", null)]);
+        const string home = "68:7f:f0:72:00:14";
+        await writer.EnsureSegmentsAsync([new("192.168.0.0/24", null, home, null), new("192.168.0.0/24", "192.168.0.1", home, "TP-LINK"), new("10.0.0.0/24", null, null, null)]);
+        await writer.EnsureSegmentsAsync([new("192.168.0.0/24", null, home, null)]);
 
         await using var db = testDb.CreateDbContext();
         var segments = await db.NetworkSegments.OrderBy(s => s.Cidr).ToListAsync();
         Assert.Equal(2, segments.Count);
         Assert.Equal("192.168.0.1", segments.Single(s => s.Cidr == "192.168.0.0/24").Gateway);
+    }
+
+    [Fact]
+    public async Task Same_cidr_on_two_networks_gives_two_segments_and_hosts_land_in_their_own()
+    {
+        await using var testDb = await TestDatabase.CreateAsync();
+        var writer = new ScanResultWriter(testDb, TimeProvider.System);
+        const string home = "68:7f:f0:72:00:14", office = "c0:4a:00:ee:19:4a";
+
+        // A segment created before the gateway was known is adopted by the first network.
+        await writer.EnsureSegmentsAsync([new("192.168.0.0/24", null, null, null)]);
+        await writer.EnsureSegmentsAsync([new("192.168.0.0/24", "192.168.0.1", home, "TP-LINK")]);
+        await writer.EnsureSegmentsAsync([new("192.168.0.0/24", "192.168.0.1", office, "TP-LINK")]);
+
+        await using var db = testDb.CreateDbContext();
+        var segments = await db.NetworkSegments.OrderBy(s => s.Id).ToListAsync();
+        Assert.Equal([home, office], segments.Select(s => s.GatewayMac));
+
+        Assert.Equal(segments[0].Id, await ScanResultWriter.FindSegmentIdAsync(db, IPAddress.Parse("192.168.0.50"), home));
+        Assert.Equal(segments[1].Id, await ScanResultWriter.FindSegmentIdAsync(db, IPAddress.Parse("192.168.0.50"), office));
+        Assert.Null(await ScanResultWriter.FindSegmentIdAsync(db, IPAddress.Parse("192.168.0.50"), "11:22:33:44:55:66"));
     }
 }
 

@@ -8,6 +8,7 @@ public class AssetListEngineTests
     private static AssetListItem Item(int id, string name, string ip, AssetType type = AssetType.Unknown, AssetStatus status = AssetStatus.Active,
         int[]? ports = null, string? os = null, string? vendor = null, string[]? products = null, int? segment = 1, double? risk = null) =>
         new(id, name, false, null, ip, null, vendor, type, false, os, AssetCriticality.Medium, segment, segment is null ? null : $"10.0.{segment}.0/24",
+            segment is null ? null : $"10.0.{segment}.0/24 · router aa:00:00:00:00:0{segment}",
             (ports ?? []).Length, ports ?? [], products ?? [], 0, risk, null, status, DateTime.UtcNow.AddDays(-id), DateTime.UtcNow, 1);
 
     private static readonly List<AssetListItem> Inventory =
@@ -43,7 +44,7 @@ public class AssetListEngineTests
     [Fact]
     public void Filters_and_facet_counts()
     {
-        var page = Run(new AssetListQuery { Statuses = new HashSet<AssetStatus> { AssetStatus.Active }, SegmentId = 1 });
+        var page = Run(new AssetListQuery { Statuses = new HashSet<AssetStatus> { AssetStatus.Active }, SegmentIds = new HashSet<int> { 1 } });
         Assert.Equal([4, 1, 3], page.Items.Select(i => i.Id)); // default IP order: .1, .10, .170; the new phone is active too
         Assert.Equal(1, page.StatusCounts[AssetStatus.Missing]); // facet ignores its own filter
         Assert.Equal(2, page.Segments.Count);
@@ -88,5 +89,19 @@ public class AssetListEngineTests
         Assert.Equal(5, page.AllStatusesCount); // "Wszystkie" does not double-count new devices
 
         Assert.Equal([3], Run(new AssetListQuery { Statuses = new HashSet<AssetStatus> { AssetStatus.New } }).Items.Select(i => i.Id));
+    }
+
+    [Fact]
+    public void Network_filter_shows_only_the_selected_networks()
+    {
+        Assert.Equal([5], Run(new AssetListQuery { SegmentIds = new HashSet<int> { 2 } }).Items.Select(i => i.Id));
+        Assert.Empty(Run(new AssetListQuery { SegmentIds = new HashSet<int>() }).Items);
+        Assert.Equal(5, Run(new AssetListQuery { SegmentIds = null }).TotalCount);
+        Assert.Equal([5], Run(new AssetListQuery { Search = "aa:00:00:00:00:02" }).Items.Select(i => i.Id)); // network label is searchable
+
+        // Current-network view: other networks hidden, assets without a segment (loopback, routed) stay.
+        var current = Run(new AssetListQuery { ExcludedSegmentIds = new HashSet<int> { 1 } });
+        Assert.Equal([5], current.Items.Select(i => i.Id));
+        Assert.Equal(4, current.HiddenOtherNetworks);
     }
 }

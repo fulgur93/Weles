@@ -238,6 +238,12 @@ Ograniczenia znane po Etapie 2: brak UDP poza mDNS (SNMP, NetBIOS-NS, SSDP), bra
   sieci, w której wykonano skan. Zakresy prywatne się powtarzają (192.168.0.0/24 w domu i w biurze), więc skan obejmuje
   urządzenie tylko w jego własnej sieci, a dopasowanie „po IP i nazwie” (urządzenia bez MAC) też wymaga tej samej sieci.
   Migracja uzupełnia odcisk starych skanów z bramy zaobserwowanej w danym skanie. Nieznany odcisk = sieci nierozróżnialne.
+- **Sieć = segment** (`NetworkSegment.GatewayMac`, migracja `Stage3NetworkSegments`): segment to zakres CIDR *w konkretnej
+  sieci* (unikalny indeks Cidr + GatewayMac), więc 192.168.0.0/24 w domu i w biurze to dwa segmenty, a każde urządzenie
+  należy do sieci swojej ostatniej obserwacji. Migracja rozdziela dawne wspólne segmenty według tej zasady.
+- **Bieżąca sieć** (`CurrentNetworkProvider`) – z interfejsów i pamięci ARP (bez wysyłania ruchu). Widok domyślny listy
+  ukrywa wyłącznie segmenty *innych rozpoznanych* sieci; urządzenia bez segmentu (127.0.0.1, podsieci routowane/VPN)
+  i segmenty bez znanej bramy pozostają widoczne. Kolumna „Sieć” i wybór sieci w filtrze.
 - **Ten komputer** – znaleziony pod adresem sieciowym (nie 127.0.0.1) jest jednym zasobem niezależnie od karty
   (Wi‑Fi / kabel): zasoby z adresami MAC jego interfejsów są łączone w najstarszy (obserwacje, ustalenia, pola ręczne
   zachowane). Skan 127.0.0.1 pozostaje osobnym zasobem – usługi nasłuchujące tylko lokalnie to inna powierzchnia ataku.
@@ -313,3 +319,4 @@ Ograniczenia znane po Etapie 2: brak UDP poza mDNS (SNMP, NetBIOS-NS, SSDP), bra
 | 2026‑11‑19 | Porównanie obserwacji uwzględnia listę portów sprawdzonych przez skan – wcześniej skan profilem Mobilnym po Standardowym raportował porty 81/1900/49152 routera jako zamknięte, a następny Standardowy jako nowe (wykryte na prawdziwej sieci). |
 | 2026‑11‑19 | Zakładka „Aktywne” pokazuje też urządzenia nowe – po pierwszym skanie była pusta (zgłoszone przez użytkownika). |
 | 2026‑11‑19 | Sieć skanu identyfikowana adresem MAC bramy: skan sieci przewodowej 192.168.0.0/24 oznaczał 12 urządzeń z domowej sieci 192.168.0.0/24 jako nieobecne. Komputer z WELES widziany przez Wi‑Fi i kabel występował jako dwa zasoby – teraz jeden. |
+| 2026‑11‑19 | Segment sieci identyfikowany przez CIDR **i** MAC bramy; lista domyślnie pokazuje bieżącą sieć (ukrywa tylko inne rozpoznane sieci, żeby nie gubić 127.0.0.1 ani podsieci za VPN – wykryte testem integracyjnym). |

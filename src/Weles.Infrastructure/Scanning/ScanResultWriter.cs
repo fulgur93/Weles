@@ -13,6 +13,9 @@ namespace Weles.Infrastructure.Scanning;
 /// Persists scan observations and correlates them with stable assets. Writes are serialized
 /// (SQLite has a single writer) and never cancelled half-way, so partial results survive a stop.
 /// </summary>
+/// <param name="Gateway">Gateway IP.</param>
+public sealed record SegmentInfo(string Cidr, string? Gateway, string? GatewayMac, string? GatewayVendor);
+
 public sealed class ScanResultWriter(IDbContextFactory<WelesDbContext> contextFactory, TimeProvider timeProvider)
 {
     private readonly SemaphoreSlim _writeLock = new(1, 1);
@@ -92,7 +95,7 @@ public sealed class ScanResultWriter(IDbContextFactory<WelesDbContext> contextFa
             // A name or type set by the user is never overwritten by a scan.
             asset.DisplayName = AssetNaming.DisplayName(asset.CustomName, asset.Hostname, AssetNaming.Label(asset.Model, asset.Vendor), ip);
             asset.LastSeenAt = now;
-            asset.NetworkSegmentId = await FindSegmentIdAsync(db, result.Address) ?? asset.NetworkSegmentId;
+            asset.NetworkSegmentId = await FindSegmentIdAsync(db, result.Address, network) ?? asset.NetworkSegmentId;
 
             host.Asset = asset;
             db.DiscoveredHosts.Add(host);
@@ -109,26 +112,39 @@ public sealed class ScanResultWriter(IDbContextFactory<WelesDbContext> contextFa
         }
     }
 
-    /// <summary>Creates network segments for every CIDR in the scope (idempotent).</summary>
-    public async Task EnsureSegmentsAsync(IEnumerable<(string Cidr, string? Gateway)> segments)
+    /// <summary>
+    /// Creates network segments (idempotent). A segment is a CIDR on a specific network (gateway MAC); a segment created
+    /// earlier without a known gateway is adopted by the first network that reports one.
+    /// </summary>
+    public async Task EnsureSegmentsAsync(IEnumerable<SegmentInfo> segments)
     {
         await _writeLock.WaitAsync();
         try
         {
             await using var db = await contextFactory.CreateDbContextAsync();
             var now = Now;
-            // The same CIDR can come from the scope (no gateway) and from a local interface (with gateway) – keep the gateway.
-            foreach (var (cidr, gateway) in segments.GroupBy(s => s.Cidr).Select(g => (g.Key, g.Select(x => x.Gateway).FirstOrDefault(x => x is not null))))
+            // The same CIDR can come from the scope (no gateway IP) and from a local interface (with gateway) – keep the gateway.
+            var merged = segments.GroupBy(s => (s.Cidr, Mac: s.GatewayMac?.ToLowerInvariant()))
+                .Select(g => new SegmentInfo(g.Key.Cidr, g.Select(x => x.Gateway).FirstOrDefault(x => x is not null), g.Key.Mac, g.Select(x => x.GatewayVendor).FirstOrDefault(x => x is not null)));
+            foreach (var info in merged)
             {
-                var existing = await db.NetworkSegments.SingleOrDefaultAsync(s => s.Cidr == cidr);
+                var sameCidr = await db.NetworkSegments.Where(s => s.Cidr == info.Cidr).ToListAsync();
+                var existing = sameCidr.FirstOrDefault(s => s.GatewayMac == info.GatewayMac)
+                    ?? (info.GatewayMac is not null && sameCidr.All(s => s.GatewayMac is null) ? sameCidr.FirstOrDefault() : null);
                 if (existing is null)
                 {
-                    db.NetworkSegments.Add(new NetworkSegment { Cidr = cidr, Gateway = gateway, FirstSeenAt = now, LastSeenAt = now });
+                    db.NetworkSegments.Add(new NetworkSegment
+                    {
+                        Cidr = info.Cidr, Gateway = info.Gateway, GatewayMac = info.GatewayMac, GatewayVendor = Truncate(info.GatewayVendor, 255),
+                        FirstSeenAt = now, LastSeenAt = now
+                    });
                 }
                 else
                 {
                     existing.LastSeenAt = now;
-                    existing.Gateway ??= gateway;
+                    existing.Gateway ??= info.Gateway;
+                    existing.GatewayMac ??= info.GatewayMac;
+                    existing.GatewayVendor ??= Truncate(info.GatewayVendor, 255);
                 }
             }
 
@@ -209,15 +225,18 @@ public sealed class ScanResultWriter(IDbContextFactory<WelesDbContext> contextFa
         return target;
     }
 
-    private static async Task<int?> FindSegmentIdAsync(WelesDbContext db, IPAddress address)
+    /// <summary>Most specific segment containing the address on this scan's network (or one whose network is unknown).</summary>
+    internal static async Task<int?> FindSegmentIdAsync(WelesDbContext db, IPAddress address, string? network)
     {
         if (address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork) return null;
         var value = Ipv4.ToUInt(address);
-        var segments = await db.NetworkSegments.AsNoTracking().Select(s => new { s.Id, s.Cidr }).ToListAsync();
+        var segments = await db.NetworkSegments.AsNoTracking().Select(s => new { s.Id, s.Cidr, s.GatewayMac }).ToListAsync();
         return segments
-            .Select(s => (s.Id, Parsed: TargetParser.TryParse(s.Cidr, out var t, out _) ? t : null))
+            .Select(s => (s.Id, s.GatewayMac, Parsed: TargetParser.TryParse(s.Cidr, out var t, out _) ? t : null))
             .Where(s => s.Parsed?.Ipv4Range is { } r && Ipv4.CidrRange(r.Start, PrefixOf(s.Parsed.Normalized), false).Contains(value))
+            .Where(s => NetworkIdentity.SameNetwork(s.GatewayMac, network))
             .OrderByDescending(s => PrefixOf(s.Parsed!.Normalized))
+            .ThenByDescending(s => s.GatewayMac is not null && network is not null)
             .Select(s => (int?)s.Id)
             .FirstOrDefault();
     }

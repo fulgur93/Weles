@@ -524,3 +524,5 @@ th.sortable:hover { color: var(--text); }
     .hero { grid-template-columns: 1fr; padding: 24px; }
     .hero-visual { display: none; }
 }
+
+.network-note { margin: 4px 0 10px; }

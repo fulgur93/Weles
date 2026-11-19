@@ -5,6 +5,7 @@ using Weles.Core.Enums;
 using Weles.Core.Networking;
 using Weles.Core.Rules;
 using Weles.Infrastructure.Database;
+using Weles.Infrastructure.Discovery;
 
 namespace Weles.Infrastructure.Queries;
 
@@ -22,6 +23,7 @@ public sealed record AssetListItem(
     AssetCriticality Criticality,
     int? SegmentId,
     string? SegmentCidr,
+    string? NetworkLabel,
     int OpenPortCount,
     IReadOnlyList<int> OpenPorts,
     IReadOnlyList<string> Products,
@@ -45,7 +47,11 @@ public sealed record AssetListQuery
     public string? Search { get; init; }
     public IReadOnlySet<AssetType> Types { get; init; } = new HashSet<AssetType>();
     public IReadOnlySet<AssetStatus> Statuses { get; init; } = new HashSet<AssetStatus>();
-    public int? SegmentId { get; init; }
+    /// <summary>Segments (networks) to show; null = every network, including assets without a segment.</summary>
+    public IReadOnlySet<int>? SegmentIds { get; init; }
+
+    /// <summary>Segments to hide (other networks in the current-network view).</summary>
+    public IReadOnlySet<int>? ExcludedSegmentIds { get; init; }
     public string? OsFamily { get; init; }
     public bool OnlyWithOpenPorts { get; init; }
     public IReadOnlyList<AssetSort> Sort { get; init; } = [new(AssetSortColumn.Ip, false)];
@@ -59,9 +65,10 @@ public sealed record AssetListPage(
     int Page,
     int PageSize,
     int AllStatusesCount,
+    int HiddenOtherNetworks,
     IReadOnlyDictionary<AssetStatus, int> StatusCounts,
     IReadOnlyDictionary<AssetType, int> TypeCounts,
-    IReadOnlyList<(int Id, string Cidr)> Segments,
+    IReadOnlyList<(int Id, string Label)> Segments,
     IReadOnlyList<string> OsFamilies)
 {
     public int PageCount => Math.Max(1, (int)Math.Ceiling(TotalCount / (double)PageSize));
@@ -84,8 +91,32 @@ public sealed record AssetDetail(
 /// inventory holds at most tens of thousands of assets, and in-memory evaluation gives culture-aware (Polish)
 /// case-insensitive search and arbitrary multi-column sorting, which SQLite LIKE/ORDER BY cannot.
 /// </summary>
-public sealed class AssetQueries(IDbContextFactory<WelesDbContext> contextFactory)
+/// <param name="OtherNetworkSegmentIds">
+/// Segments that belong to a different, identified network (known gateway MAC, not the one this machine is attached
+/// to now). The current-network view hides exactly these; loopback, routed or unidentified segments stay visible.
+/// </param>
+/// <param name="Description">Attached networks, e.g. "192.168.0.0/24 · TP-LINK c0:4a:00:ee:19:4a".</param>
+public sealed record CurrentNetworkView(IReadOnlySet<int> OtherNetworkSegmentIds, string Description);
+
+public sealed class AssetQueries(IDbContextFactory<WelesDbContext> contextFactory, ICurrentNetworkProvider? currentNetwork = null)
 {
+    public async Task<CurrentNetworkView> CurrentNetworkAsync(CancellationToken ct = default)
+    {
+        var attached = currentNetwork?.GetAttachedNetworks() ?? [];
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        var segments = await db.NetworkSegments.AsNoTracking().Select(s => new { s.Id, s.Cidr, s.Name, s.GatewayMac, s.GatewayVendor }).ToListAsync(ct);
+        bool IsAttached(string cidr, string? mac) => attached.Any(n => n.Cidr == cidr && NetworkIdentity.SameNetwork(n.GatewayMac, mac));
+
+        var others = attached.Count == 0
+            ? new HashSet<int>()
+            : segments.Where(s => s.GatewayMac is not null && !IsAttached(s.Cidr, s.GatewayMac)).Select(s => s.Id).ToHashSet();
+        var description = string.Join(", ", attached.Select(n =>
+            segments.FirstOrDefault(s => s.Cidr == n.Cidr && s.GatewayMac is not null && NetworkIdentity.SameNetwork(n.GatewayMac, s.GatewayMac)) is { } seg
+                ? NetworkNaming.Label(seg.Cidr, seg.Name, seg.GatewayVendor, seg.GatewayMac)
+                : NetworkNaming.Label(n.Cidr, null, null, n.GatewayMac)));
+        return new CurrentNetworkView(others, description);
+    }
+
     private const int CoverageScanLimit = 200;
 
     public async Task<IReadOnlyList<AssetListItem>> LoadAllAsync(CancellationToken ct = default)
@@ -97,6 +128,9 @@ public sealed class AssetQueries(IDbContextFactory<WelesDbContext> contextFactor
             {
                 a.Id, a.DisplayName, a.CustomName, a.Hostname, a.PrimaryIpAddress, a.MacAddress, a.Vendor, a.AssetType, a.UserAssetType,
                 a.OsFamily, a.Criticality, a.NetworkSegmentId, Cidr = a.NetworkSegment != null ? a.NetworkSegment.Cidr : null,
+                SegmentName = a.NetworkSegment != null ? a.NetworkSegment.Name : null,
+                GatewayVendor = a.NetworkSegment != null ? a.NetworkSegment.GatewayVendor : null,
+                GatewayMac = a.NetworkSegment != null ? a.NetworkSegment.GatewayMac : null,
                 a.CurrentRiskScore, a.CurrentRiskLevel, a.FirstSeenAt, a.LastSeenAt,
                 OpenVulns = a.Vulnerabilities.Count(v => v.Status == FindingStatus.Open)
             })
@@ -127,6 +161,7 @@ public sealed class AssetQueries(IDbContextFactory<WelesDbContext> contextFactor
             return new AssetListItem(
                 a.Id, a.DisplayName, a.CustomName is not null, a.Hostname, a.PrimaryIpAddress, a.MacAddress, a.Vendor,
                 a.UserAssetType ?? a.AssetType, a.UserAssetType is not null, a.OsFamily, a.Criticality, a.NetworkSegmentId, a.Cidr,
+                a.Cidr is null ? null : NetworkNaming.Label(a.Cidr, a.SegmentName, a.GatewayVendor, a.GatewayMac),
                 ports.Count, ports.Select(p => p.Port).Order().ToList(),
                 ports.Where(p => p.Product is not null).Select(p => p.Version is null ? p.Product! : $"{p.Product} {p.Version}").Distinct().ToList(),
                 a.OpenVulns, a.CurrentRiskScore, a.CurrentRiskLevel, presence.Status, a.FirstSeenAt, a.LastSeenAt, obs.Count);
@@ -223,7 +258,14 @@ public static class AssetListEngine
 
         // Facet counts reflect the search but not the facet's own filter, so the user sees what each choice would give.
         var searched = filtered.ToList();
-        if (query.SegmentId is { } segment) searched = searched.Where(a => a.SegmentId == segment).ToList();
+        if (query.SegmentIds is { } segmentIds) searched = searched.Where(a => a.SegmentId is { } id && segmentIds.Contains(id)).ToList();
+        var hiddenByNetwork = 0;
+        if (query.ExcludedSegmentIds is { Count: > 0 } excluded)
+        {
+            var before = searched.Count;
+            searched = searched.Where(a => a.SegmentId is not { } id || !excluded.Contains(id)).ToList();
+            hiddenByNetwork = before - searched.Count;
+        }
         if (!string.IsNullOrEmpty(query.OsFamily)) searched = searched.Where(a => string.Equals(a.OsFamily, query.OsFamily, StringComparison.OrdinalIgnoreCase)).ToList();
         if (query.OnlyWithOpenPorts) searched = searched.Where(a => a.OpenPortCount > 0).ToList();
 
@@ -240,8 +282,8 @@ public static class AssetListEngine
 
         return new AssetListPage(
             sorted.Skip((page - 1) * pageSize).Take(pageSize).ToList(),
-            result.Count, page, pageSize, byType.Count, statusCounts, typeCounts,
-            all.Where(a => a.SegmentId is not null).Select(a => (a.SegmentId!.Value, a.SegmentCidr!)).Distinct().OrderBy(s => s.Item2).ToList(),
+            result.Count, page, pageSize, byType.Count, hiddenByNetwork, statusCounts, typeCounts,
+            all.Where(a => a.SegmentId is not null).Select(a => (a.SegmentId!.Value, a.NetworkLabel ?? a.SegmentCidr!)).Distinct().OrderBy(s => s.Item2).ToList(),
             all.Select(a => a.OsFamily).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).Order().ToList());
     }
 
@@ -259,7 +301,7 @@ public static class AssetListEngine
     {
         if (int.TryParse(term, out var port) && a.OpenPorts.Contains(port)) return true; // term is already folded; digits are unchanged
         return Contains(a.DisplayName, term) || Contains(a.Hostname, term) || Contains(a.IpAddress, term) || Contains(a.MacAddress, term)
-               || Contains(a.Vendor, term) || Contains(a.OsFamily, term) || Contains(a.SegmentCidr, term) || a.Products.Any(p => Contains(p, term));
+               || Contains(a.Vendor, term) || Contains(a.OsFamily, term) || Contains(a.NetworkLabel, term) || a.Products.Any(p => Contains(p, term));
     }
 
     private static bool Contains(string? value, string foldedTerm) =>

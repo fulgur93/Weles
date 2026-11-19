@@ -34,6 +34,7 @@ public static class DependencyInjection
         services.Configure<ScanOptions>(configuration.GetSection(ScanOptions.SectionName));
         services.AddSingleton<OuiDatabase>();
         services.AddSingleton<LocalNetworkDiscovery>();
+        services.AddSingleton<ICurrentNetworkProvider, CurrentNetworkProvider>();
         services.AddSingleton<ScanCoordinator>();
         services.AddSingleton<ScanResultWriter>();
         services.AddSingleton<ScanEngine>();

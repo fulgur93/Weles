@@ -78,7 +78,7 @@ else
                 <dt>Producent</dt><dd>@(a.Vendor ?? "—")</dd>
                 @if (a.Model is not null) { <dt>Model</dt><dd>@a.Model</dd> }
                 <dt>System</dt><dd>@(a.OsFamily ?? "nierozpoznany")</dd>
-                <dt>Segment</dt><dd class="mono">@(a.NetworkSegment?.Cidr ?? "—")</dd>
+                <dt>Sieć</dt><dd class="mono">@(a.NetworkSegment is { } seg ? NetworkNaming.Label(seg.Cidr, seg.Name, seg.GatewayVendor, seg.GatewayMac) : "—")</dd>
                 <dt>Pierwsze wykrycie</dt><dd>@Labels.Local(a.FirstSeenAt)</dd>
                 <dt>Ostatnio widziane</dt><dd>@Labels.Local(a.LastSeenAt)</dd>
                 @if (latest is not null)
