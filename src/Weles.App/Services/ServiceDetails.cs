@@ -89,6 +89,7 @@ public static class ServiceDetails
 
         if (x.TryGetValue("mdns.service", out var mdnsService))
             yield return (L.F("Ogłaszane przez mDNS: {0}", L.Message(mdnsService)) + (x.TryGetValue("mdns.instance", out var inst) ? $" („{inst}”)" : ""), x.ContainsKey("mdns.risky"));
+        if (x.TryGetValue("ssh.hostKey", out var hostKey)) yield return (L.F("Klucz hosta SSH: {0} {1}", x.GetValueOrDefault("ssh.hostKeyType", ""), hostKey), false);
         if (x.TryGetValue("dns.rcode", out var rcode)) yield return (L.F("DNS potwierdzony (odpowiedź {0})", rcode), false);
         if (x.TryGetValue("dns.version", out var dnsVersion)) yield return (L.F("Ujawniona wersja: {0}", dnsVersion), true);
         if (x.ContainsKey("dns.versionNote")) yield return (L.T("Wersja może należeć do serwera nadrzędnego (przekazywanie zapytań) – wymaga weryfikacji"), false);

@@ -48,6 +48,13 @@ public sealed partial class ServiceProber(ScanOptions options)
 
             if (BannerParser.Parse(banner, port) is { } fromBanner)
             {
+                // SSH: the public host key identifies the installation – the same key on two addresses is one device.
+                if (fromBanner.ServiceName == "ssh" && await ReadSshHostKeyAsync(address, port, cancellationToken) is { } key)
+                {
+                    fromBanner.Extra["ssh.hostKey"] = key.Fingerprint;
+                    fromBanner.Extra["ssh.hostKeyType"] = key.Type;
+                }
+
                 return new ServiceProbeResult(fromBanner, null);
             }
         }
@@ -98,6 +105,12 @@ public sealed partial class ServiceProber(ScanOptions options)
         using var client = await NetworkProbe.OpenAsync(address, port, options.ConnectTimeoutMs, ct);
         if (client is null) return [];
         return await ReadAsync(client.GetStream(), options.BannerTimeoutMs, 4096, ct);
+    }
+
+    private async Task<SshHostKey?> ReadSshHostKeyAsync(IPAddress address, int port, CancellationToken ct)
+    {
+        using var client = await NetworkProbe.OpenAsync(address, port, options.ConnectTimeoutMs, ct);
+        return client is null ? null : await SshHostKeyProbe.ReadAsync(client.GetStream(), options.ProbeTimeoutMs, ct);
     }
 
     private async Task<ServiceIdentification?> ProbeRedisAsync(IPAddress address, int port, CancellationToken ct)

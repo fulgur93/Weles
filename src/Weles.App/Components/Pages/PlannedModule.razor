@@ -7,6 +7,7 @@
 @page "/reports"
 @page "/agents"
 @inject NavigationManager Navigation
+@inject Weles.Infrastructure.Queries.VulnerabilityQueries Vulnerabilities
 
 <PageTitle>@L.T(_module?.Title ?? "Moduł") · WELES</PageTitle>
 
@@ -18,6 +19,20 @@
             <p class="page-subtitle">@L.T(_module.Summary)</p>
         </div>
     </div>
+
+    @if (_cve is { } cve)
+    {
+        <section class="card ai-question">
+            <div class="card-title"><Icon Name="ai" /> @L.T("Pytanie dla Analityka AI")</div>
+            <blockquote>@L.F("Wyjaśnij {0} prostym językiem: na czym polega, czy dotyczy moich urządzeń i co powinienem zrobić.", cve.Vulnerability.CveId)</blockquote>
+            <p class="small">@L.T("Analityk dostanie tylko dane z bazy WELES:")
+                @L.F("opis z NVD, CVSS {0}, EPSS {1}, CISA KEV: {2}", cve.Vulnerability.CvssScore?.ToString("0.0") ?? "—", Labels.Epss(cve.Vulnerability.EpssScore), cve.Vulnerability.IsKnownExploited ? L.T("tak") : L.T("nie"))
+                @if (cve.Findings.Count > 0) { <span>· @L.F("dopasowane urządzenia: {0}", string.Join(", ", cve.Findings.Select(f => L.Message(f.AssetName)).Distinct()))</span> }
+            </p>
+            <p class="alert alert-info small">@L.T("Analityk AI nie jest jeszcze zainstalowany – lokalny silnik Ollama z modelem dochodzi w Etapie 6. Wtedy ten link od razu zada powyższe pytanie; dziś WELES nie pokazuje wymyślonej odpowiedzi.")</p>
+            <a class="btn btn-ghost btn-sm" href="vulnerabilities/@cve.Vulnerability.CveId"><Icon Name="arrow-left" Size="14" /> @L.F("Wróć do {0}", cve.Vulnerability.CveId)</a>
+        </section>
+    }
 
     <section class="card planned-card">
         <div class="planned-head">
@@ -39,11 +54,18 @@
 }
 
 @code {
-    private WelesModule? _module;
+    [SupplyParameterFromQuery(Name = "cve")] public string? Cve { get; set; }
 
-    protected override void OnParametersSet()
+    private WelesModule? _module;
+    private Weles.Infrastructure.Queries.CveDetail? _cve;
+
+    protected override async Task OnParametersSetAsync()
     {
         var route = Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0];
         _module = ModuleCatalog.FindByRoute(route);
+        // Question prepared from a CVE page (link "Wyjaśnij z Analitykiem AI"); only real CVE IDs from the local database.
+        _cve = _module?.Route == "ai" && Cve is { } id && System.Text.RegularExpressions.Regex.IsMatch(id, @"^CVE-\d{4}-\d{4,}$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+            ? await Vulnerabilities.GetCveAsync(id)
+            : null;
     }
 }

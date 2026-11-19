@@ -78,6 +78,17 @@ else
                 <dt>@L.T("Adres IP")</dt><dd class="mono">@(a.PrimaryIpAddress ?? "—")</dd>
                 <dt>@L.T("Nazwa hosta")</dt><dd>@(a.Hostname ?? "—")</dd>
                 <dt>@L.T("Adres MAC")</dt><dd class="mono">@(a.MacAddress ?? "—")</dd>
+                @if (Interfaces() is { Count: > 1 } nics)
+                {
+                    <dt>@L.T("Interfejsy")</dt>
+                    <dd>
+                        @foreach (var n in nics) { <div class="mono small">@n.Ip · @(n.Mac ?? "—")</div> }
+                        @if (nics.Select(n => n.HostKey).Distinct().Count() == 1 && nics[0].HostKey is { } key)
+                        {
+                            <div class="muted small">@L.F("jedno urządzenie: identyczny klucz hosta SSH ({0})", key)</div>
+                        }
+                    </dd>
+                }
                 <dt>@L.T("Producent")</dt><dd>@(a.Vendor ?? "—")</dd>
                 @if (a.Model is not null) { <dt>@L.T("Model")</dt><dd>@a.Model</dd> }
                 <dt>@L.T("System")</dt><dd>@(a.OsFamily ?? L.T("nierozpoznany"))</dd>
@@ -277,6 +288,18 @@ else
 @code {
     private bool _showAllVulns;
     private AssetRiskDetail? _risk;
+
+    private sealed record Nic(string Ip, string? Mac, string? HostKey);
+
+    /// <summary>Addresses the device answered on in its latest scan (e.g. cable and Wi‑Fi), with the evidence that joins them.</summary>
+    private List<Nic> Interfaces()
+    {
+        if (_detail?.Latest is not { } latest) return [];
+        return _detail.Observations.Where(o => o.ScanId == latest.ScanId)
+            .Select(o => new Nic(o.Host.IpAddress, o.Host.MacAddress,
+                o.Host.Ports.Select(p => ServiceDetails.Extra(p.Service).GetValueOrDefault("ssh.hostKey")).FirstOrDefault(k => k is not null)))
+            .DistinctBy(n => (n.Ip, n.Mac)).OrderBy(n => n.Ip, StringComparer.Ordinal).ToList();
+    }
 
     private async Task SetFindingAsync(int id, FindingStatus status)
     {

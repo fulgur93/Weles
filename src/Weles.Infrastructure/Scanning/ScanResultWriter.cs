@@ -71,6 +71,11 @@ public sealed class ScanResultWriter(IDbContextFactory<WelesDbContext> contextFa
                 ? await ConsolidateLocalMachineAsync(db, result.LocalMacAddresses!, result.MacAddress)
                 : null;
             asset ??= await FindAssetAsync(db, ip, result.MacAddress, result.Hostname, network);
+            if (!result.IsLocalMachine && HostKeyOf(result) is { } hostKey)
+            {
+                asset = await ConsolidateBySshHostKeyAsync(db, hostKey, result.MacAddress, asset);
+            }
+
             if (asset is null)
             {
                 asset = new Asset { DisplayName = ip, FirstSeenAt = now };
@@ -195,6 +200,53 @@ public sealed class ScanResultWriter(IDbContextFactory<WelesDbContext> contextFa
             .OrderBy(a => a.FirstSeenAt).ThenBy(a => a.Id).ToListAsync();
         if (assets.Count <= 1) return assets.FirstOrDefault();
 
+        return await MergeIntoOldestAsync(db, assets);
+    }
+
+    /// <summary>SSH host key fingerprint the scan read from the host (see <see cref="SshHostKeyProbe"/>).</summary>
+    internal static string? HostKeyOf(HostScanResult result) =>
+        result.OpenPorts.Select(p => p.Service?.Identification.Extra.GetValueOrDefault("ssh.hostKey")).FirstOrDefault(k => !string.IsNullOrEmpty(k));
+
+    /// <summary>
+    /// One SSH host key = one operating system installation, so assets presenting the same key (e.g. a Raspberry Pi on
+    /// cable and on Wi‑Fi, two MAC addresses) are one device and are merged into the oldest record. Guard: some vendors
+    /// ship the same key on every unit, so only assets whose MAC addresses share the vendor prefix (OUI) are merged.
+    /// </summary>
+    internal static async Task<Asset?> ConsolidateBySshHostKeyAsync(WelesDbContext db, string hostKey, string? mac, Asset? found)
+    {
+        var candidates = await db.DiscoveredServices.AsNoTracking()
+            .Where(s => s.ExtraInfoJson != null && s.ExtraInfoJson.Contains("ssh.hostKey") && s.Port!.Host!.AssetId != null)
+            .Select(s => new { AssetId = s.Port!.Host!.AssetId!.Value, s.ExtraInfoJson })
+            .ToListAsync();
+        var ids = candidates.Where(c => KeyIn(c.ExtraInfoJson) == hostKey).Select(c => c.AssetId).Distinct().ToList();
+        if (found is not null && !ids.Contains(found.Id)) ids.Add(found.Id);
+        if (ids.Count == 0) return found;
+
+        var assets = await db.Assets.Where(a => ids.Contains(a.Id)).OrderBy(a => a.FirstSeenAt).ThenBy(a => a.Id).ToListAsync();
+        var oui = Oui(mac ?? found?.MacAddress);
+        assets = assets.Where(a => Oui(a.MacAddress) is null || oui is null || Oui(a.MacAddress) == oui).ToList();
+        if (assets.Count == 0) return found;
+        if (assets.Count == 1) return found ?? assets[0];
+        return await MergeIntoOldestAsync(db, assets);
+    }
+
+    private static string? KeyIn(string? extraJson)
+    {
+        try
+        {
+            return extraJson is null ? null : JsonSerializer.Deserialize<Dictionary<string, string>>(extraJson)?.GetValueOrDefault("ssh.hostKey");
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string? Oui(string? mac) => mac is { Length: >= 8 } ? mac[..8].ToLowerInvariant() : null;
+
+    /// <summary>Merges assets into the first (oldest): observations, findings and scores move, user-entered fields are kept.</summary>
+    private static async Task<Asset> MergeIntoOldestAsync(WelesDbContext db, List<Asset> assets)
+    {
         var target = assets[0];
         foreach (var other in assets.Skip(1))
         {
@@ -208,7 +260,15 @@ public sealed class ScanResultWriter(IDbContextFactory<WelesDbContext> contextFa
 
             var otherId = other.Id;
             await db.DiscoveredHosts.Where(h => h.AssetId == otherId).ExecuteUpdateAsync(u => u.SetProperty(h => h.AssetId, target.Id));
-            await db.RiskFindings.Where(f => f.AssetId == otherId).ExecuteUpdateAsync(u => u.SetProperty(f => f.AssetId, target.Id));
+            var existingFindings = await db.RiskFindings.Where(f => f.AssetId == target.Id).Select(f => new { f.RuleId, f.Port }).ToListAsync();
+            foreach (var f in await db.RiskFindings.Where(f => f.AssetId == otherId).ToListAsync())
+            {
+                if (existingFindings.Any(e => e.RuleId == f.RuleId && e.Port == f.Port)) db.RiskFindings.Remove(f);
+                else f.AssetId = target.Id;
+            }
+
+            var targetScans = await db.RiskScores.Where(r => r.AssetId == target.Id).Select(r => r.ScanId).ToListAsync();
+            await db.RiskScores.Where(r => r.AssetId == otherId && targetScans.Contains(r.ScanId)).ExecuteDeleteAsync();
             await db.RiskScores.Where(r => r.AssetId == otherId).ExecuteUpdateAsync(u => u.SetProperty(r => r.AssetId, target.Id));
             var existing = await db.AssetVulnerabilities.Where(v => v.AssetId == target.Id).Select(v => v.VulnerabilityId).ToListAsync();
             foreach (var v in await db.AssetVulnerabilities.Where(v => v.AssetId == otherId).ToListAsync())

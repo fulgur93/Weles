@@ -24,6 +24,13 @@ WELES służy do legalnych audytów infrastruktury, do której masz uprawnienia.
 | Brak testów ofensywnych | Tylko: TCP connect, ICMP echo, odczyt banera, `GET /`, handshake TLS, `PING`/`INFO server` (Redis, tylko gdy bez hasła – metadane), `SSLRequest` (PostgreSQL), negocjacja RDP. `CNXN` (ADB – bez odpowiedzi na wyzwanie AUTH), zapytanie DNS `version.bind` (CHAOS TXT), zapytania mDNS/DNS-SD (tylko sieć lokalna, wyniki filtrowane do zakresu). Bez logowania, bez brute force, bez exploitów. Sondy z danymi tylko na portach ich protokołów. |
 | Dane z sieci są niezaufane | Banery i nagłówki są sanityzowane (drukowalne ASCII, limit długości), regexy z timeoutem, rozmiary odpowiedzi ograniczone. |
 
+### Klucz hosta SSH
+
+Na porcie z rozpoznanym banerem SSH skaner – jak `ssh-keyscan` – wysyła identyfikację klienta, listę algorytmów
+(KEXINIT) i pierwszą wiadomość wymiany kluczy, odbiera publiczny klucz hosta i zamyka połączenie. Nie ma żadnej próby
+uwierzytelnienia; klucz serwer pokazuje każdemu klientowi przed logowaniem. Służy wyłącznie do rozpoznania, że dwa adresy
+to to samo urządzenie.
+
 ## Ochrona lokalnego panelu (zaimplementowane w Etapie 1)
 
 | Zagrożenie | Mechanizm |

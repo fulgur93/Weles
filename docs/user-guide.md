@@ -53,6 +53,9 @@ Limity (równoległość, tempo, timeouty, maks. liczba hostów) są w `appsetti
 - **Filtry** – status, typ, segment, system, „z otwartymi portami”; liczby przy filtrach pokazują, ile urządzeń zostanie.
 - **Sortowanie** – klik w nagłówek; **Shift+klik** dodaje kolejny poziom (np. porty ↓, potem nazwa ↑).
 - **Kolumny** – przycisk „Kolumny”; wybór jest zapamiętywany.
+- **Jedno urządzenie, kilka adresów** – urządzenie podłączone kablem i przez Wi‑Fi ma dwa adresy MAC. Jeśli pod obydwoma
+  działa SSH z tym samym kluczem hosta (np. Raspberry Pi), WELES łączy je w jedno urządzenie; w szczegółach widać oba
+  interfejsy i powód połączenia. Klucz jest odczytywany bez logowania, tak jak robi to `ssh-keyscan`.
 - **Status**: *Aktywne* – wykryte w ostatnim skanie obejmującym jego adres (w tym *Nowe* – wykryte po raz pierwszy);
   *Nieobecne* – skan obejmował adres, ale urządzenia nie znalazł; *Poza ostatnimi skanami* – żaden ostatni skan nie
   sprawdzał tego adresu; *Nieznane* – urządzenie sprawdzono ostatnio w jego sieci, ale potem skanowano inną sieć, więc

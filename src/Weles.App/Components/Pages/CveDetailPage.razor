@@ -16,14 +16,17 @@ else if (_detail is { } d)
         <div>
             <p class="muted small"><a href="vulnerabilities">@L.T("Podatności")</a> /</p>
             <h1 class="mono">@v.CveId</h1>
-            <p class="page-subtitle">@(v.Title ?? L.T("Opis z NVD (w języku angielskim). Wyjaśnienie po polsku przygotuje Analityk AI w Etapie 6."))</p>
+            @if (v.Title is not null) { <p class="page-subtitle">@v.Title</p> }
         </div>
-        <a class="btn btn-ghost" href="https://nvd.nist.gov/vuln/detail/@v.CveId" target="_blank" rel="noopener noreferrer">@L.T("NVD ↗")</a>
+        <div class="header-actions">
+            <a class="btn btn-primary" href="ai?cve=@v.CveId" title="@L.T("Wyjaśnienie tej podatności prostym językiem, na podstawie danych z bazy WELES i Twoich urządzeń")"><Icon Name="ai" Size="15" /> @L.T("Wyjaśnij z Analitykiem AI")</a>
+            <a class="btn btn-ghost" href="https://nvd.nist.gov/vuln/detail/@v.CveId" target="_blank" rel="noopener noreferrer">@L.T("NVD ↗")</a>
+        </div>
     </div>
 
     <section class="grid-2">
         <div class="card">
-            <div class="card-title"><Icon Name="vulnerabilities" /> @L.T("Opis")</div>
+            <div class="card-title"><Icon Name="vulnerabilities" /> @L.T("Opis") <span class="muted small">· @L.T("z NVD, w języku angielskim")</span></div>
             <p>@v.Description</p>
             <dl class="facts">
                 <dt>@L.T("CVSS")</dt><dd>@if (v.CvssScore is { } c) { <StatusPill Tone="@Labels.Tone(v.Severity)">@c.ToString("0.0") · @(v.Severity is { } sev ? Labels.Of(sev) : "")</StatusPill> <span class="mono small muted">v@v.CvssVersion @v.CvssVector</span> } else { <span class="muted">@L.T("brak oceny NVD")</span> }</dd>
