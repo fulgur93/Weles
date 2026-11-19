@@ -85,7 +85,9 @@ Limity (równoległość, tempo, timeouty, maks. liczba hostów) są w `appsetti
   *Wymaga weryfikacji* – pakiet dystrybucji (Ubuntu, Debian… – poprawki mogą być przeniesione bez zmiany wersji),
   wersja niedokładna (np. `2.4` wobec granicy `2.4.52`) albo pewność rozpoznania < 70%;
   *Brak wystarczających danych* – model urządzenia (np. router TP-Link) jest w NVD, ale wersji firmware skan nie zna –
-  sprawdź ją w panelu urządzenia.
+  sprawdź ją w panelu urządzenia; albo NVD oznacza „wszystkie wersje” produktu, więc wersja niczego nie rozstrzyga.
+  CVE, które NVD wiąże z inną dystrybucją niż wykryta (np. tylko pakiety Red Hata, a baner wskazuje Debiana), nie są
+  dopasowywane.
   Każde dopasowanie ma uzasadnienie (najedź na wiersz) i procent pewności.
 - **Status podatności**: *Otwarte*; *Rozwiązane* – kolejny skan nie potwierdził dowodu (np. nowsza wersja);
   *Zaakceptowane* – świadoma decyzja w szczegółach CVE (przycisk „Akceptuj ryzyko”), zachowywana przez kolejne skany.
@@ -97,6 +99,13 @@ WELES sprawdza, co telefon **wystawia w sieci**: otwarte porty, ADB przez sieć 
 bezprzewodowe (wykrywane przez mDNS), serwery udostępniania plików. Telefony zwykle mają losowy adres MAC, więc
 producent nie jest znany. Wersji Androida/iOS i poprawek bezpieczeństwa nie da się odczytać z sieci.
 Aby przetestować wykrywanie, włącz na telefonie *Opcje programisty → Debugowanie bezprzewodowe* i uruchom skan.
+
+## Język
+
+Przełącznik **PL / EN** w górnym pasku (oraz w Ustawieniach → Wygląd) zmienia język całego interfejsu. Wybór jest
+zapisywany w lokalnej bazie; strona przeładowuje się w nowym języku. Komunikaty zapisane wcześniej przez WELES
+(dziennik skanu, uzasadnienia klasyfikacji i dopasowań, nazwy zakresów utworzonych automatycznie) też są wyświetlane
+w wybranym języku. Opisy CVE pochodzą z NVD i są zawsze po angielsku; nazwy nadane przez Ciebie się nie zmieniają.
 
 ## Motyw
 

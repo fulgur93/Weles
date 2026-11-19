@@ -2,7 +2,7 @@
 @if (Ports.Count > 0)
 {
     <table class="table table-inner">
-        <thead><tr><th>Port</th><th>Usługa</th><th>Oprogramowanie</th><th>Pewność</th><th>Metoda</th><th>Szczegóły</th></tr></thead>
+        <thead><tr><th>@L.T("Port")</th><th>@L.T("Usługa")</th><th>@L.T("Oprogramowanie")</th><th>@L.T("Pewność")</th><th>@L.T("Metoda")</th><th>@L.T("Szczegóły")</th></tr></thead>
         <tbody>
             @foreach (var port in Ports.OrderBy(p => p.Port))
             {
@@ -10,7 +10,7 @@
                 var extra = ServiceDetails.Extra(svc);
                 <tr>
                     <td class="mono">@port.Port/@(port.Protocol == TransportProtocol.Tcp ? "tcp" : "udp")</td>
-                    <td>@(svc?.ServiceName ?? "—") @if (svc?.IsTls == true) { <span class="tag tag-tls">TLS</span> }</td>
+                    <td>@(svc?.ServiceName ?? "—") @if (svc?.IsTls == true) { <span class="tag tag-tls">@L.T("TLS")</span> }</td>
                     <td>
                         @if (svc?.Product is not null)
                         {
@@ -18,11 +18,11 @@
                         }
                         else
                         {
-                            <span class="muted">nierozpoznane</span>
+                            <span class="muted">@L.T("nierozpoznane")</span>
                         }
                         @if (extra.TryGetValue("distribution", out var distro))
                         {
-                            <div class="muted small" title="Dystrybucje często łatają podatności bez zmiany numeru wersji (backporty).">pakiet dystrybucji: @distro – wersja może zawierać poprawki</div>
+                            <div class="muted small" title="@L.T("Dystrybucje często łatają podatności bez zmiany numeru wersji (backporty).")">@L.F("pakiet dystrybucji: {0} – wersja może zawierać poprawki", distro)</div>
                         }
                     </td>
                     <td>@if (svc is not null) { <ConfidenceBar Value="svc.Confidence" /> }</td>
@@ -34,7 +34,7 @@
                         }
                         @if (svc?.Banner is { Length: > 0 } banner && svc.DetectionMethod is "banner" or "banner-unrecognized")
                         {
-                            <div class="mono muted banner" title="Baner usługi">@banner</div>
+                            <div class="mono muted banner" title="@L.T("Baner usługi")">@banner</div>
                         }
                     </td>
                 </tr>
@@ -44,7 +44,7 @@
 }
 else if (ShowEmpty)
 {
-    <p class="muted">Brak otwartych portów w tej obserwacji.</p>
+    <p class="muted">@L.T("Brak otwartych portów w tej obserwacji.")</p>
 }
 
 @code {

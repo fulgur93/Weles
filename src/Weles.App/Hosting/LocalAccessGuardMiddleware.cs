@@ -97,13 +97,18 @@ public sealed class LocalAccessGuardMiddleware(RequestDelegate next, LocalAccess
     }
 
     private const string UnauthorizedPage = """
-        <!DOCTYPE html><html lang="pl"><head><meta charset="utf-8"><title>WELES – brak dostępu</title>
+        <!DOCTYPE html><html lang="pl"><head><meta charset="utf-8"><title>WELES – brak dostępu / access denied</title>
         <style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0f15;color:#e6edf3;font-family:system-ui,sans-serif}
         main{max-width:520px;padding:32px;border:1px solid #223042;border-radius:14px;background:#111822}
         h1{font-size:20px;margin:0 0 12px}p{color:#9aa7b6;line-height:1.55}code{color:#8fb3ff}</style></head>
         <body><main><h1>Sesja WELES nie jest autoryzowana</h1>
         <p>Panel WELES jest dostępny wyłącznie dla przeglądarki otwartej przez aplikację.
         Uruchom WELES ponownie – otworzy istniejącą sesję – albo użyj adresu wypisanego w konsoli przy starcie.</p>
-        <p>To zabezpieczenie chroni lokalny serwer przed dostępem innych użytkowników i stron internetowych.</p></main></body></html>
+        <p>To zabezpieczenie chroni lokalny serwer przed dostępem innych użytkowników i stron internetowych.</p>
+        <hr style="border:0;border-top:1px solid #223042;margin:20px 0">
+        <h1 lang="en">WELES session is not authorized</h1>
+        <p lang="en">The WELES panel is available only to the browser opened by the application. Start WELES again – it opens
+        the existing session – or use the address printed in the console at startup. This protects the local server from
+        other users and websites.</p></main></body></html>
         """;
 }

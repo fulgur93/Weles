@@ -81,6 +81,7 @@ if (OperatingSystem.IsWindows())
 }
 builder.Services.AddSingleton(sp => new RuntimeInfo(port, hostOptions.DemoMode, sp.GetRequiredService<TimeProvider>()));
 builder.Services.AddScoped<ThemeState>();
+builder.Services.AddSingleton<Weles.App.Localization.LanguageState>();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -88,6 +89,8 @@ builder.Services.AddRazorComponents()
 var app = builder.Build();
 
 await app.Services.GetRequiredService<DatabaseInitializer>().InitializeAsync();
+var language = app.Services.GetRequiredService<Weles.App.Localization.LanguageState>();
+await language.LoadAsync();
 
 if (!app.Environment.IsDevelopment())
 {
@@ -95,6 +98,15 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseMiddleware<LocalAccessGuardMiddleware>();
+// Every request – including the Blazor circuit connection – runs in the language chosen in the UI.
+app.UseRequestLocalization(options =>
+{
+    var cultures = Weles.App.Localization.LanguageState.Languages.Select(l => System.Globalization.CultureInfo.GetCultureInfo(l.Culture)).ToList();
+    options.SupportedCultures = cultures;
+    options.SupportedUICultures = cultures;
+    options.SetDefaultCulture("pl-PL");
+    options.RequestCultureProviders = [new Weles.App.Localization.LanguageState.Provider(language)];
+});
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseAntiforgery();
 

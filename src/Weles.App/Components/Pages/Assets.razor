@@ -6,24 +6,24 @@
 @inject SettingsService Settings
 @inject NavigationManager Navigation
 
-<PageTitle>Assets · WELES</PageTitle>
+<PageTitle>@L.T("Urządzenia · WELES")</PageTitle>
 
 <div class="page-header">
     <div>
-        <h1>Assets</h1>
-        <p class="page-subtitle">Inwentarz urządzeń wykrytych w skanach. Status odnosi się do ostatniego skanu, który obejmował adres urządzenia.</p>
+        <h1>@L.T("Urządzenia")</h1>
+        <p class="page-subtitle">@L.T("Inwentarz urządzeń wykrytych w skanach. Status odnosi się do ostatniego skanu, który obejmował adres urządzenia.")</p>
     </div>
-    <a class="btn btn-primary" href="discovery"><Icon Name="play" Size="16" /> Nowy skan</a>
+    <a class="btn btn-primary" href="discovery"><Icon Name="play" Size="16" /> @L.T("Nowy skan")</a>
 </div>
 
 @if (_all is null)
 {
-    <div class="card loading">Wczytywanie…</div>
+    <div class="card loading">@L.T("Wczytywanie…")</div>
 }
 else if (_all.Count == 0)
 {
     <section class="card empty">
-        <p>Inwentarz jest pusty. Urządzenia pojawią się po pierwszym skanie w <a href="discovery">Network Discovery</a>.</p>
+        <p>@L.T("Inwentarz jest pusty. Urządzenia pojawią się po pierwszym skanie w") <a href="discovery">@L.T("Wykrywanie sieci")</a>.</p>
     </section>
 }
 else
@@ -32,38 +32,38 @@ else
         <div class="toolbar">
             <div class="search">
                 <Icon Name="discovery" Size="15" />
-                <input class="input" placeholder="Szukaj: nazwa, IP, MAC, producent, system, produkt, port…" @bind="_search" @bind:event="oninput" @bind:after="OnSearchChanged" />
+                <input class="input" placeholder="@L.T("Szukaj: nazwa, IP, MAC, producent, system, produkt, port…")" @bind="_search" @bind:event="oninput" @bind:after="OnSearchChanged" />
             </div>
-            <select class="input input-sm" @bind="_type" @bind:after="Refresh" aria-label="Typ urządzenia">
-                <option value="">Wszystkie typy</option>
+            <select class="input input-sm" @bind="_type" @bind:after="Refresh" aria-label="@L.T("Typ urządzenia")">
+                <option value="">@L.T("Wszystkie typy")</option>
                 @foreach (var (type, count) in _page!.TypeCounts.OrderByDescending(t => t.Value))
                 {
                     <option value="@type">@Labels.Of(type) (@count)</option>
                 }
             </select>
-            <select class="input input-sm" @bind="_network" @bind:after="Refresh" aria-label="Sieć">
-                @if (_current?.OtherNetworkSegmentIds.Count > 0) { <option value="current">Bieżąca sieć</option> }
-                <option value="all">Wszystkie sieci</option>
+            <select class="input input-sm" @bind="_network" @bind:after="Refresh" aria-label="@L.T("Sieć")">
+                @if (_current?.OtherNetworkSegmentIds.Count > 0) { <option value="current">@L.T("Bieżąca sieć")</option> }
+                <option value="all">@L.T("Wszystkie sieci")</option>
                 @foreach (var (id, label) in _page.Segments) { <option value="@id">@label</option> }
             </select>
             @if (_page.OsFamilies.Count > 0)
             {
-                <select class="input input-sm" @bind="_os" @bind:after="Refresh" aria-label="System">
-                    <option value="">Każdy system</option>
+                <select class="input input-sm" @bind="_os" @bind:after="Refresh" aria-label="@L.T("System")">
+                    <option value="">@L.T("Każdy system")</option>
                     @foreach (var os in _page.OsFamilies) { <option value="@os">@os</option> }
                 </select>
             }
-            <label class="checkbox inline"><input type="checkbox" @bind="_openOnly" @bind:after="Refresh" /><span>Z otwartymi portami</span></label>
-            <button class="btn btn-ghost btn-sm" @onclick="() => _showColumns = !_showColumns"><Icon Name="settings" Size="14" /> Kolumny</button>
+            <label class="checkbox inline"><input type="checkbox" @bind="_openOnly" @bind:after="Refresh" /><span>@L.T("Z otwartymi portami")</span></label>
+            <button class="btn btn-ghost btn-sm" @onclick="() => _showColumns = !_showColumns"><Icon Name="settings" Size="14" /> @L.T("Kolumny")</button>
         </div>
 
         @if (_network == "current")
         {
-            <p class="muted small network-note">Bieżąca sieć: <span class="mono">@_current!.Description</span>@if (_page.HiddenOtherNetworks > 0) { <span> · ukryto @_page.HiddenOtherNetworks @Labels.Devices(_page.HiddenOtherNetworks) z innych sieci – <a href="" @onclick="ShowAllNetworks" @onclick:preventDefault="true">pokaż wszystkie sieci</a></span> }</p>
+            <p class="muted small network-note">@L.T("Bieżąca sieć:") <span class="mono">@_current!.Description</span>@if (_page.HiddenOtherNetworks > 0) { <span> · @L.F("ukryto {0} {1} z innych sieci", _page.HiddenOtherNetworks, Labels.Devices(_page.HiddenOtherNetworks)) – <a href="" @onclick="ShowAllNetworks" @onclick:preventDefault="true">@L.T("pokaż wszystkie sieci")</a></span> }</p>
         }
 
         <div class="status-tabs">
-            <button class="@(_status is null ? "active" : "")" @onclick="() => SetStatus(null)">Wszystkie <span>@_page.AllStatusesCount</span></button>
+            <button class="@(_status is null ? "active" : "")" @onclick="() => SetStatus(null)">@L.T("Wszystkie") <span>@_page.AllStatusesCount</span></button>
             @foreach (var st in Enum.GetValues<AssetStatus>())
             {
                 <button class="@(_status == st ? "active" : "")" title="@Labels.Describe(st)" @onclick="() => SetStatus(st)">
@@ -87,7 +87,7 @@ else
 
         @if (_page.TotalCount == 0)
         {
-            <p class="muted empty">Brak urządzeń spełniających kryteria.</p>
+            <p class="muted empty">@L.T("Brak urządzeń spełniających kryteria.")</p>
         }
         else
         {
@@ -97,7 +97,7 @@ else
                         <tr>
                             @foreach (var c in VisibleColumns)
                             {
-                                <th class="@(c.Sort is null ? "" : "sortable") @(c.AlignRight ? "right" : "")" title="@(c.Sort is null ? "" : "Kliknij, aby sortować · Shift+klik dodaje kolejny poziom sortowania")"
+                                <th class="@(c.Sort is null ? "" : "sortable") @(c.AlignRight ? "right" : "")" title="@(c.Sort is null ? "" : L.T("Kliknij, aby sortować · Shift+klik dodaje kolejny poziom sortowania"))"
                                     @onclick="e => SortBy(c, e.ShiftKey)">
                                     @c.Label @SortIndicator(c)
                                 </th>
@@ -119,7 +119,7 @@ else
             </div>
 
             <div class="pager">
-                <span class="muted small">@(((_page.Page - 1) * _page.PageSize) + 1)–@(Math.Min(_page.Page * _page.PageSize, _page.TotalCount)) z @_page.TotalCount</span>
+                <span class="muted small">@(((_page.Page - 1) * _page.PageSize) + 1)–@(Math.Min(_page.Page * _page.PageSize, _page.TotalCount)) @L.T("z") @_page.TotalCount</span>
                 <div class="pager-buttons">
                     <button class="btn btn-ghost btn-sm" disabled="@(_page.Page <= 1)" @onclick="() => GoTo(_page.Page - 1)">‹</button>
                     @foreach (var n in PageWindow())
@@ -128,8 +128,8 @@ else
                     }
                     <button class="btn btn-ghost btn-sm" disabled="@(_page.Page >= _page.PageCount)" @onclick="() => GoTo(_page.Page + 1)">›</button>
                 </div>
-                <select class="input input-sm" @bind="_pageSize" @bind:after="Refresh" aria-label="Wierszy na stronę">
-                    @foreach (var size in new[] { 25, 50, 100 }) { <option value="@size">@size na stronę</option> }
+                <select class="input input-sm" @bind="_pageSize" @bind:after="Refresh" aria-label="@L.T("Wierszy na stronę")">
+                    @foreach (var size in new[] { 25, 50, 100 }) { <option value="@size">@L.F("{0} na stronę", size)</option> }
                 </select>
             </div>
         }
@@ -169,20 +169,20 @@ else
 
     private List<Column> BuildColumns() =>
     [
-        new("name", "Nazwa", AssetSortColumn.Name, true, a => @<span><strong>@a.DisplayName</strong>@if (a.HasCustomName && a.Hostname is not null) { <div class="muted small">@a.Hostname</div> }</span>, Required: true),
-        new("ip", "Adres IP", AssetSortColumn.Ip, true, a => @<span class="mono">@a.IpAddress</span>),
-        new("type", "Typ", AssetSortColumn.Type, true, a => @<span>@Labels.Of(a.Type)@if (a.TypeSetByUser) { <span class="tag" title="Typ ustawiony ręcznie">ręczny</span> }</span>),
-        new("os", "System", AssetSortColumn.Os, true, a => @<span>@(a.OsFamily ?? "—")</span>),
-        new("vendor", "Producent / MAC", AssetSortColumn.Vendor, true, a => @<span>@(a.Vendor ?? "—")<div class="mono muted small">@a.MacAddress</div></span>),
-        new("network", "Sieć", null, true, a => @<span class="mono small">@(a.NetworkLabel ?? "—")</span>),
-        new("ports", "Otwarte porty", AssetSortColumn.OpenPorts, true, a => @<div class="chips">@foreach (var p in a.OpenPorts.Take(6)) { <span class="chip mono">@p</span> }@if (a.OpenPorts.Count > 6) { <span class="muted small">+@(a.OpenPorts.Count - 6)</span> }@if (a.OpenPorts.Count == 0) { <span class="muted small">brak</span> }</div>),
-        new("services", "Oprogramowanie", null, true, a => @<span class="small">@(a.Products.Count == 0 ? "—" : string.Join(", ", a.Products.Take(3)) + (a.Products.Count > 3 ? "…" : ""))</span>),
-        new("vulns", "Podatności", AssetSortColumn.Vulnerabilities, false, a => @<span>@(a.OpenVulnerabilities == 0 ? "—" : a.OpenVulnerabilities.ToString())</span>, AlignRight: true, Note: "dane od Etapu 4"),
-        new("risk", "Ryzyko", AssetSortColumn.Risk, false, a => @<span>@(a.RiskScore?.ToString("0") ?? "—")</span>, AlignRight: true, Note: "dane od Etapu 5"),
-        new("criticality", "Krytyczność", AssetSortColumn.Criticality, false, a => @<span>@Labels.Of(a.Criticality)</span>),
-        new("status", "Status", AssetSortColumn.Status, true, a => @<span title="@Labels.Describe(a.Status)"><StatusPill Tone="@Labels.Tone(a.Status)">@Labels.Of(a.Status)</StatusPill></span>),
-        new("first", "Pierwsze wykrycie", AssetSortColumn.FirstSeen, false, a => @<span class="small">@Labels.Local(a.FirstSeenAt)</span>),
-        new("last", "Ostatnio widziane", AssetSortColumn.LastSeen, true, a => @<span class="small">@Labels.Local(a.LastSeenAt)</span>),
+        new("name", L.T("Nazwa"), AssetSortColumn.Name, true, a => @<span><strong>@L.Message(a.DisplayName)</strong>@if (a.HasCustomName && a.Hostname is not null) { <div class="muted small">@a.Hostname</div> }</span>, Required: true),
+        new("ip", L.T("Adres IP"), AssetSortColumn.Ip, true, a => @<span class="mono">@a.IpAddress</span>),
+        new("type", L.T("Typ"), AssetSortColumn.Type, true, a => @<span>@Labels.Of(a.Type)@if (a.TypeSetByUser) { <span class="tag" title="@L.T("Typ ustawiony ręcznie")">@L.T("ręczny")</span> }</span>),
+        new("os", L.T("System"), AssetSortColumn.Os, true, a => @<span>@(a.OsFamily ?? "—")</span>),
+        new("vendor", L.T("Producent / MAC"), AssetSortColumn.Vendor, true, a => @<span>@(a.Vendor ?? "—")<div class="mono muted small">@a.MacAddress</div></span>),
+        new("network", L.T("Sieć"), null, true, a => @<span class="mono small">@(a.NetworkLabel ?? "—")</span>),
+        new("ports", L.T("Otwarte porty"), AssetSortColumn.OpenPorts, true, a => @<div class="chips">@foreach (var p in a.OpenPorts.Take(6)) { <span class="chip mono">@p</span> }@if (a.OpenPorts.Count > 6) { <span class="muted small">+@(a.OpenPorts.Count - 6)</span> }@if (a.OpenPorts.Count == 0) { <span class="muted small">@L.T("brak")</span> }</div>),
+        new("services", L.T("Oprogramowanie"), null, true, a => @<span class="small">@(a.Products.Count == 0 ? "—" : string.Join(", ", a.Products.Take(3)) + (a.Products.Count > 3 ? "…" : ""))</span>),
+        new("vulns", L.T("Podatności"), AssetSortColumn.Vulnerabilities, false, a => @<span>@(a.OpenVulnerabilities == 0 ? "—" : a.OpenVulnerabilities.ToString())</span>, AlignRight: true),
+        new("risk", L.T("Ryzyko"), AssetSortColumn.Risk, false, a => @<span>@(a.RiskScore?.ToString("0") ?? "—")</span>, AlignRight: true, Note: L.T("dane od Etapu 5")),
+        new("criticality", L.T("Krytyczność"), AssetSortColumn.Criticality, false, a => @<span>@Labels.Of(a.Criticality)</span>),
+        new("status", L.T("Status"), AssetSortColumn.Status, true, a => @<span title="@Labels.Describe(a.Status)"><StatusPill Tone="@Labels.Tone(a.Status)">@Labels.Of(a.Status)</StatusPill></span>),
+        new("first", L.T("Pierwsze wykrycie"), AssetSortColumn.FirstSeen, false, a => @<span class="small">@Labels.Local(a.FirstSeenAt)</span>),
+        new("last", L.T("Ostatnio widziane"), AssetSortColumn.LastSeen, true, a => @<span class="small">@Labels.Local(a.LastSeenAt)</span>),
     ];
 
     protected override async Task OnInitializedAsync()

@@ -2,37 +2,37 @@
 @inject Weles.Infrastructure.Queries.DashboardQueries Queries
 @inject IAiService Ai
 
-<PageTitle>Dashboard · WELES</PageTitle>
+<PageTitle>@L.T("Pulpit · WELES")</PageTitle>
 
 <div class="page-header">
     <div>
-        <h1>Dashboard</h1>
-        <p class="page-subtitle">Stan bezpieczeństwa infrastruktury na podstawie rzeczywistych wyników skanowania.</p>
+        <h1>@L.T("Pulpit")</h1>
+        <p class="page-subtitle">@L.T("Stan bezpieczeństwa infrastruktury na podstawie rzeczywistych wyników skanowania.")</p>
     </div>
 </div>
 
 @if (_summary is null)
 {
-    <div class="card loading">Wczytywanie danych…</div>
+    <div class="card loading">@L.T("Wczytywanie danych…")</div>
 }
 else if (!_summary.HasAnyScan)
 {
     <section class="hero card">
         <div class="hero-body">
-            <div class="eyebrow">Pierwsze uruchomienie</div>
-            <h2>Brak wykonanych audytów</h2>
+            <div class="eyebrow">@L.T("Pierwsze uruchomienie")</div>
+            <h2>@L.T("Brak wykonanych audytów")</h2>
             <p>
-                WELES nie wyświetla żadnych przykładowych ani szacunkowych liczb. Dashboard wypełni się danymi po pierwszym
-                skanowaniu zatwierdzonego zakresu sieci.
+                @L.T("WELES nie wyświetla żadnych przykładowych ani szacunkowych liczb. Pulpit wypełni się danymi po pierwszym")
+                @L.T("skanowaniu zatwierdzonego zakresu sieci.")
             </p>
             <ol class="steps">
-                <li><span class="step-no">1</span><div><strong>Zdefiniuj i zatwierdź zakres</strong><span>sieć lokalna wykryta automatycznie albo własne adresy IP, CIDR i domeny</span></div></li>
-                <li><span class="step-no">2</span><div><strong>Uruchom discovery</strong><span>urządzenia, porty, usługi, wersje i certyfikaty TLS</span></div></li>
-                <li><span class="step-no">3</span><div><strong>Przeanalizuj ryzyko</strong><span>podatności, priorytety napraw i wyjaśnienia lokalnego AI</span></div></li>
+                <li><span class="step-no">1</span><div><strong>@L.T("Zdefiniuj i zatwierdź zakres")</strong><span>@L.T("sieć lokalna wykryta automatycznie albo własne adresy IP, CIDR i domeny")</span></div></li>
+                <li><span class="step-no">2</span><div><strong>@L.T("Uruchom wykrywanie")</strong><span>@L.T("urządzenia, porty, usługi, wersje i certyfikaty TLS")</span></div></li>
+                <li><span class="step-no">3</span><div><strong>@L.T("Przeanalizuj ryzyko")</strong><span>@L.T("podatności, priorytety napraw i wyjaśnienia lokalnego AI")</span></div></li>
             </ol>
             <div class="hero-actions">
-                <a class="btn btn-primary" href="discovery"><Icon Name="play" Size="16" /> Rozpocznij pierwszy audyt</a>
-                <span class="muted small">WELES zaproponuje zakres na podstawie sieci tego komputera.</span>
+                <a class="btn btn-primary" href="discovery"><Icon Name="play" Size="16" /> @L.T("Rozpocznij pierwszy audyt")</a>
+                <span class="muted small">@L.T("WELES zaproponuje zakres na podstawie sieci tego komputera.")</span>
             </div>
         </div>
         <div class="hero-visual" aria-hidden="true">
@@ -44,52 +44,52 @@ else
 {
     <section class="kpi-grid">
         <div class="kpi card">
-            <div class="kpi-label">Security Posture Score</div>
+            <div class="kpi-label">@L.T("Ocena stanu bezpieczeństwa")</div>
             <div class="kpi-value">@(_summary.SecurityPostureScore is { } s ? s.ToString("0") : "—")</div>
-            <div class="kpi-hint">@(_summary.SecurityPostureScore is null ? "Ocena ryzyka – Etap 5" : "0–100, wyżej = lepiej")</div>
+            <div class="kpi-hint">@(_summary.SecurityPostureScore is null ? L.T("Ocena ryzyka – Etap 5") : L.T("0–100, wyżej = lepiej"))</div>
         </div>
-        <a class="kpi card kpi-link" href="assets"><div class="kpi-label">Urządzenia</div><div class="kpi-value">@_summary.AssetCount</div><div class="kpi-hint">nowe od ostatniego skanu: @_summary.NewAssetsSinceLastScan</div></a>
-        <div class="kpi card"><div class="kpi-label">Aktywne usługi</div><div class="kpi-value">@_summary.ActiveServiceCount</div><div class="kpi-hint">otwarte porty w ostatnim skanie</div></div>
-        <div class="kpi card"><div class="kpi-label">Podatności</div><div class="kpi-value">@_summary.VulnerabilityCount</div><div class="kpi-hint">otwarte dopasowania (bez „brak danych”)</div></div>
-        <div class="kpi card kpi-critical"><div class="kpi-label">Krytyczne problemy</div><div class="kpi-value">@_summary.CriticalFindingCount</div><div class="kpi-hint">w ostatnim skanie</div></div>
+        <a class="kpi card kpi-link" href="assets"><div class="kpi-label">@L.T("Urządzenia")</div><div class="kpi-value">@_summary.AssetCount</div><div class="kpi-hint">@L.F("nowe od ostatniego skanu: {0}", _summary.NewAssetsSinceLastScan)</div></a>
+        <div class="kpi card"><div class="kpi-label">@L.T("Aktywne usługi")</div><div class="kpi-value">@_summary.ActiveServiceCount</div><div class="kpi-hint">@L.T("otwarte porty w ostatnim skanie")</div></div>
+        <div class="kpi card"><div class="kpi-label">@L.T("Podatności")</div><div class="kpi-value">@_summary.VulnerabilityCount</div><div class="kpi-hint">@L.T("otwarte dopasowania (bez „brak danych”)")</div></div>
+        <div class="kpi card kpi-critical"><div class="kpi-label">@L.T("Krytyczne problemy")</div><div class="kpi-value">@_summary.CriticalFindingCount</div><div class="kpi-hint">@L.T("w ostatnim skanie")</div></div>
     </section>
 
     @if (_summary.LastScan is { } last)
     {
         <section class="card">
-            <div class="card-title"><Icon Name="clock" /> Ostatnie skanowanie</div>
+            <div class="card-title"><Icon Name="clock" /> @L.T("Ostatnie skanowanie")</div>
             <dl class="facts">
-                <dt>Zakres</dt><dd>@last.TargetName</dd>
-                <dt>Zakończone</dt><dd>@last.CompletedAt?.ToLocalTime().ToString("g")</dd>
-                <dt>Aktywne hosty</dt><dd>@last.HostsAlive</dd>
-                <dt>Otwarte porty</dt><dd>@last.OpenPorts</dd>
+                <dt>@L.T("Zakres")</dt><dd>@L.Message(last.TargetName)</dd>
+                <dt>@L.T("Zakończone")</dt><dd>@last.CompletedAt?.ToLocalTime().ToString("g")</dd>
+                <dt>@L.T("Aktywne hosty")</dt><dd>@last.HostsAlive</dd>
+                <dt>@L.T("Otwarte porty")</dt><dd>@last.OpenPorts</dd>
             </dl>
-            <a class="btn btn-ghost btn-sm" href="scans/@last.Id">Szczegóły skanu</a>
+            <a class="btn btn-ghost btn-sm" href="scans/@last.Id">@L.T("Szczegóły skanu")</a>
         </section>
     }
 }
 
 <section class="grid-3">
     <div class="card">
-        <div class="card-title"><Icon Name="database" /> Baza danych</div>
-        <StatusPill Tone="ok">Gotowa</StatusPill>
-        <p class="muted small">Lokalna baza SQLite, migracje zastosowane. Zakończone skany: @(_summary?.CompletedScanCount ?? 0).</p>
+        <div class="card-title"><Icon Name="database" /> @L.T("Baza danych")</div>
+        <StatusPill Tone="ok">@L.T("Gotowa")</StatusPill>
+        <p class="muted small">@L.F("Lokalna baza SQLite, migracje zastosowane. Zakończone skany: {0}.", _summary?.CompletedScanCount ?? 0)</p>
     </div>
     <div class="card">
-        <div class="card-title"><Icon Name="vulnerabilities" /> Baza podatności</div>
+        <div class="card-title"><Icon Name="vulnerabilities" /> @L.T("Baza podatności")</div>
         @if (_summary?.VulnerabilityDatabaseUpdatedAt is { } updated)
         {
-            <StatusPill Tone="ok">Dane z @updated.ToLocalTime().ToString("d")</StatusPill>
-            <p class="muted small"><a href="vulnerabilities">Szczegóły i aktualizacja</a></p>
+            <StatusPill Tone="ok">@L.F("Dane z {0}", updated.ToLocalTime().ToString("d"))</StatusPill>
+            <p class="muted small"><a href="vulnerabilities">@L.T("Szczegóły i aktualizacja")</a></p>
         }
         else
         {
-            <StatusPill Tone="muted">Wczytywanie bazy…</StatusPill>
-            <p class="muted small">Lokalna baza NVD / CISA KEV / EPSS jest importowana w tle przy pierwszym uruchomieniu.</p>
+            <StatusPill Tone="muted">@L.T("Wczytywanie bazy…")</StatusPill>
+            <p class="muted small">@L.T("Lokalna baza NVD / CISA KEV / EPSS jest importowana w tle przy pierwszym uruchomieniu.")</p>
         }
     </div>
     <div class="card">
-        <div class="card-title"><Icon Name="ai" /> Lokalne AI</div>
+        <div class="card-title"><Icon Name="ai" /> @L.T("Lokalne AI")</div>
         <AiStatusView Status="_ai" />
     </div>
 </section>

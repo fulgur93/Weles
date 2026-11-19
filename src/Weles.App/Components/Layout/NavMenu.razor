@@ -2,17 +2,17 @@
     @foreach (var group in ModuleCatalog.Groups)
     {
         <div class="nav-group">
-            <div class="nav-group-title">@group.Key</div>
+            <div class="nav-group-title">@L.T(group.Key)</div>
             @foreach (var module in group)
             {
                 <NavLink class="@(module.IsAvailable ? "nav-item" : "nav-item planned")" href="@module.Route"
                          Match="@(module.Route == "" ? NavLinkMatch.All : NavLinkMatch.Prefix)"
-                         title="@(module.IsAvailable ? module.Summary : $"Planowany – Etap {module.Stage}")">
+                         title="@(module.IsAvailable ? L.T(module.Summary) : L.F("Planowany – Etap {0}", module.Stage))">
                     <Icon Name="@module.Icon" />
-                    <span class="nav-label">@module.Title</span>
+                    <span class="nav-label">@L.T(module.Title)</span>
                     @if (!module.IsAvailable)
                     {
-                        <span class="nav-stage">E@(module.Stage)</span>
+                        <span class="nav-stage">@L.T("E")@(module.Stage)</span>
                     }
                 </NavLink>
             }

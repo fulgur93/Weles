@@ -5,39 +5,39 @@
 @inject ScanTargetService Targets
 @inject NavigationManager Navigation
 
-<PageTitle>Network Discovery · WELES</PageTitle>
+<PageTitle>@L.T("Wykrywanie sieci · WELES")</PageTitle>
 
 <div class="page-header">
     <div>
-        <h1>Network Discovery</h1>
-        <p class="page-subtitle">Zdefiniuj i zatwierdź zakres, a potem uruchom wykrywanie urządzeń, portów i usług. WELES skanuje wyłącznie zatwierdzone zakresy.</p>
+        <h1>@L.T("Wykrywanie sieci")</h1>
+        <p class="page-subtitle">@L.T("Zdefiniuj i zatwierdź zakres, a potem uruchom wykrywanie urządzeń, portów i usług. WELES skanuje wyłącznie zatwierdzone zakresy.")</p>
     </div>
-    <button class="btn btn-primary" @onclick="NewScope"><Icon Name="layers" Size="16" /> Nowy zakres</button>
+    <button class="btn btn-primary" @onclick="NewScope"><Icon Name="layers" Size="16" /> @L.T("Nowy zakres")</button>
 </div>
 
 <section class="card">
-    <div class="card-title"><Icon Name="discovery" /> Sieci tego komputera</div>
+    <div class="card-title"><Icon Name="discovery" /> @L.T("Sieci tego komputera")</div>
     @if (_interfaces.Count == 0)
     {
-        <p class="muted">Nie wykryto aktywnych interfejsów IPv4 (poza loopback).</p>
+        <p class="muted">@L.T("Nie wykryto aktywnych interfejsów IPv4 (poza loopback).")</p>
     }
     else
     {
         <div class="table-wrap">
             <table class="table">
-                <thead><tr><th>Interfejs</th><th>Adres</th><th>Sieć</th><th>Brama</th><th>MAC / producent</th><th></th></tr></thead>
+                <thead><tr><th>@L.T("Interfejs")</th><th>@L.T("Adres")</th><th>@L.T("Sieć")</th><th>@L.T("Brama")</th><th>@L.T("MAC / producent")</th><th></th></tr></thead>
                 <tbody>
                     @foreach (var nic in _interfaces)
                     {
                         <tr>
                             <td><strong>@nic.Name</strong><div class="muted small">@nic.Type</div></td>
                             <td class="mono">@nic.Address/@nic.PrefixLength</td>
-                            <td class="mono">@nic.NetworkCidr<div class="muted small">@nic.HostCount adresów</div></td>
+                            <td class="mono">@nic.NetworkCidr<div class="muted small">@L.F("{0} adresów", nic.HostCount)</div></td>
                             <td class="mono">@(nic.Gateway ?? "—")</td>
                             <td><span class="mono">@(nic.MacAddress ?? "—")</span><div class="muted small">@nic.Vendor</div></td>
                             <td class="right">
-                                <button class="btn btn-ghost btn-sm" @onclick="() => ScopeFromInterface(nic)">Utwórz zakres @nic.SuggestedScope</button>
-                                @if (nic.Note is not null) { <div class="muted small">@nic.Note</div> }
+                                <button class="btn btn-ghost btn-sm" @onclick="() => ScopeFromInterface(nic)">@L.F("Utwórz zakres {0}", nic.SuggestedScope)</button>
+                                @if (nic.Note is not null) { <div class="muted small">@L.Message(nic.Note)</div> }
                             </td>
                         </tr>
                     }
@@ -50,71 +50,71 @@
 @if (_editor is not null)
 {
     <section class="card editor">
-        <div class="card-title"><Icon Name="layers" /> @(_editingId is null ? "Nowy zakres skanowania" : "Edycja zakresu")</div>
+        <div class="card-title"><Icon Name="layers" /> @(_editingId is null ? L.T("Nowy zakres skanowania") : L.T("Edycja zakresu"))</div>
         @if (_editingId is not null)
         {
-            <div class="alert alert-warn"><Icon Name="alert" Size="15" /> Zapisanie zmian cofa zatwierdzenie zakresu – trzeba go zatwierdzić ponownie.</div>
+            <div class="alert alert-warn"><Icon Name="alert" Size="15" /> @L.T("Zapisanie zmian cofa zatwierdzenie zakresu – trzeba go zatwierdzić ponownie.")</div>
         }
         <div class="form-grid">
-            <label class="field"><span>Nazwa</span><input class="input" @bind="_editor.Name" maxlength="200" placeholder="np. Biuro – LAN" /></label>
-            <label class="field"><span>Opis (opcjonalnie)</span><input class="input" @bind="_editor.Description" maxlength="2000" /></label>
+            <label class="field"><span>@L.T("Nazwa")</span><input class="input" @bind="_editor.Name" maxlength="200" placeholder="@L.T("np. Biuro – LAN")" /></label>
+            <label class="field"><span>@L.T("Opis (opcjonalnie)")</span><input class="input" @bind="_editor.Description" maxlength="2000" /></label>
             <label class="field">
-                <span>Adresy do skanowania</span>
+                <span>@L.T("Adresy do skanowania")</span>
                 <textarea class="input mono" rows="5" @bind="_editor.Include" placeholder="192.168.1.0/24&#10;10.0.0.10-10.0.0.50&#10;nas.firma.local"></textarea>
-                <small class="muted">IP, CIDR (maks. /16), zakres <code>a.b.c.d-e</code> lub domena – jeden wpis w wierszu.</small>
+                <small class="muted">@L.T("IP, CIDR (maks. /16), zakres") <code>@L.T("a.b.c.d-e")</code> @L.T("lub domena – jeden wpis w wierszu.")</small>
             </label>
             <label class="field">
-                <span>Wykluczenia</span>
+                <span>@L.T("Wykluczenia")</span>
                 <textarea class="input mono" rows="5" @bind="_editor.Exclude" placeholder="192.168.1.1&#10;192.168.1.200-254"></textarea>
-                <small class="muted">Wykluczenia mają pierwszeństwo przed listą adresów.</small>
+                <small class="muted">@L.T("Wykluczenia mają pierwszeństwo przed listą adresów.")</small>
             </label>
         </div>
         <label class="checkbox">
             <input type="checkbox" @bind="_editor.AllowPublic" />
-            <span>Zezwól na adresy publiczne (Internet) – <strong>tylko jeśli masz pisemne uprawnienie do ich testowania</strong></span>
+            <span>@L.T("Zezwól na adresy publiczne (Internet) –") <strong>@L.T("tylko jeśli masz pisemne uprawnienie do ich testowania")</strong></span>
         </label>
 
         @if (_editorErrors.Count > 0)
         {
-            <div class="alert alert-bad"><ul>@foreach (var e in _editorErrors) { <li>@e</li> }</ul></div>
+            <div class="alert alert-bad"><ul>@foreach (var e in _editorErrors) { <li>@L.Message(e)</li> }</ul></div>
         }
         @if (_preview is not null)
         {
             <div class="alert @(_preview.Errors.Count > 0 ? "alert-bad" : "alert-info")">
                 @if (_preview.Errors.Count > 0)
                 {
-                    <ul>@foreach (var e in _preview.Errors) { <li>@e</li> }</ul>
+                    <ul>@foreach (var e in _preview.Errors) { <li>@L.Message(e)</li> }</ul>
                 }
                 else
                 {
-                    <div><strong>@_preview.AddressCount</strong> adresów do sprawdzenia, np. <span class="mono">@string.Join(", ", _preview.Sample)</span>@(_preview.AddressCount > _preview.Sample.Count ? "…" : "")</div>
+                    <div><strong>@_preview.AddressCount</strong> @L.T("adresów do sprawdzenia, np.") <span class="mono">@string.Join(", ", _preview.Sample)</span>@(_preview.AddressCount > _preview.Sample.Count ? "…" : "")</div>
                 }
-                @foreach (var w in _preview.Warnings) { <div class="small">⚠ @w</div> }
+                @foreach (var w in _preview.Warnings) { <div class="small">⚠ @L.Message(w)</div> }
             </div>
         }
 
         <div class="actions">
-            <button class="btn btn-ghost" @onclick="PreviewAsync" disabled="@_busy"><Icon Name="monitoring" Size="15" /> Podgląd zakresu</button>
-            <button class="btn btn-primary" @onclick="SaveAsync" disabled="@_busy">Zapisz</button>
-            <button class="btn btn-ghost" @onclick="CloseEditor">Anuluj</button>
+            <button class="btn btn-ghost" @onclick="PreviewAsync" disabled="@_busy"><Icon Name="monitoring" Size="15" /> @L.T("Podgląd zakresu")</button>
+            <button class="btn btn-primary" @onclick="SaveAsync" disabled="@_busy">@L.T("Zapisz")</button>
+            <button class="btn btn-ghost" @onclick="CloseEditor">@L.T("Anuluj")</button>
         </div>
     </section>
 }
 
 <section class="card">
-    <div class="card-title"><Icon Name="lock" /> Zakresy skanowania</div>
+    <div class="card-title"><Icon Name="lock" /> @L.T("Zakresy skanowania")</div>
     @if (_message is not null)
     {
         <div class="alert @(_messageIsError ? "alert-bad" : "alert-ok")">@_message</div>
     }
     @if (_targets is null)
     {
-        <p class="muted">Wczytywanie…</p>
+        <p class="muted">@L.T("Wczytywanie…")</p>
     }
     else if (_targets.Count == 0)
     {
         <div class="empty">
-            <p>Brak zdefiniowanych zakresów. Utwórz zakres z wykrytej sieci powyżej albo dodaj własny.</p>
+            <p>@L.T("Brak zdefiniowanych zakresów. Utwórz zakres z wykrytej sieci powyżej albo dodaj własny.")</p>
         </div>
     }
     else
@@ -125,33 +125,33 @@
                 <article class="scope @(t.IsApproved ? "approved" : "")">
                     <div class="scope-head">
                         <div>
-                            <h3>@t.Name</h3>
-                            @if (t.Description is not null) { <p class="muted small">@t.Description</p> }
+                            <h3>@L.Message(t.Name)</h3>
+                            @if (t.Description is not null) { <p class="muted small">@L.Message(t.Description)</p> }
                         </div>
                         @if (t.IsApproved)
                         {
-                            <StatusPill Tone="ok">Zatwierdzony @Labels.Local(t.ApprovedAt)</StatusPill>
+                            <StatusPill Tone="ok">@L.F("Zatwierdzony {0}", Labels.Local(t.ApprovedAt))</StatusPill>
                         }
                         else
                         {
-                            <StatusPill Tone="warn">Niezatwierdzony</StatusPill>
+                            <StatusPill Tone="warn">@L.T("Niezatwierdzony")</StatusPill>
                         }
                     </div>
                     <div class="chips">
                         @foreach (var e in t.Includes) { <span class="chip mono">@e</span> }
-                        @foreach (var e in t.Excludes) { <span class="chip chip-exclude mono" title="Wykluczenie">− @e</span> }
-                        @if (t.AllowPublicAddresses) { <span class="chip chip-public">adresy publiczne dozwolone</span> }
+                        @foreach (var e in t.Excludes) { <span class="chip chip-exclude mono" title="@L.T("Wykluczenie")">− @e</span> }
+                        @if (t.AllowPublicAddresses) { <span class="chip chip-public">@L.T("adresy publiczne dozwolone")</span> }
                     </div>
-                    <div class="muted small">Skany: @t.ScanCount @(t.LastScanAt is not null ? $"· ostatni {Labels.Local(t.LastScanAt)}" : "")</div>
+                    <div class="muted small">@L.T("Skany:") @t.ScanCount @(t.LastScanAt is not null ? "· " + L.F("ostatni {0}", Labels.Local(t.LastScanAt)) : "")</div>
 
                     @if (_approvingId == t.Id)
                     {
                         <div class="approval">
-                            <p>Zatwierdzenie oznacza, że WELES może aktywnie łączyć się z każdym adresem z tego zakresu (wykrywanie hostów, porty, banery usług, TLS, HTTP). WELES nie wykonuje exploitów, prób logowania ani testów destrukcyjnych.</p>
-                            <label class="checkbox"><input type="checkbox" @bind="_approvalConfirmed" /><span>Potwierdzam, że jestem właścicielem tych zasobów lub mam uprawnienie do ich audytu.</span></label>
+                            <p>@L.T("Zatwierdzenie oznacza, że WELES może aktywnie łączyć się z każdym adresem z tego zakresu (wykrywanie hostów, porty, banery usług, TLS, HTTP). WELES nie wykonuje exploitów, prób logowania ani testów destrukcyjnych.")</p>
+                            <label class="checkbox"><input type="checkbox" @bind="_approvalConfirmed" /><span>@L.T("Potwierdzam, że jestem właścicielem tych zasobów lub mam uprawnienie do ich audytu.")</span></label>
                             <div class="actions">
-                                <button class="btn btn-primary" disabled="@(!_approvalConfirmed || _busy)" @onclick="() => ApproveAsync(t.Id)">Zatwierdź zakres</button>
-                                <button class="btn btn-ghost" @onclick="() => _approvingId = null">Anuluj</button>
+                                <button class="btn btn-primary" disabled="@(!_approvalConfirmed || _busy)" @onclick="() => ApproveAsync(t.Id)">@L.T("Zatwierdź zakres")</button>
+                                <button class="btn btn-ghost" @onclick="() => _approvingId = null">@L.T("Anuluj")</button>
                             </div>
                         </div>
                     }
@@ -160,24 +160,24 @@
                         @if (t.IsApproved)
                         {
                             <select class="input input-sm" @bind="_profiles[t.Id]">
-                                <option value="@Weles.Core.Networking.PortSpecification.Quick">Szybki (@Weles.Core.Networking.PortSpecification.QuickPorts.Count portów)</option>
-                                <option value="@Weles.Core.Networking.PortSpecification.Standard">Standardowy (@Weles.Core.Networking.PortSpecification.StandardPorts.Distinct().Count() portów)</option>
-                                <option value="@Weles.Core.Networking.PortSpecification.Mobile">Urządzenia mobilne (szybki + ADB, udostępnianie plików, KDE Connect…)</option>
-                                <option value="custom">Własna lista portów…</option>
+                                <option value="@Weles.Core.Networking.PortSpecification.Quick">@L.F("Szybki ({0} portów)", Weles.Core.Networking.PortSpecification.QuickPorts.Count)</option>
+                                <option value="@Weles.Core.Networking.PortSpecification.Standard">@L.F("Standardowy ({0} portów)", Weles.Core.Networking.PortSpecification.StandardPorts.Distinct().Count())</option>
+                                <option value="@Weles.Core.Networking.PortSpecification.Mobile">@L.T("Urządzenia mobilne (szybki + ADB, udostępnianie plików, KDE Connect…)")</option>
+                                <option value="custom">@L.T("Własna lista portów…")</option>
                             </select>
                             @if (_profiles[t.Id] == "custom")
                             {
                                 <input class="input input-sm mono" placeholder="22,80,443,8000-8100" @bind="_customPorts[t.Id]" />
                             }
-                            <button class="btn btn-primary btn-sm" disabled="@(t.HasActiveScan || _busy)" @onclick="() => StartAsync(t.Id)"><Icon Name="play" Size="14" /> @(t.HasActiveScan ? "Skan w toku" : "Uruchom skan")</button>
-                            <button class="btn btn-ghost btn-sm" @onclick="() => RevokeAsync(t.Id)">Cofnij zatwierdzenie</button>
+                            <button class="btn btn-primary btn-sm" disabled="@(t.HasActiveScan || _busy)" @onclick="() => StartAsync(t.Id)"><Icon Name="play" Size="14" /> @(t.HasActiveScan ? L.T("Skan w toku") : L.T("Uruchom skan"))</button>
+                            <button class="btn btn-ghost btn-sm" @onclick="() => RevokeAsync(t.Id)">@L.T("Cofnij zatwierdzenie")</button>
                         }
                         else if (_approvingId != t.Id)
                         {
-                            <button class="btn btn-primary btn-sm" @onclick="() => { _approvingId = t.Id; _approvalConfirmed = false; }"><Icon Name="check" Size="14" /> Zatwierdź…</button>
+                            <button class="btn btn-primary btn-sm" @onclick="() => { _approvingId = t.Id; _approvalConfirmed = false; }"><Icon Name="check" Size="14" /> @L.T("Zatwierdź…")</button>
                         }
-                        <button class="btn btn-ghost btn-sm" disabled="@t.HasActiveScan" @onclick="() => Edit(t)">Edytuj</button>
-                        <button class="btn btn-ghost btn-sm" disabled="@(t.ScanCount > 0)" title="@(t.ScanCount > 0 ? "Zakres ma historię skanów" : "")" @onclick="() => DeleteAsync(t.Id)">Usuń</button>
+                        <button class="btn btn-ghost btn-sm" disabled="@t.HasActiveScan" @onclick="() => Edit(t)">@L.T("Edytuj")</button>
+                        <button class="btn btn-ghost btn-sm" disabled="@(t.ScanCount > 0)" title="@(t.ScanCount > 0 ? L.T("Zakres ma historię skanów") : "")" @onclick="() => DeleteAsync(t.Id)">@L.T("Usuń")</button>
                     </div>
                 </article>
             }
@@ -229,7 +229,7 @@
     private void NewScope() => OpenEditor(null, new EditorModel());
 
     private void ScopeFromInterface(LocalInterfaceInfo nic) =>
-        OpenEditor(null, new EditorModel { Name = $"Sieć lokalna {nic.SuggestedScope}", Include = nic.SuggestedScope, Description = $"Interfejs {nic.Name}" });
+        OpenEditor(null, new EditorModel { Name = L.F("Sieć lokalna {0}", nic.SuggestedScope), Include = nic.SuggestedScope, Description = L.F("Interfejs {0}", nic.Name) });
 
     private void Edit(ScanTargetSummary t) =>
         OpenEditor(t.Id, new EditorModel { Name = t.Name, Description = t.Description, Include = string.Join('\n', t.Includes), Exclude = string.Join('\n', t.Excludes), AllowPublic = t.AllowPublicAddresses });
@@ -266,7 +266,7 @@
         }
 
         _editor = null;
-        Show(_editingId is null ? "Zakres zapisany. Zatwierdź go, aby móc uruchomić skan." : "Zmiany zapisane – zakres wymaga ponownego zatwierdzenia.");
+        Show(_editingId is null ? L.T("Zakres zapisany. Zatwierdź go, aby móc uruchomić skan.") : L.T("Zmiany zapisane – zakres wymaga ponownego zatwierdzenia."));
         await ReloadAsync();
     }
 
@@ -276,21 +276,21 @@
         var result = await Targets.ApproveAsync(id, _approvalConfirmed);
         _busy = false;
         _approvingId = null;
-        Show(result.Success ? "Zakres zatwierdzony." : string.Join(" ", result.Errors), !result.Success);
+        Show(result.Success ? L.T("Zakres zatwierdzony.") : string.Join(" ", result.Errors.Select(L.Message)), !result.Success);
         await ReloadAsync();
     }
 
     private async Task RevokeAsync(int id)
     {
         await Targets.RevokeApprovalAsync(id);
-        Show("Zatwierdzenie cofnięte.");
+        Show(L.T("Zatwierdzenie cofnięte."));
         await ReloadAsync();
     }
 
     private async Task DeleteAsync(int id)
     {
         var result = await Targets.DeleteAsync(id);
-        Show(result.Success ? "Zakres usunięty." : string.Join(" ", result.Errors), !result.Success);
+        Show(result.Success ? L.T("Zakres usunięty.") : string.Join(" ", result.Errors.Select(L.Message)), !result.Success);
         await ReloadAsync();
     }
 
@@ -306,7 +306,7 @@
             return;
         }
 
-        Show(string.Join(" ", result.Errors), true);
+        Show(string.Join(" ", result.Errors.Select(L.Message)), true);
     }
 
     private void Show(string message, bool isError = false)

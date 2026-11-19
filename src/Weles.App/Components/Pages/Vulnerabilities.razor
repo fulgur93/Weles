@@ -6,48 +6,48 @@
 @inject VulnerabilityDatabaseService Database
 @inject NavigationManager Navigation
 
-<PageTitle>Vulnerabilities · WELES</PageTitle>
+<PageTitle>@L.T("Podatności · WELES")</PageTitle>
 
 <div class="page-header">
     <div>
-        <h1>Vulnerabilities</h1>
-        <p class="page-subtitle">Wykryte wersje oprogramowania i modele urządzeń dopasowane do lokalnej bazy NVD, CISA KEV i EPSS. Podobny numer wersji nigdy nie wystarcza – każde dopasowanie ma status i uzasadnienie.</p>
+        <h1>@L.T("Podatności")</h1>
+        <p class="page-subtitle">@L.T("Wykryte wersje oprogramowania i modele urządzeń dopasowane do lokalnej bazy NVD, CISA KEV i EPSS. Podobny numer wersji nigdy nie wystarcza – każde dopasowanie ma status i uzasadnienie.")</p>
     </div>
 </div>
 
 <section class="card">
-    <div class="card-title"><Icon Name="vulnerabilities" /> Lokalna baza podatności</div>
+    <div class="card-title"><Icon Name="vulnerabilities" /> @L.T("Lokalna baza podatności")</div>
     @if (_status is null)
     {
-        <p class="muted">Wczytywanie…</p>
+        <p class="muted">@L.T("Wczytywanie…")</p>
     }
     else
     {
         var st = _status.State;
         <div class="vulndb-grid">
             <dl class="facts">
-                <dt>CVE w bazie</dt><dd>@_status.CveCount.ToString("N0") <span class="muted small">(produkty, które WELES rozpoznaje)</span></dd>
-                <dt>NVD</dt><dd>@(st.NvdUpdatedAt is { } n ? Labels.Local(n) : "brak danych")</dd>
-                <dt>CISA KEV</dt><dd>@(st.KevVersion ?? "brak") <span class="muted small">· @_status.KevCount wykorzystywanych w atakach</span></dd>
-                <dt>EPSS</dt><dd>@(st.EpssScoreDate is { } e ? e.ToLocalTime().ToString("d") : "brak") <span class="muted small">· wyniki dla @_status.EpssCount CVE</span></dd>
-                <dt>Źródło</dt><dd>@(st.Source switch { "online" => "pobrane z Internetu", "snapshot" => $"baza dołączona do WELES (zbudowana {st.SnapshotCreatedAt?.ToLocalTime():d})", _ => "brak" })</dd>
+                <dt>@L.T("CVE w bazie")</dt><dd>@_status.CveCount.ToString("N0") <span class="muted small">@L.T("(produkty, które WELES rozpoznaje)")</span></dd>
+                <dt>@L.T("NVD")</dt><dd>@(st.NvdUpdatedAt is { } n ? Labels.Local(n) : L.T("brak danych"))</dd>
+                <dt>@L.T("CISA KEV")</dt><dd>@(st.KevVersion ?? L.T("brak")) <span class="muted small">· @L.F("{0} wykorzystywanych w atakach", _status.KevCount)</span></dd>
+                <dt>@L.T("EPSS")</dt><dd>@(st.EpssScoreDate is { } e ? e.ToLocalTime().ToString("d") : L.T("brak")) <span class="muted small">· @L.F("wyniki dla {0} CVE", _status.EpssCount)</span></dd>
+                <dt>@L.T("Źródło")</dt><dd>@(st.Source switch { "online" => L.T("pobrane z Internetu"), "snapshot" => L.F("baza dołączona do WELES (zbudowana {0})", st.SnapshotCreatedAt?.ToLocalTime().ToString("d")), _ => L.T("brak") })</dd>
                 @if (st.LastOnlineAttemptAt is { } attempt)
                 {
-                    <dt>Ostatnia aktualizacja online</dt>
-                    <dd>@Labels.Local(attempt) @if (st.LastOnlineError is { } err) { <span class="detail-warn small"> · częściowo nieudana: @err</span> } else { <span class="tone-ok small"> · zakończona</span> }</dd>
+                    <dt>@L.T("Ostatnia aktualizacja online")</dt>
+                    <dd>@Labels.Local(attempt) @if (st.LastOnlineError is { } err) { <span class="detail-warn small"> · @L.T("częściowo nieudana:") @L.Message(err)</span> } else { <span class="tone-ok small"> @L.T("· zakończona")</span> }</dd>
                 }
             </dl>
             <div class="vulndb-update">
                 @if (_status.IsUpdating)
                 {
-                    <p><StatusPill Tone="info">Aktualizacja w toku</StatusPill></p>
-                    <p class="muted small mono break">@_status.Progress</p>
-                    <button class="btn btn-ghost btn-sm" @onclick="Cancel">Przerwij</button>
+                    <p><StatusPill Tone="info">@L.T("Aktualizacja w toku")</StatusPill></p>
+                    <p class="muted small mono break">@L.Message(_status.Progress)</p>
+                    <button class="btn btn-ghost btn-sm" @onclick="Cancel">@L.T("Przerwij")</button>
                 }
                 else
                 {
-                    <button class="btn btn-primary btn-sm" @onclick="Update"><Icon Name="refresh" Size="14" /> Aktualizuj z Internetu</button>
-                    <p class="muted small">Pobiera publiczne dane z services.nvd.nist.gov, cisa.gov i epss.empiricalsecurity.com. Zapytania zawierają tylko stałą listę produktów WELES – nic o Twojej sieci. Bez Internetu WELES używa ostatnio pobranej bazy. NVD bez klucza API pozwala na 5 zapytań / 30 s, więc pełne pobranie trwa ok. 5 minut.</p>
+                    <button class="btn btn-primary btn-sm" @onclick="Update"><Icon Name="refresh" Size="14" /> @L.T("Aktualizuj z Internetu")</button>
+                    <p class="muted small">@L.T("Pobiera publiczne dane z services.nvd.nist.gov, cisa.gov i epss.empiricalsecurity.com. Zapytania zawierają tylko stałą listę produktów WELES – nic o Twojej sieci. Bez Internetu WELES używa ostatnio pobranej bazy. NVD bez klucza API pozwala na 5 zapytań / 30 s, więc pełne pobranie trwa ok. 5 minut.")</p>
                 }
             </div>
         </div>
@@ -57,21 +57,21 @@
 <section class="card">
     @if (_page is null)
     {
-        <p class="muted">Wczytywanie…</p>
+        <p class="muted">@L.T("Wczytywanie…")</p>
     }
     else
     {
         <div class="toolbar">
             <div class="search">
                 <Icon Name="discovery" Size="15" />
-                <input class="input" placeholder="Szukaj: CVE, urządzenie, IP, produkt, wersja, port…" @bind="_search" @bind:event="oninput" @bind:after="Refresh" />
+                <input class="input" placeholder="@L.T("Szukaj: CVE, urządzenie, IP, produkt, wersja, port…")" @bind="_search" @bind:event="oninput" @bind:after="Refresh" />
             </div>
-            <label class="checkbox inline"><input type="checkbox" @bind="_kevOnly" @bind:after="Refresh" /><span>Tylko CISA KEV (@_page.KnownExploited)</span></label>
-            <label class="checkbox inline"><input type="checkbox" @bind="_includeResolved" @bind:after="Refresh" /><span>Pokaż rozwiązane</span></label>
+            <label class="checkbox inline"><input type="checkbox" @bind="_kevOnly" @bind:after="Refresh" /><span>@L.F("Tylko CISA KEV ({0})", _page.KnownExploited)</span></label>
+            <label class="checkbox inline"><input type="checkbox" @bind="_includeResolved" @bind:after="Refresh" /><span>@L.T("Pokaż rozwiązane")</span></label>
         </div>
 
         <div class="status-tabs">
-            <button class="@(_match is null ? "active" : "")" @onclick="() => SetMatch(null)">Wszystkie <span>@_page.Total</span></button>
+            <button class="@(_match is null ? "active" : "")" @onclick="() => SetMatch(null)">@L.T("Wszystkie") <span>@_page.Total</span></button>
             @foreach (var s in Enum.GetValues<VulnerabilityMatchStatus>())
             {
                 <button class="@(_match == s ? "active" : "")" title="@Labels.Describe(s)" @onclick="() => SetMatch(s)">
@@ -85,11 +85,21 @@
             <div class="empty">
                 @if (_page.Total == 0 && string.IsNullOrWhiteSpace(_search) && !_kevOnly)
                 {
-                    <p>Brak dopasowań. Podatności są dopasowywane po każdym skanie – do wykrytych wersji usług (baner, protokół) i do modelu urządzenia. Usługa bez wersji nie daje dopasowania.</p>
+                    <p>@L.T("Brak dopasowań. Podatności są dopasowywane po każdym skanie do") <strong>@L.T("wszystkich urządzeń z inwentarza")</strong> @L.T("(nie tylko z ostatniego skanu) – do wersji usług odczytanych z banera lub protokołu i do modelu urządzenia. Usługa bez wersji nie daje dopasowania: sam numer portu nie mówi, jakie oprogramowanie na nim działa.")</p>
+                    @if (_evidence is { } e)
+                    {
+                        <p class="muted small">
+                            @L.F("Ostatnie obserwacje {0} {1}: {2} otwartych portów, {3} rozpoznanych usług,", e.Assets, Labels.Devices(e.Assets), e.OpenPorts, e.IdentifiedServices)
+                            <strong>@L.F("{0} z wersją produktu z katalogu", e.ServicesWithVersion)</strong>@(e.Examples.Count > 0 ? $" ({string.Join(", ", e.Examples)})" : ""),
+                            @L.F("{0} z rozpoznanym modelem urządzenia.", e.ModelsKnown)
+                            @if (e.ServicesWithVersion == 0 && e.ModelsKnown == 0) { <span>@L.T("Nie ma więc czego dopasować – to nie oznacza, że urządzenia są wolne od podatności. Większość urządzeń domowych nie ujawnia wersji oprogramowania bez logowania.")</span> }
+                            else { <span>@L.T("Wykryte wersje nie mieszczą się w zakresach podatnych wersji z NVD.")</span> }
+                        </p>
+                    }
                 }
                 else
                 {
-                    <p>Brak dopasowań dla wybranych filtrów.</p>
+                    <p>@L.T("Brak dopasowań dla wybranych filtrów.")</p>
                 }
             </div>
         }
@@ -97,17 +107,17 @@
         {
             <div class="table-wrap">
                 <table class="table table-hover">
-                    <thead><tr><th>CVE</th><th>Urządzenie</th><th>Wykryto</th><th>CVSS</th><th>EPSS</th><th>KEV</th><th>Dopasowanie</th><th>Status</th></tr></thead>
+                    <thead><tr><th>@L.T("CVE")</th><th>@L.T("Urządzenie")</th><th>@L.T("Wykryto")</th><th>@L.T("CVSS")</th><th>@L.T("EPSS")</th><th>@L.T("KEV")</th><th>@L.T("Dopasowanie")</th><th>@L.T("Status")</th></tr></thead>
                     <tbody>
                         @foreach (var f in _page.Items.Take(_limit))
                         {
-                            <tr class="clickable" @onclick="@(() => Navigation.NavigateTo($"vulnerabilities/{f.CveId}"))" title="@f.MatchReason">
+                            <tr class="clickable" @onclick="@(() => Navigation.NavigateTo($"vulnerabilities/{f.CveId}"))" title="@L.Message(f.MatchReason)">
                                 <td class="mono"><strong>@f.CveId</strong>@if (f.Title is not null) { <div class="muted small">@f.Title</div> }</td>
-                                <td><a href="assets/@f.AssetId" @onclick:stopPropagation="true">@f.AssetName</a><div class="muted small mono">@f.AssetIp</div></td>
-                                <td>@f.Product @f.DetectedVersion @if (f.Port is { } p) { <span class="muted small">· port @p</span> }</td>
+                                <td><a href="assets/@f.AssetId" @onclick:stopPropagation="true">@L.Message(f.AssetName)</a><div class="muted small mono">@f.AssetIp</div></td>
+                                <td>@f.Product @f.DetectedVersion @if (f.Port is { } p) { <span class="muted small">· @L.F("port {0}", p)</span> }</td>
                                 <td>@if (f.CvssScore is { } c) { <StatusPill Tone="@Labels.Tone(f.Severity)">@c.ToString("0.0")</StatusPill> } else { <span class="muted">—</span> }</td>
-                                <td class="mono small" title="@(f.EpssPercentile is { } pc ? $"percentyl {pc * 100:0.#}" : null)">@Labels.Epss(f.EpssScore)</td>
-                                <td>@if (f.IsKnownExploited) { <StatusPill Tone="bad">KEV</StatusPill> } else { <span class="muted">—</span> }</td>
+                                <td class="mono small" title="@(f.EpssPercentile is { } pc ? L.F("percentyl {0}", (pc * 100).ToString("0.#")) : null)">@Labels.Epss(f.EpssScore)</td>
+                                <td>@if (f.IsKnownExploited) { <StatusPill Tone="bad">@L.T("KEV")</StatusPill> } else { <span class="muted">—</span> }</td>
                                 <td title="@Labels.Describe(f.MatchStatus)"><StatusPill Tone="@Labels.Tone(f.MatchStatus)">@Labels.Of(f.MatchStatus)</StatusPill> <span class="muted small">@f.MatchConfidence%</span></td>
                                 <td><StatusPill Tone="@Labels.Tone(f.Status)">@Labels.Of(f.Status)</StatusPill></td>
                             </tr>
@@ -117,7 +127,7 @@
             </div>
             @if (_page.Items.Count > _limit)
             {
-                <div class="pager"><span class="muted small">Pokazano @_limit z @_page.Items.Count</span><button class="btn btn-ghost btn-sm" @onclick="() => _limit += 100">Pokaż więcej</button></div>
+                <div class="pager"><span class="muted small">@L.F("Pokazano {0} z {1}", _limit, _page.Items.Count)</span><button class="btn btn-ghost btn-sm" @onclick="() => _limit += 100">@L.T("Pokaż więcej")</button></div>
             }
         }
     }
@@ -129,6 +139,7 @@
 
     private VulnerabilityDatabaseStatus? _status;
     private VulnerabilityFindingPage? _page;
+    private MatchingEvidenceSummary? _evidence;
     private string? _search;
     private bool _kevOnly;
     private bool _includeResolved;
@@ -148,6 +159,7 @@
     {
         _limit = 100;
         _page = await Queries.FindingsAsync(new VulnerabilityFindingQuery { Search = _search, MatchStatus = _match, KnownExploitedOnly = _kevOnly, IncludeResolved = _includeResolved });
+        if (_page.Total == 0) _evidence ??= await Queries.EvidenceAsync();
     }
 
     private async Task SetMatch(VulnerabilityMatchStatus? status)

@@ -10,6 +10,10 @@
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Localization\en.json" LogicalName="Weles.App.Localization.en.json" />
+  </ItemGroup>
+
   <PropertyGroup>
     <Description>Aplikacja WELES: lokalny serwer ASP.NET Core z interfejsem Blazor (Interactive Server), dostępny wyłącznie na 127.0.0.1 i chroniony tokenem sesji. Zawiera hosting, nawigację, strony modułów (Dashboard, Network Discovery, Scans, Settings), logowanie Serilog i pobieranie logów.</Description>
     <NoDefaultLaunchSettingsFile>True</NoDefaultLaunchSettingsFile>

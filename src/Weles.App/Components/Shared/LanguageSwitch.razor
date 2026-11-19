@@ -1,0 +1,23 @@
+@* Switching reloads the page: Blazor takes the culture from the request that opens the circuit. *@
+@inject LanguageState Language
+@inject NavigationManager Navigation
+
+<div class="segmented @Class" role="radiogroup" aria-label="@L.T("Język")">
+    @foreach (var (lang, name, _) in LanguageState.Languages)
+    {
+        <button class="@(Language.Code == lang ? "active" : "")" role="radio" aria-checked="@(Language.Code == lang)" lang="@lang"
+                title="@name" @onclick="() => SwitchAsync(lang)">@(Compact ? lang.ToUpperInvariant() : name)</button>
+    }
+</div>
+
+@code {
+    [Parameter] public bool Compact { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private async Task SwitchAsync(string code)
+    {
+        if (code == Language.Code) return;
+        await Language.SetAsync(code);
+        Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+    }
+}

@@ -7,33 +7,33 @@
 @inject ScanCoordinator Coordinator
 @inject ScanTargetService Targets
 
-<PageTitle>Skan #@ScanId · WELES</PageTitle>
+<PageTitle>@L.F("Skan #{0}", ScanId) · WELES</PageTitle>
 
 @if (_detail is null)
 {
-    <div class="card loading">@(_notFound ? "Skan nie istnieje." : "Wczytywanie…")</div>
+    <div class="card loading">@(_notFound ? L.T("Skan nie istnieje.") : L.T("Wczytywanie…"))</div>
 }
 else
 {
     var s = _detail.Summary;
     <div class="page-header">
         <div>
-            <a class="back-link" href="scans"><Icon Name="arrow-left" Size="14" /> Scans</a>
-            <h1>Skan #@s.Id · @s.TargetName</h1>
-            <p class="page-subtitle">Porty: <span class="mono">@s.PortSpecification</span> (@_detail.PortCount) · rozpoczęty @Labels.Local(s.StartedAt ?? s.CreatedAt) · czas @Labels.Duration(s.StartedAt, s.CompletedAt)</p>
+            <a class="back-link" href="scans"><Icon Name="arrow-left" Size="14" /> @L.T("Skany")</a>
+            <h1>@L.F("Skan #{0}", s.Id) · @L.Message(s.TargetName)</h1>
+            <p class="page-subtitle">@L.T("Porty:") <span class="mono">@s.PortSpecification</span> (@_detail.PortCount) · @L.F("rozpoczęty {0}", Labels.Local(s.StartedAt ?? s.CreatedAt)) · @L.F("czas {0}", Labels.Duration(s.StartedAt, s.CompletedAt))</p>
         </div>
         <div class="header-actions">
             <ScanStatusPill Status="s.Status" />
             @if (IsActive)
             {
-                <button class="btn btn-danger" disabled="@(_progress?.StopRequested == true)" @onclick="Stop">@(_progress?.StopRequested == true ? "Zatrzymywanie…" : "Zatrzymaj skan")</button>
+                <button class="btn btn-danger" disabled="@(_progress?.StopRequested == true)" @onclick="Stop">@(_progress?.StopRequested == true ? L.T("Zatrzymywanie…") : L.T("Zatrzymaj skan"))</button>
             }
         </div>
     </div>
 
     @if (s.ErrorMessage is not null)
     {
-        <div class="alert alert-bad">@s.ErrorMessage</div>
+        <div class="alert alert-bad">@L.Message(s.ErrorMessage)</div>
     }
 
     @if (IsActive && _progress is { } p)
@@ -41,47 +41,47 @@ else
         <section class="card progress-card">
             <div class="progress-head">
                 <strong>@Labels.Of(p.Phase)</strong>
-                <span class="muted small">@p.Activity</span>
+                <span class="muted small">@L.Message(p.Activity)</span>
                 <span class="progress-pct">@p.PercentComplete.ToString("0")%</span>
             </div>
             <div class="progress"><div class="progress-fill" style="width:@p.PercentComplete.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)%"></div></div>
             <div class="progress-stats">
-                <span>Sprawdzone adresy <strong>@p.HostsProbed / @p.HostsTotal</strong></span>
-                <span>Aktywne hosty <strong>@p.HostsAlive</strong></span>
-                <span>Przeskanowane hosty <strong>@p.HostsCompleted</strong></span>
-                <span>Otwarte porty <strong>@p.OpenPorts</strong></span>
-                <span>Rozpoznane usługi <strong>@p.ServicesIdentified</strong></span>
+                <span>@L.T("Sprawdzone adresy") <strong>@p.HostsProbed / @p.HostsTotal</strong></span>
+                <span>@L.T("Aktywne hosty") <strong>@p.HostsAlive</strong></span>
+                <span>@L.T("Przeskanowane hosty") <strong>@p.HostsCompleted</strong></span>
+                <span>@L.T("Otwarte porty") <strong>@p.OpenPorts</strong></span>
+                <span>@L.T("Rozpoznane usługi") <strong>@p.ServicesIdentified</strong></span>
             </div>
         </section>
     }
 
     <section class="kpi-grid kpi-grid-4">
-        <div class="kpi card"><div class="kpi-label">Adresy w zakresie</div><div class="kpi-value">@s.HostsTargeted</div></div>
-        <div class="kpi card"><div class="kpi-label">Aktywne hosty</div><div class="kpi-value">@_detail.Hosts.Count</div></div>
-        <div class="kpi card"><div class="kpi-label">Otwarte porty</div><div class="kpi-value">@_detail.Hosts.Sum(h => h.Ports.Count)</div></div>
-        <div class="kpi card"><div class="kpi-label">Rozpoznane usługi</div><div class="kpi-value">@_detail.Hosts.SelectMany(h => h.Ports).Count(p => p.Service is { DetectionMethod: not "port-hint" })</div><div class="kpi-hint">na podstawie odpowiedzi usługi, nie numeru portu</div></div>
+        <div class="kpi card"><div class="kpi-label">@L.T("Adresy w zakresie")</div><div class="kpi-value">@s.HostsTargeted</div></div>
+        <div class="kpi card"><div class="kpi-label">@L.T("Aktywne hosty")</div><div class="kpi-value">@_detail.Hosts.Count</div></div>
+        <div class="kpi card"><div class="kpi-label">@L.T("Otwarte porty")</div><div class="kpi-value">@_detail.Hosts.Sum(h => h.Ports.Count)</div></div>
+        <div class="kpi card"><div class="kpi-label">@L.T("Rozpoznane usługi")</div><div class="kpi-value">@_detail.Hosts.SelectMany(h => h.Ports).Count(p => p.Service is { DetectionMethod: not "port-hint" })</div><div class="kpi-hint">@L.T("na podstawie odpowiedzi usługi, nie numeru portu")</div></div>
     </section>
 
     <section class="card">
-        <div class="card-title"><Icon Name="assets" /> Wykryte hosty</div>
+        <div class="card-title"><Icon Name="assets" /> @L.T("Wykryte hosty")</div>
         @if (_detail.Hosts.Count == 0)
         {
-            <p class="muted">@(IsActive ? "Wyniki pojawią się po przeskanowaniu pierwszych hostów." : "Nie wykryto aktywnych hostów w tym zakresie.")</p>
+            <p class="muted">@(IsActive ? L.T("Wyniki pojawią się po przeskanowaniu pierwszych hostów.") : L.T("Nie wykryto aktywnych hostów w tym zakresie."))</p>
         }
         else
         {
             <div class="table-wrap">
                 <table class="table">
-                    <thead><tr><th>Adres IP</th><th>Nazwa hosta</th><th>MAC / producent</th><th>Typ / system</th><th>Wykryty przez</th><th>Otwarte porty</th></tr></thead>
+                    <thead><tr><th>@L.T("Adres IP")</th><th>@L.T("Nazwa hosta")</th><th>@L.T("MAC / producent")</th><th>@L.T("Typ / system")</th><th>@L.T("Wykryty przez")</th><th>@L.T("Otwarte porty")</th></tr></thead>
                     <tbody>
                         @foreach (var h in _detail.Hosts)
                         {
                             var expanded = _expanded.Contains(h.Id);
                             <tr class="clickable @(expanded ? "expanded" : "")" @onclick="() => Toggle(h.Id)">
-                                <td class="mono"><strong>@h.IpAddress</strong>@if (h.AssetId is { } assetId) { <a class="asset-link" href="assets/@assetId" title="Szczegóły urządzenia" @onclick:stopPropagation="true">↗</a> } @if (h.IsGateway) { <span class="tag">brama</span> }</td>
+                                <td class="mono"><strong>@h.IpAddress</strong>@if (h.AssetId is { } assetId) { <a class="asset-link" href="assets/@assetId" title="@L.T("Szczegóły urządzenia")" @onclick:stopPropagation="true">↗</a> } @if (h.IsGateway) { <span class="tag">@L.T("brama")</span> }</td>
                                 <td>@(h.Hostname ?? "—")</td>
                                 <td><span class="mono small">@(h.MacAddress ?? "—")</span><div class="muted small">@h.Vendor</div></td>
-                                <td title="@h.ClassificationReasons">@Labels.Of(h.AssetTypeGuess)<div class="muted small">@(h.OsGuess ?? "system nieznany")</div></td>
+                                <td title="@L.Message(h.ClassificationReasons)">@Labels.Of(h.AssetTypeGuess)<div class="muted small">@(h.OsGuess ?? L.T("system nieznany"))</div></td>
                                 <td class="small">@Labels.Of(h.DiscoveryMethods)@if (h.RoundTripMs is { } rtt) { <div class="muted small">@rtt.ToString("0") ms@(h.Ttl is { } ttl ? $" · TTL {ttl}" : "")</div> }</td>
                                 <td>
                                     <div class="chips">
@@ -89,7 +89,7 @@ else
                                         {
                                             <span class="chip mono" title="@port.Service?.ServiceName">@port.Port</span>
                                         }
-                                        @if (h.Ports.Count == 0) { <span class="muted small">brak</span> }
+                                        @if (h.Ports.Count == 0) { <span class="muted small">@L.T("brak")</span> }
                                     </div>
                                 </td>
                             </tr>
@@ -99,7 +99,7 @@ else
                                     <td colspan="6">
                                         @if (!string.IsNullOrEmpty(h.ClassificationReasons))
                                         {
-                                            <div class="reasons"><strong>Dlaczego @Labels.Of(h.AssetTypeGuess).ToLowerInvariant()?</strong> @string.Join(" · ", h.ClassificationReasons.Split('\n'))</div>
+                                            <div class="reasons"><strong>@L.F("Dlaczego {0}?", Labels.Of(h.AssetTypeGuess).ToLowerInvariant())</strong> @string.Join(" · ", h.ClassificationReasons.Split('\n').Select(L.Message))</div>
                                         }
                                         <AnnouncedServices Host="h" />
                                         <ServiceTable Ports="h.Ports" />
@@ -114,11 +114,11 @@ else
     </section>
 
     <section class="card">
-        <div class="card-title"><Icon Name="clock" /> Dziennik skanu</div>
+        <div class="card-title"><Icon Name="clock" /> @L.T("Dziennik skanu")</div>
         <ul class="events">
             @foreach (var e in _detail.Events)
             {
-                <li class="event event-@e.Level.ToString().ToLowerInvariant()"><span class="mono muted">@e.Timestamp.ToLocalTime().ToString("HH:mm:ss")</span> @e.Message</li>
+                <li class="event event-@e.Level.ToString().ToLowerInvariant()"><span class="mono muted">@e.Timestamp.ToLocalTime().ToString("HH:mm:ss")</span> @L.Message(e.Message)</li>
             }
         </ul>
     </section>

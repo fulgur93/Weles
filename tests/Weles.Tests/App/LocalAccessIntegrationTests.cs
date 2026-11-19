@@ -69,14 +69,49 @@ public class LocalAccessIntegrationTests(WelesAppFactory factory) : IClassFixtur
     {
         var client = await AuthenticatedClientAsync();
 
-        var dashboard = await client.GetStringAsync("/");
+        // Texts written through the dictionary are HTML-encoded by Razor ("ó" → "&#xF3;").
+        var dashboard = WebUtility.HtmlDecode(await client.GetStringAsync("/"));
         Assert.Contains("Brak wykonanych audytów", dashboard);
 
         var settings = await client.GetStringAsync("/settings");
         Assert.Contains("weles.db", settings);
 
-        var planned = await client.GetStringAsync("/vulnerabilities");
+        var planned = WebUtility.HtmlDecode(await client.GetStringAsync("/risk"));
         Assert.Contains("Planowany", planned);
+    }
+
+    [Fact]
+    public async Task Switching_to_english_translates_every_page()
+    {
+        var client = await AuthenticatedClientAsync();
+        var language = factory.Services.GetRequiredService<Weles.App.Localization.LanguageState>();
+        await language.SetAsync("en");
+        try
+        {
+            foreach (var path in (string[])["/", "/assets", "/discovery", "/scans", "/vulnerabilities", "/settings", "/risk", "/ai", "/assets/999999", "/scans/999999", "/vulnerabilities/CVE-2099-0001", "/no-such-page"])
+            {
+                var html = await (await client.GetAsync(path)).Content.ReadAsStringAsync(); // the last one is a 404 page
+                Assert.Contains("<html lang=\"en\">", html);
+                var text = VisibleText(html);
+                Assert.False(System.Text.RegularExpressions.Regex.IsMatch(text, "[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]"), $"{path}: {text}");
+            }
+
+            Assert.Contains("No audits yet", VisibleText(await client.GetStringAsync("/")));
+            Assert.Contains("Vulnerabilities", VisibleText(await client.GetStringAsync("/vulnerabilities")));
+        }
+        finally
+        {
+            await language.SetAsync("pl");
+        }
+
+        Assert.Contains("Podatności", VisibleText(await client.GetStringAsync("/vulnerabilities")));
+    }
+
+    /// <summary>Page text without scripts, tags and the hidden reconnect/error templates.</summary>
+    private static string VisibleText(string html)
+    {
+        html = System.Text.RegularExpressions.Regex.Replace(html, "<script.*?</script>|<style.*?</style>", "", System.Text.RegularExpressions.RegexOptions.Singleline);
+        return WebUtility.HtmlDecode(System.Text.RegularExpressions.Regex.Replace(html, "<[^>]+>", " "));
     }
 
     [Fact]

@@ -2,36 +2,36 @@
 @using Weles.Infrastructure.Queries
 @inject ScanQueries Queries
 
-<PageTitle>Scans · WELES</PageTitle>
+<PageTitle>@L.T("Skany · WELES")</PageTitle>
 
 <div class="page-header">
     <div>
-        <h1>Scans</h1>
-        <p class="page-subtitle">Historia skanowań. Wyniki każdego skanu są zachowywane i nie są nadpisywane.</p>
+        <h1>@L.T("Skany")</h1>
+        <p class="page-subtitle">@L.T("Historia skanowań. Wyniki każdego skanu są zachowywane i nie są nadpisywane.")</p>
     </div>
-    <a class="btn btn-primary" href="discovery"><Icon Name="play" Size="16" /> Nowy skan</a>
+    <a class="btn btn-primary" href="discovery"><Icon Name="play" Size="16" /> @L.T("Nowy skan")</a>
 </div>
 
 <section class="card">
     @if (_scans is null)
     {
-        <p class="muted">Wczytywanie…</p>
+        <p class="muted">@L.T("Wczytywanie…")</p>
     }
     else if (_scans.Count == 0)
     {
-        <div class="empty"><p>Nie wykonano jeszcze żadnego skanu. Zdefiniuj i zatwierdź zakres w <a href="discovery">Network Discovery</a>.</p></div>
+        <div class="empty"><p>@L.T("Nie wykonano jeszcze żadnego skanu. Zdefiniuj i zatwierdź zakres w") <a href="discovery">@L.T("Wykrywanie sieci")</a>.</p></div>
     }
     else
     {
         <div class="table-wrap">
             <table class="table table-hover">
-                <thead><tr><th>#</th><th>Zakres</th><th>Status</th><th>Porty</th><th>Rozpoczęty</th><th>Czas</th><th class="right">Adresy</th><th class="right">Hosty</th><th class="right">Otwarte porty</th></tr></thead>
+                <thead><tr><th>#</th><th>@L.T("Zakres")</th><th>@L.T("Status")</th><th>@L.T("Porty")</th><th>@L.T("Rozpoczęty")</th><th>@L.T("Czas")</th><th class="right">@L.T("Adresy")</th><th class="right">@L.T("Hosty")</th><th class="right">@L.T("Otwarte porty")</th></tr></thead>
                 <tbody>
                     @foreach (var s in _scans)
                     {
                         <tr class="clickable" @onclick="@(() => Navigation.NavigateTo($"scans/{s.Id}"))">
                             <td class="mono">@s.Id</td>
-                            <td><strong>@s.TargetName</strong></td>
+                            <td><strong>@L.Message(s.TargetName)</strong></td>
                             <td><ScanStatusPill Status="s.Status" /></td>
                             <td class="mono small">@s.PortSpecification</td>
                             <td>@Labels.Local(s.StartedAt ?? s.CreatedAt)</td>

@@ -281,6 +281,22 @@ poprawnie: jedyna usługa z wersją z katalogu to BIND 9.20.26 na routerze (najn
 9.20.23), MicroStack (radio internetowe) nie ma CPE w katalogu, a model routera nie został zapisany w tych skanach.
 Zapytanie przyrostowe NVD sprawdzone na żywo (47 zmian OpenSSH od 2026‑08‑01).
 
+## 5c. Język interfejsu (PL / EN)
+
+- Polski jest językiem źródłowym: każdy tekst w kodzie jest po polsku i jest jednocześnie kluczem słownika
+  (`Weles.App/Localization/en.json`, ~670 wpisów). Brak tłumaczenia oznacza tekst polski, nigdy surowy klucz.
+- `L.T("…")` – tekst stały, `L.F("… {0}", x)` – z parametrami (formatowanie w kulturze języka), `L.Message(tekst)` –
+  komunikaty zapisane wcześniej po polsku przez Core/Infrastructure (zdarzenia skanu, uzasadnienia klasyfikacji i
+  dopasowań, błędy walidacji, automatyczne nazwy zakresów): dokładny wpis, potem wzorce z `{0}…{n}` (argumenty
+  tłumaczone rekurencyjnie), a teksty złożone dzielone na wierszach, `" | "`, `"; "`, `" – "` i `", "`. Dzięki temu
+  przełączenie języka działa także dla danych z wcześniejszych skanów – bez migracji i bez zapisywania kluczy w bazie.
+- `LanguageState` (ustawienie `ui.language`) + własny `RequestCultureProvider`: każde żądanie, także połączenie obwodu
+  Blazor, dostaje `pl-PL` albo `en-GB`; przełączenie przeładowuje stronę (nowy obwód w nowej kulturze).
+- Testy: każdy literał `L.T/L.F` w `Weles.App` ma tłumaczenie, placeholdery się zgadzają, tłumaczenia nie zawierają
+  polskich liter; teksty generowane przez rdzeń (uzasadnienia dopasowań i klasyfikacji, błędy walidacji, historia
+  zmian) i prawdziwe komunikaty z bazy użytkownika tłumaczą się bez polskich słów; wszystkie strony renderowane po
+  angielsku (także na kopii bazy użytkownika: 36 stron) nie zawierają polskiego tekstu.
+
 ## 6. Bezpieczeństwo aplikacji (Etap 1)
 
 - Kestrel nasłuchuje **wyłącznie** na `127.0.0.1` (port 5080 albo pierwszy wolny).
@@ -346,3 +362,5 @@ Zapytanie przyrostowe NVD sprawdzone na żywo (47 zmian OpenSSH od 2026‑08‑0
 | 2026‑11‑19 | Dokładne porównanie wersji: test wykazał, że tolerowanie sufiksu (`9.3` ≈ `9.3p2`) oznaczało naprawioną wersję OpenSSH jako podatną. |
 | 2026‑11‑19 | Model sprzętu bez wersji firmware → „Brak wystarczających danych”, a nie brak wyniku: dla routera to najcenniejsza wskazówka (sprawdź firmware), ale nie jest liczona jako otwarta podatność. |
 | 2026‑11‑19 | Laboratorium demo (`deploy/demo-lab`): prawdziwe stare obrazy usług tylko na 127.0.0.11–15 zamiast symulowanych banerów – symulacja byłaby udawaniem wyników. Nieuruchomione lokalnie (brak Dockera). |
+| 2026‑11‑19 | Dwa języki interfejsu (zgłoszone przez użytkownika: „część po polsku, część po angielsku”). Polskie teksty są kluczami słownika, a komunikaty zapisane w bazie tłumaczone przy wyświetlaniu wzorcami – zapisywanie kluczy zamiast tekstów wymagałoby migracji danych i zmiany każdego producenta komunikatów. Nazwy modułów w trybie polskim też po polsku (Pulpit, Urządzenia, Podatności…). |
+| 2026‑11‑19 | Dopasowania: wpis NVD bez zakresu wersji („wszystkie wersje”) → „Brak wystarczających danych”; warunek NVD wskazujący inną dystrybucję niż baner (CVE-2008-3844 – tylko pakiety Red Hata) → brak dopasowania. Wykryte na Raspberry Pi użytkownika (OpenSSH 8.4p1 Debian). |

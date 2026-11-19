@@ -9,14 +9,14 @@
 @page "/agents"
 @inject NavigationManager Navigation
 
-<PageTitle>@(_module?.Title ?? "Moduł") · WELES</PageTitle>
+<PageTitle>@L.T(_module?.Title ?? "Moduł") · WELES</PageTitle>
 
 @if (_module is not null)
 {
     <div class="page-header">
         <div>
-            <h1>@_module.Title</h1>
-            <p class="page-subtitle">@_module.Summary</p>
+            <h1>@L.T(_module.Title)</h1>
+            <p class="page-subtitle">@L.T(_module.Summary)</p>
         </div>
     </div>
 
@@ -24,18 +24,18 @@
         <div class="planned-head">
             <div class="planned-icon"><Icon Name="@_module.Icon" Size="28" /></div>
             <div>
-                <StatusPill Tone="info">Planowany · Etap @_module.Stage</StatusPill>
-                <p class="muted">Ten moduł nie jest jeszcze zaimplementowany. WELES nie pokazuje pustych ani pozornie działających ekranów – funkcje pojawią się tutaj po zakończeniu etapu.</p>
+                <StatusPill Tone="info">@L.F("Planowany · Etap {0}", _module.Stage)</StatusPill>
+                <p class="muted">@L.T("Ten moduł nie jest jeszcze zaimplementowany. WELES nie pokazuje pustych ani pozornie działających ekranów – funkcje pojawią się tutaj po zakończeniu etapu.")</p>
             </div>
         </div>
-        <div class="card-title">Zakres modułu</div>
+        <div class="card-title">@L.T("Zakres modułu")</div>
         <ul class="checklist">
             @foreach (var capability in _module.PlannedCapabilities)
             {
-                <li><Icon Name="layers" Size="15" /> @capability</li>
+                <li><Icon Name="layers" Size="15" /> @L.T(capability)</li>
             }
         </ul>
-        <a class="btn btn-ghost" href=""><Icon Name="arrow-left" Size="15" /> Wróć do dashboardu</a>
+        <a class="btn btn-ghost" href=""><Icon Name="arrow-left" Size="15" /> @L.T("Wróć do pulpitu")</a>
     </section>
 }
 

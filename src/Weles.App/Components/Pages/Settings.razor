@@ -6,56 +6,60 @@
 @inject ThemeState ThemeState
 @inject Microsoft.Extensions.Options.IOptions<Weles.Infrastructure.AI.AiOptions> AiOptions
 
-<PageTitle>Settings · WELES</PageTitle>
+<PageTitle>@L.T("Ustawienia · WELES")</PageTitle>
 
 <div class="page-header">
     <div>
-        <h1>Settings</h1>
-        <p class="page-subtitle">Konfiguracja i stan lokalnej instalacji WELES.</p>
+        <h1>@L.T("Ustawienia")</h1>
+        <p class="page-subtitle">@L.T("Konfiguracja i stan lokalnej instalacji WELES.")</p>
     </div>
 </div>
 
 <section class="grid-2">
     <div class="card">
-        <div class="card-title"><Icon Name="info" /> Aplikacja</div>
+        <div class="card-title"><Icon Name="info" /> @L.T("Aplikacja")</div>
         <dl class="facts">
-            <dt>Wersja</dt><dd>@Runtime.Version</dd>
-            <dt>Tryb</dt><dd>@(Runtime.DemoMode ? "Demonstracyjny (osobna baza)" : "Produkcyjny")</dd>
-            <dt>Adres panelu</dt><dd class="mono">@Runtime.BaseUrl</dd>
-            <dt>Dostęp</dt><dd>tylko localhost, sesja chroniona tokenem uruchomieniowym</dd>
-            <dt>Uruchomiono</dt><dd>@Runtime.StartedAt.ToLocalTime().ToString("g")</dd>
-            <dt>Środowisko</dt><dd>@Runtime.Framework</dd>
-            <dt>System</dt><dd>@Runtime.OperatingSystem (@Runtime.Architecture)</dd>
+            <dt>@L.T("Wersja")</dt><dd>@Runtime.Version</dd>
+            <dt>@L.T("Tryb")</dt><dd>@(Runtime.DemoMode ? L.T("Demonstracyjny (osobna baza)") : L.T("Produkcyjny"))</dd>
+            <dt>@L.T("Adres panelu")</dt><dd class="mono">@Runtime.BaseUrl</dd>
+            <dt>@L.T("Dostęp")</dt><dd>@L.T("tylko localhost, sesja chroniona tokenem uruchomieniowym")</dd>
+            <dt>@L.T("Uruchomiono")</dt><dd>@Runtime.StartedAt.ToLocalTime().ToString("g")</dd>
+            <dt>@L.T("Środowisko")</dt><dd>@Runtime.Framework</dd>
+            <dt>@L.T("System")</dt><dd>@Runtime.OperatingSystem (@Runtime.Architecture)</dd>
         </dl>
     </div>
 
     <div class="card">
-        <div class="card-title"><Icon Name="sun" /> Wygląd</div>
-        <div class="segmented" role="radiogroup" aria-label="Motyw">
-            <button class="@(ThemeState.IsDark ? "active" : "")" @onclick="@(() => ThemeState.SetAsync(ThemeState.Dark))"><Icon Name="moon" Size="15" /> Ciemny</button>
-            <button class="@(!ThemeState.IsDark ? "active" : "")" @onclick="@(() => ThemeState.SetAsync(ThemeState.Light))"><Icon Name="sun" Size="15" /> Jasny</button>
+        <div class="card-title"><Icon Name="sun" /> @L.T("Wygląd")</div>
+        <div class="segmented" role="radiogroup" aria-label="@L.T("Motyw")">
+            <button class="@(ThemeState.IsDark ? "active" : "")" @onclick="@(() => ThemeState.SetAsync(ThemeState.Dark))"><Icon Name="moon" Size="15" /> @L.T("Ciemny")</button>
+            <button class="@(!ThemeState.IsDark ? "active" : "")" @onclick="@(() => ThemeState.SetAsync(ThemeState.Light))"><Icon Name="sun" Size="15" /> @L.T("Jasny")</button>
         </div>
-        <p class="muted small">Wybór jest zapisywany w lokalnej bazie.</p>
+        <p class="muted small">@L.T("Wybór jest zapisywany w lokalnej bazie.")</p>
+
+        <div class="card-title" style="margin-top:18px"><Icon Name="surface" /> @L.T("Język")</div>
+        <LanguageSwitch />
+        <p class="muted small">@L.T("Język interfejsu, komunikatów i uzasadnień generowanych przez WELES. Opisy CVE pochodzą z NVD i są po angielsku.")</p>
     </div>
 
     <div class="card">
-        <div class="card-title"><Icon Name="database" /> Baza danych</div>
+        <div class="card-title"><Icon Name="database" /> @L.T("Baza danych")</div>
         @if (_db is null)
         {
-            <p class="muted">Wczytywanie…</p>
+            <p class="muted">@L.T("Wczytywanie…")</p>
         }
         else
         {
             <dl class="facts">
-                <dt>Plik</dt><dd class="mono break">@_db.FilePath</dd>
-                <dt>Rozmiar</dt><dd>@Format.Bytes(_db.SizeBytes)</dd>
-                <dt>SQLite</dt><dd>@_db.SqliteVersion</dd>
-                <dt>Migracje</dt>
+                <dt>@L.T("Plik")</dt><dd class="mono break">@_db.FilePath</dd>
+                <dt>@L.T("Rozmiar")</dt><dd>@Format.Bytes(_db.SizeBytes)</dd>
+                <dt>@L.T("SQLite")</dt><dd>@_db.SqliteVersion</dd>
+                <dt>@L.T("Migracje")</dt>
                 <dd>
-                    @_db.AppliedMigrations.Count zastosowanych
+                    @L.F("{0} zastosowanych", _db.AppliedMigrations.Count)
                     @if (_db.PendingMigrations.Count > 0)
                     {
-                        <StatusPill Tone="warn">@_db.PendingMigrations.Count oczekujących</StatusPill>
+                        <StatusPill Tone="warn">@L.F("{0} oczekujących", _db.PendingMigrations.Count)</StatusPill>
                     }
                 </dd>
             </dl>
@@ -63,31 +67,31 @@
     </div>
 
     <div class="card">
-        <div class="card-title"><Icon Name="ai" /> Silnik AI</div>
+        <div class="card-title"><Icon Name="ai" /> @L.T("Silnik AI")</div>
         <AiStatusView Status="_ai" />
         <dl class="facts">
-            <dt>Silnik</dt><dd>@(_ai?.EngineName ?? "Ollama") @(_ai?.EngineVersion is { } v ? $"v{v}" : "")</dd>
-            <dt>Endpoint</dt><dd class="mono">@AiOptions.Value.Endpoint</dd>
-            <dt>Model</dt><dd class="mono">@AiOptions.Value.Model</dd>
+            <dt>@L.T("Silnik")</dt><dd>@(_ai?.EngineName ?? "Ollama") @(_ai?.EngineVersion is { } v ? $"v{v}" : "")</dd>
+            <dt>@L.T("Endpoint")</dt><dd class="mono">@AiOptions.Value.Endpoint</dd>
+            <dt>@L.T("Model")</dt><dd class="mono">@AiOptions.Value.Model</dd>
             @if (_ai?.InstalledModels.Count > 0)
             {
-                <dt>Zainstalowane</dt><dd class="mono">@string.Join(", ", _ai.InstalledModels)</dd>
+                <dt>@L.T("Zainstalowane")</dt><dd class="mono">@string.Join(", ", _ai.InstalledModels)</dd>
             }
         </dl>
-        <button class="btn btn-ghost" @onclick="RefreshAiAsync" disabled="@_checkingAi"><Icon Name="refresh" Size="15" /> Sprawdź ponownie</button>
+        <button class="btn btn-ghost" @onclick="RefreshAiAsync" disabled="@_checkingAi"><Icon Name="refresh" Size="15" /> @L.T("Sprawdź ponownie")</button>
     </div>
 
     <div class="card span-2">
-        <div class="card-title"><Icon Name="folder" /> Dane i logi</div>
-        <p class="muted small">Dane użytkownika nigdy nie są zapisywane w katalogu instalacyjnym. Logi rotują codziennie (maks. 10 MB na plik, 14 plików) i nie zawierają haseł ani tokenów.</p>
+        <div class="card-title"><Icon Name="folder" /> @L.T("Dane i logi")</div>
+        <p class="muted small">@L.T("Dane użytkownika nigdy nie są zapisywane w katalogu instalacyjnym. Logi rotują codziennie (maks. 10 MB na plik, 14 plików) i nie zawierają haseł ani tokenów.")</p>
         <dl class="facts">
-            <dt>Katalog danych</dt><dd class="mono break">@Paths.Root</dd>
-            <dt>Logi</dt><dd class="mono break">@Paths.LogsDirectory</dd>
-            <dt>Raporty</dt><dd class="mono break">@Paths.ReportsDirectory</dd>
-            <dt>Eksporty</dt><dd class="mono break">@Paths.ExportsDirectory</dd>
-            <dt>Baza podatności</dt><dd class="mono break">@Paths.VulnerabilityDataDirectory</dd>
+            <dt>@L.T("Katalog danych")</dt><dd class="mono break">@Paths.Root</dd>
+            <dt>@L.T("Logi")</dt><dd class="mono break">@Paths.LogsDirectory</dd>
+            <dt>@L.T("Raporty")</dt><dd class="mono break">@Paths.ReportsDirectory</dd>
+            <dt>@L.T("Eksporty")</dt><dd class="mono break">@Paths.ExportsDirectory</dd>
+            <dt>@L.T("Baza podatności")</dt><dd class="mono break">@Paths.VulnerabilityDataDirectory</dd>
         </dl>
-        <a class="btn btn-ghost" href="api/logs/download" download><Icon Name="download" Size="15" /> Pobierz logi (ZIP)</a>
+        <a class="btn btn-ghost" href="api/logs/download" download><Icon Name="download" Size="15" /> @L.T("Pobierz logi (ZIP)")</a>
     </div>
 </section>
 
