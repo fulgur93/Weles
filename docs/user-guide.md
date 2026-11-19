@@ -46,6 +46,14 @@ Wersja z dopiskiem dystrybucji (np. Ubuntu) może zawierać poprawki bezpieczeń
 
 Limity (równoległość, tempo, timeouty, maks. liczba hostów) są w `appsettings.json`, sekcja `Weles:Scanning`.
 
+### Skan w tle
+
+Skan działa na serwerze WELES, niezależnie od otwartej strony: można przechodzić między zakładkami albo zamknąć kartę
+przeglądarki. Trwający skan jest widoczny w górnym pasku każdej strony (numer, zakres, etap, procent – kliknięcie
+otwiera postęp); po zakończeniu przez minutę widać tam link „Skan #N zakończony – zobacz wyniki”. W Wykrywaniu sieci
+zakres ze skanem w toku ma przycisk „Skan w toku – pokaż postęp”. Skan przerywa tylko „Zatrzymaj skan” albo zamknięcie
+aplikacji (wtedy skan jest oznaczany jako przerwany).
+
 ## Inwentarz urządzeń (Assets)
 
 - **Wyszukiwanie** – kilka słów naraz (wszystkie muszą pasować): nazwa, IP, MAC, producent, system, produkt

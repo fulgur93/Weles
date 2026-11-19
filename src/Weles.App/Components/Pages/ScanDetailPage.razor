@@ -44,6 +44,7 @@ else
                 <span class="muted small">@L.Message(p.Activity)</span>
                 <span class="progress-pct">@p.PercentComplete.ToString("0")%</span>
             </div>
+            <p class="muted small">@L.T("Skan działa w tle na serwerze WELES: możesz przejść do innych zakładek albo zamknąć kartę przeglądarki – postęp widać w górnym pasku. Skan przerywa tylko przycisk „Zatrzymaj skan” albo zamknięcie aplikacji.")</p>
             <div class="progress"><div class="progress-fill" style="width:@p.PercentComplete.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)%"></div></div>
             <div class="progress-stats">
                 <span>@L.T("Sprawdzone adresy") <strong>@p.HostsProbed / @p.HostsTotal</strong></span>

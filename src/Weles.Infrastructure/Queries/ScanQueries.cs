@@ -24,6 +24,15 @@ public sealed class ScanQueries(IDbContextFactory<WelesDbContext> contextFactory
             .ToListAsync(ct);
     }
 
+    /// <summary>Scope names of the given scans (for the progress indicator in the top bar).</summary>
+    public async Task<Dictionary<int, string>> TargetNamesAsync(IReadOnlyCollection<int> scanIds, CancellationToken ct = default)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        // Project in SQL – a selector passed to ToDictionaryAsync runs on entities without the ScanTarget loaded.
+        var rows = await db.Scans.AsNoTracking().Where(s => scanIds.Contains(s.Id)).Select(s => new { s.Id, s.ScanTarget!.Name }).ToListAsync(ct);
+        return rows.ToDictionary(r => r.Id, r => r.Name);
+    }
+
     public async Task<ScanDetail?> GetAsync(int scanId, CancellationToken ct = default)
     {
         await using var db = await contextFactory.CreateDbContextAsync(ct);

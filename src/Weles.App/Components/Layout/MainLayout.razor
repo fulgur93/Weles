@@ -28,6 +28,7 @@
                     <Icon Name="info" Size="14" /> @L.T("TRYB DEMONSTRACYJNY – przykładowe dane")
                 </span>
             }
+            <ActiveScanIndicator />
             <div class="topbar-spacer"></div>
             <LanguageSwitch Compact="true" Class="segmented-sm" />
             <button class="icon-button" @onclick="ThemeState.ToggleAsync" title="@(ThemeState.IsDark ? L.T("Przełącz na jasny motyw") : L.T("Przełącz na ciemny motyw"))">

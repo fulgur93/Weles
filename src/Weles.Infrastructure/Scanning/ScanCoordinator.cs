@@ -39,6 +39,9 @@ public sealed class ScanCoordinator(TimeProvider timeProvider)
 
     public ScanProgress? GetProgress(int scanId) => _progress.GetValueOrDefault(scanId);
 
+    /// <summary>Queued and running scans – shown on every page, scans run in the background whatever page is open.</summary>
+    public IReadOnlyList<ScanProgress> ActiveScans() => _progress.Values.Where(p => p.Phase != ScanPhase.Finished).OrderBy(p => p.ScanId).ToList();
+
     public bool IsActive(int scanId) => _running.ContainsKey(scanId) || (_progress.TryGetValue(scanId, out var p) && p.Phase != ScanPhase.Finished);
 
     internal (CancellationTokenSource Cts, ScanProgress Progress) Begin(int scanId, CancellationToken hostStopping)

@@ -1,0 +1,92 @@
+@* Scans run on the server, independently of the open page. This indicator, in the top bar of every page, shows that
+   a scan is still running (and when it has finished) after the user moves to another tab. *@
+@using Weles.Infrastructure.Queries
+@using Weles.Infrastructure.Scanning
+@implements IDisposable
+@inject ScanCoordinator Coordinator
+@inject ScanQueries Scans
+
+@foreach (var p in _active)
+{
+    <a class="scan-indicator" href="scans/@p.ScanId" title="@L.T("Skan działa w tle – możesz przechodzić między zakładkami. Kliknij, aby zobaczyć postęp.")">
+        <span class="spinner" aria-hidden="true"></span>
+        <span>@L.F("Skan #{0}", p.ScanId)@(_names.TryGetValue(p.ScanId, out var name) ? " · " + L.Message(name) : "")</span>
+        <span class="muted">· @Labels.Of(p.Phase)</span>
+        <strong>@p.PercentComplete.ToString("0")%</strong>
+    </a>
+}
+@foreach (var (id, _) in _finished)
+{
+    <span class="scan-indicator done">
+        <Icon Name="check" Size="14" />
+        <a href="scans/@id">@L.F("Skan #{0} zakończony – zobacz wyniki", id)</a>
+        <button class="icon-button" title="@L.T("Ukryj")" @onclick="() => _finished.Remove(id)">×</button>
+    </span>
+}
+
+@code {
+    private static readonly TimeSpan ShowFinishedFor = TimeSpan.FromMinutes(1);
+    private IReadOnlyList<ScanProgress> _active = [];
+    private readonly Dictionary<int, string> _names = [];
+    private readonly Dictionary<int, DateTime> _finished = [];
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _cts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Coordinator.ScanFinished += OnScanFinished;
+        await RefreshAsync();
+        _cts = new CancellationTokenSource();
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        _ = PollAsync(_cts.Token);
+    }
+
+    private async Task PollAsync(CancellationToken ct)
+    {
+        try
+        {
+            while (await _timer!.WaitForNextTickAsync(ct))
+            {
+                var expired = _finished.Where(f => DateTime.UtcNow - f.Value > ShowFinishedFor).Select(f => f.Key).ToList();
+                foreach (var id in expired) _finished.Remove(id);
+                if (_active.Count > 0 || Coordinator.ActiveScans().Count > 0 || expired.Count > 0)
+                {
+                    await InvokeAsync(async () =>
+                    {
+                        await RefreshAsync();
+                        StateHasChanged();
+                    });
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Circuit closed.
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        _active = Coordinator.ActiveScans();
+        var missing = _active.Select(p => p.ScanId).Where(id => !_names.ContainsKey(id)).ToList();
+        if (missing.Count > 0)
+        {
+            foreach (var (id, name) in await Scans.TargetNamesAsync(missing)) _names[id] = name;
+        }
+    }
+
+    private void OnScanFinished(int scanId) => _ = InvokeAsync(async () =>
+    {
+        _finished[scanId] = DateTime.UtcNow;
+        await RefreshAsync();
+        StateHasChanged();
+    });
+
+    public void Dispose()
+    {
+        Coordinator.ScanFinished -= OnScanFinished;
+        _cts?.Cancel();
+        _timer?.Dispose();
+        _cts?.Dispose();
+    }
+}

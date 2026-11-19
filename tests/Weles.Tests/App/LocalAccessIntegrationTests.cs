@@ -242,3 +242,43 @@ public class AssetPagesIntegrationTests(WelesAppFactory factory) : IClassFixture
         Assert.Contains("nie istnieje", System.Net.WebUtility.HtmlDecode(await client.GetStringAsync("/assets/999999")));
     }
 }
+
+public class ActiveScanIndicatorTests(WelesAppFactory factory) : IClassFixture<WelesAppFactory>
+{
+    /// <summary>
+    /// While a scan runs, every page shows it in the top bar (regression: the indicator's scope-name query failed with a
+    /// 500 when a page was opened during a scan).
+    /// </summary>
+    [Fact]
+    public async Task Pages_opened_during_a_scan_show_it_in_the_top_bar()
+    {
+        // A slow service keeps the scan busy long enough to open pages meanwhile.
+        await using var slow = new Weles.Tests.Support.FakeServer(async (s, ct) => await Task.Delay(10_000, ct));
+        var targets = factory.Services.GetRequiredService<Weles.Infrastructure.Scanning.ScanTargetService>();
+        var coordinator = factory.Services.GetRequiredService<Weles.Infrastructure.Scanning.ScanCoordinator>();
+        var id = (await targets.CreateAsync(new("Wolny serwer", null, "127.0.0.1", null, false))).Id!.Value;
+        await targets.ApproveAsync(id, confirmedAuthorization: true);
+        var scanId = (await targets.StartScanAsync(id, slow.Port.ToString())).Id!.Value;
+
+        var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, BaseAddress = new Uri("http://localhost") });
+        await client.GetAsync($"/auth?token={Uri.EscapeDataString(factory.Services.GetRequiredService<LocalAccessToken>().Value)}");
+
+        var sawIndicator = false;
+        for (var i = 0; i < 50 && coordinator.IsActive(scanId); i++)
+        {
+            foreach (var path in (string[])["/", "/assets", $"/scans/{scanId}", "/discovery"])
+            {
+                var response = await client.GetAsync(path);
+                Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                var html = WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync());
+                if (html.Contains($"href=\"scans/{scanId}\"") && html.Contains("scan-indicator") && html.Contains("Wolny serwer")) sawIndicator = true;
+            }
+
+            if (sawIndicator) break;
+            await Task.Delay(100);
+        }
+
+        Assert.True(sawIndicator);
+        targets.StopScan(scanId);
+    }
+}

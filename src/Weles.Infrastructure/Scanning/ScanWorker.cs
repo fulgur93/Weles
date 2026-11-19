@@ -27,6 +27,8 @@ public sealed class ScanWorker(
             {
                 var engine = services.GetRequiredService<ScanEngine>();
                 await engine.RunAsync(scanId, progress, cts.Token);
+                progress.Phase = ScanPhase.Finishing;
+                progress.Activity = "Dopasowanie podatności i ocena ryzyka";
                 await MatchVulnerabilitiesAsync(scanId, stoppingToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException || !stoppingToken.IsCancellationRequested)

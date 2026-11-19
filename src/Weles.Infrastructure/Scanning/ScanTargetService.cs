@@ -21,7 +21,10 @@ public sealed record ScopePreview(int AddressCount, IReadOnlyList<string> Warnin
 
 public sealed record ScanTargetSummary(
     int Id, string Name, string? Description, bool IsApproved, DateTime? ApprovedAt, bool AllowPublicAddresses,
-    IReadOnlyList<string> Includes, IReadOnlyList<string> Excludes, int ScanCount, DateTime? LastScanAt, ScanStatus? LastScanStatus, bool HasActiveScan);
+    IReadOnlyList<string> Includes, IReadOnlyList<string> Excludes, int ScanCount, DateTime? LastScanAt, ScanStatus? LastScanStatus, int? ActiveScanId)
+{
+    public bool HasActiveScan => ActiveScanId is not null;
+}
 
 /// <summary>
 /// Scope management. Rules: a scope must be approved before any scan; editing a scope revokes approval;
@@ -45,7 +48,7 @@ public sealed class ScanTargetService(
                 Entries = t.Entries.Select(e => new { e.Value, e.IsExclusion }).ToList(),
                 ScanCount = t.Scans.Count,
                 Last = t.Scans.OrderByDescending(s => s.CreatedAt).Select(s => new { s.CreatedAt, s.Status }).FirstOrDefault(),
-                Active = t.Scans.Any(s => s.Status == ScanStatus.Pending || s.Status == ScanStatus.Running)
+                Active = t.Scans.Where(s => s.Status == ScanStatus.Pending || s.Status == ScanStatus.Running).OrderByDescending(s => s.Id).Select(s => (int?)s.Id).FirstOrDefault()
             })
             .OrderBy(t => t.Name)
             .ToListAsync(ct);

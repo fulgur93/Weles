@@ -4,6 +4,8 @@
 @inject LocalNetworkDiscovery LocalNetwork
 @inject ScanTargetService Targets
 @inject NavigationManager Navigation
+@inject ScanCoordinator Coordinator
+@implements IDisposable
 
 <PageTitle>@L.T("Wykrywanie sieci · WELES")</PageTitle>
 
@@ -169,7 +171,14 @@
                             {
                                 <input class="input input-sm mono" placeholder="22,80,443,8000-8100" @bind="_customPorts[t.Id]" />
                             }
-                            <button class="btn btn-primary btn-sm" disabled="@(t.HasActiveScan || _busy)" @onclick="() => StartAsync(t.Id)"><Icon Name="play" Size="14" /> @(t.HasActiveScan ? L.T("Skan w toku") : L.T("Uruchom skan"))</button>
+                            @if (t.ActiveScanId is { } activeId)
+                            {
+                                <a class="btn btn-primary btn-sm" href="scans/@activeId" title="@L.T("Skan działa w tle – możesz przechodzić między zakładkami. Kliknij, aby zobaczyć postęp.")"><span class="spinner" aria-hidden="true"></span> @L.T("Skan w toku – pokaż postęp")</a>
+                            }
+                            else
+                            {
+                                <button class="btn btn-primary btn-sm" disabled="@_busy" @onclick="() => StartAsync(t.Id)"><Icon Name="play" Size="14" /> @L.T("Uruchom skan")</button>
+                            }
                             <button class="btn btn-ghost btn-sm" @onclick="() => RevokeAsync(t.Id)">@L.T("Cofnij zatwierdzenie")</button>
                         }
                         else if (_approvingId != t.Id)
@@ -213,8 +222,18 @@
     protected override async Task OnInitializedAsync()
     {
         _interfaces = LocalNetwork.GetInterfaces();
+        Coordinator.ScanFinished += OnScanFinished;
         await ReloadAsync();
     }
+
+    // A scan finished in the background (maybe started from another tab): show the scope as ready again.
+    private void OnScanFinished(int scanId) => _ = InvokeAsync(async () =>
+    {
+        await ReloadAsync();
+        StateHasChanged();
+    });
+
+    public void Dispose() => Coordinator.ScanFinished -= OnScanFinished;
 
     private async Task ReloadAsync()
     {
