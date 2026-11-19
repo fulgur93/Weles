@@ -232,7 +232,8 @@ Ograniczenia znane po Etapie 2: brak UDP poza mDNS (SNMP, NetBIOS-NS, SSDP), bra
   Wykryty typ (`AssetType`) nadal się aktualizuje, a obowiązuje `EffectiveType = UserAssetType ?? AssetType`.
 - **Status urządzenia** (`AssetStatusRules`) liczony względem *ostatniego zakończonego skanu, który objął jego adres*
   (zakres odtwarzany ze `ScopeSnapshot`) lub w którym urządzenie zaobserwowano: Nowe / Aktywne / Nieobecne /
-  Poza ostatnimi skanami. Skan innej sieci nie czyni urządzenia „nieobecnym”; skany przerwane i zatrzymane się nie liczą.
+  Poza ostatnimi skanami / Nieznane. Skan innej sieci nie czyni urządzenia „nieobecnym”, ale jeśli po skanie jego sieci
+  wykonano skan innej rozpoznanej sieci, status to „Nieznane” (skany bez identyfikacji sieci, np. loopback, się nie liczą); skany przerwane i zatrzymane się nie liczą.
   „Aktywne” obejmuje też „Nowe” (urządzenie widziane po raz pierwszy jest obecne).
 - **Tożsamość sieci** (`NetworkIdentity`, `Scan.NetworkFingerprint`, migracja `Stage3NetworkIdentity`) – adres MAC bramy
   sieci, w której wykonano skan. Zakresy prywatne się powtarzają (192.168.0.0/24 w domu i w biurze), więc skan obejmuje
@@ -320,3 +321,4 @@ Ograniczenia znane po Etapie 2: brak UDP poza mDNS (SNMP, NetBIOS-NS, SSDP), bra
 | 2026‑11‑19 | Zakładka „Aktywne” pokazuje też urządzenia nowe – po pierwszym skanie była pusta (zgłoszone przez użytkownika). |
 | 2026‑11‑19 | Sieć skanu identyfikowana adresem MAC bramy: skan sieci przewodowej 192.168.0.0/24 oznaczał 12 urządzeń z domowej sieci 192.168.0.0/24 jako nieobecne. Komputer z WELES widziany przez Wi‑Fi i kabel występował jako dwa zasoby – teraz jeden. |
 | 2026‑11‑19 | Segment sieci identyfikowany przez CIDR **i** MAC bramy; lista domyślnie pokazuje bieżącą sieć (ukrywa tylko inne rozpoznane sieci, żeby nie gubić 127.0.0.1 ani podsieci za VPN – wykryte testem integracyjnym). |
+| 2026‑11‑19 | Status „Nieznane” dla urządzeń sieci, którą opuszczono: po skanie sieci przewodowej 11 urządzeń z sieci domowej było „Aktywnych”, choć nikt ich od dnia nie sprawdzał (zgłoszone przez użytkownika). |

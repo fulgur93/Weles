@@ -55,8 +55,10 @@ Limity (równoległość, tempo, timeouty, maks. liczba hostów) są w `appsetti
 - **Kolumny** – przycisk „Kolumny”; wybór jest zapamiętywany.
 - **Status**: *Aktywne* – wykryte w ostatnim skanie obejmującym jego adres (w tym *Nowe* – wykryte po raz pierwszy);
   *Nieobecne* – skan obejmował adres, ale urządzenia nie znalazł; *Poza ostatnimi skanami* – żaden ostatni skan nie
-  sprawdzał tego adresu. Liczą się tylko skany **tej samej sieci** (rozpoznawanej po adresie MAC routera): skan biura
-  192.168.0.0/24 nie zmienia statusu urządzeń z domowej sieci 192.168.0.0/24.
+  sprawdzał tego adresu; *Nieznane* – urządzenie sprawdzono ostatnio w jego sieci, ale potem skanowano inną sieć, więc
+  jego obecny stan nie jest znany (zmieni się po skanie jego sieci). Liczą się tylko skany **tej samej sieci**
+  (rozpoznawanej po adresie MAC routera): skan biura 192.168.0.0/24 nie czyni urządzeń z domowej sieci 192.168.0.0/24
+  „nieobecnymi”, tylko „nieznanymi”.
 - **Sieć** – lista domyślnie pokazuje urządzenia sieci, do której komputer jest teraz podłączony (rozpoznawanej po
   zakresie adresów i adresie MAC routera); urządzenia z innych sieci są ukryte z informacją, ile ich jest. Filtr
   „Wszystkie sieci” lub wybór konkretnej sieci pokazuje resztę. Kolumna „Sieć” podaje np.

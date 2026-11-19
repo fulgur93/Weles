@@ -49,11 +49,37 @@ public class NetworkIdentityTests
 
         var tv = AssetStatusRules.Evaluate("192.168.0.226", scans, new HashSet<int> { 1 }, 1, HomeGateway);
         Assert.Equal(1, tv.ReferenceScanId);
-        Assert.NotEqual(AssetStatus.Missing, tv.Status);
+        Assert.Equal(AssetStatus.Unknown, tv.Status); // last confirmed at home, the office has been scanned since
         Assert.Empty(AssetStatusRules.Absences("192.168.0.226", scans, new HashSet<int> { 1 }, TestData.Now.AddDays(-1), HomeGateway));
 
         // On the same network it is missing.
         Assert.Equal(AssetStatus.Missing, AssetStatusRules.Evaluate("192.168.0.226", scans, new HashSet<int> { 1 }, 1, OfficeGateway).Status);
+    }
+
+    [Fact]
+    public void Devices_of_a_network_left_behind_are_unknown_until_it_is_scanned_again()
+    {
+        var coverage = ScopeCoverage.FromSnapshot(JsonSerializer.Serialize(new[] { new { Value = "192.168.0.0/24", IsExclusion = false } }));
+        var loopback = ScopeCoverage.FromSnapshot(JsonSerializer.Serialize(new[] { new { Value = "127.0.0.1", IsExclusion = false } }));
+        CompletedScanCoverage Home(int id, int day) => new(id, TestData.Now.AddDays(day), coverage, HomeGateway);
+        CompletedScanCoverage Office(int id, int day) => new(id, TestData.Now.AddDays(day), coverage, OfficeGateway);
+
+        // Seen at home, then the laptop moved to the office and scanned there.
+        List<CompletedScanCoverage> scans = [Office(2, 0), Home(1, -1)];
+        Assert.Equal(AssetStatus.Unknown, AssetStatusRules.Evaluate("192.168.0.50", scans, new HashSet<int> { 1 }, 1, HomeGateway).Status);
+        Assert.Equal(AssetStatus.Unknown, AssetStatusRules.Evaluate("192.168.0.51", [Office(3, 0), Home(2, -1), Home(1, -2)], new HashSet<int> { 1 }, 1, HomeGateway).Status);
+
+        // Back home and scanned again: judged normally.
+        scans = [Home(3, 1), Office(2, 0), Home(1, -1)];
+        Assert.Equal(AssetStatus.Active, AssetStatusRules.Evaluate("192.168.0.50", scans, new HashSet<int> { 1, 3 }, 1, HomeGateway).Status);
+        Assert.Equal(AssetStatus.Missing, AssetStatusRules.Evaluate("192.168.0.51", scans, new HashSet<int> { 1 }, 1, HomeGateway).Status);
+
+        // Office devices stay active; a later scan without network identity (loopback) changes nothing.
+        scans = [new(4, TestData.Now.AddDays(2), loopback), Office(2, 0)];
+        Assert.Equal(AssetStatus.New, AssetStatusRules.Evaluate("192.168.0.60", scans, new HashSet<int> { 2 }, 2, OfficeGateway).Status);
+
+        // A device whose network is not identified (routed subnet, VPN) is never "left behind".
+        Assert.Equal(AssetStatus.New, AssetStatusRules.Evaluate("10.8.0.5", [Office(2, 0), Home(1, -1)], new HashSet<int> { 1 }, 1, null).Status);
     }
 
     private static HostScanResult Host(string ip, string? mac, string? hostname = null, bool gateway = false, IReadOnlySet<string>? localMacs = null) => new(

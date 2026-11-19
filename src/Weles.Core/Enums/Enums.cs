@@ -85,7 +85,9 @@ public enum AssetStatus
     /// <summary>The scan covered its address but did not find it.</summary>
     Missing = 2,
     /// <summary>No completed scan covered its address.</summary>
-    NotCovered = 3
+    NotCovered = 3,
+    /// <summary>Last judged on its own network, but a later scan ran on another network – its current state is unknown.</summary>
+    Unknown = 4
 }
 
 public enum AssetChangeKind

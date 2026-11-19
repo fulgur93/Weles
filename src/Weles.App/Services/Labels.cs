@@ -64,6 +64,7 @@ public static class Labels
         AssetStatus.Active => "Aktywne",
         AssetStatus.Missing => "Nieobecne",
         AssetStatus.NotCovered => "Poza ostatnimi skanami",
+        AssetStatus.Unknown => "Nieznane",
         _ => status.ToString()
     };
 
@@ -81,6 +82,7 @@ public static class Labels
         AssetStatus.Active => "Wykryte w ostatnim skanie obejmującym jego adres (w tym nowe)",
         AssetStatus.Missing => "Ostatni skan jego sieci obejmujący jego adres nie znalazł urządzenia (skany innych sieci z tym samym zakresem adresów się nie liczą)",
         AssetStatus.NotCovered => "Żaden zakończony skan nie obejmował ostatnio jego adresu",
+        AssetStatus.Unknown => "Ostatnio sprawdzone w swojej sieci, ale potem skanowano inną sieć – obecny stan nie jest znany. Zaktualizuje się po skanie jego sieci",
         _ => ""
     };
 
