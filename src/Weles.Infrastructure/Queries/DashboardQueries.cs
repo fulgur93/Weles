@@ -23,7 +23,7 @@ public sealed class DashboardQueries(IDbContextFactory<WelesDbContext> contextFa
             .FirstOrDefaultAsync(cancellationToken);
 
         var assetCount = await db.Assets.CountAsync(cancellationToken);
-        var openVulnerabilities = await db.AssetVulnerabilities.CountAsync(v => v.Status == FindingStatus.Open, cancellationToken);
+        var openVulnerabilities = await db.AssetVulnerabilities.CountAsync(v => v.Status == FindingStatus.Open && v.MatchStatus != VulnerabilityMatchStatus.InsufficientData, cancellationToken);
 
         int activeServices = 0, criticalFindings = 0, newAssets = 0;
         double? posture = null;

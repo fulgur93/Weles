@@ -1,0 +1,34 @@
+# WELES – lokalne laboratorium demonstracyjne.
+# Celowo stare, prawdziwe wersje usług dostępne WYŁĄCZNIE na adresach pętli zwrotnej (127.0.0.11–15).
+# Skan zakresu 127.0.0.11-127.0.0.15 (profil Szybki) daje prawdziwe wyniki i prawdziwe dopasowania CVE –
+# bez dotykania sieci, na której odbywa się prezentacja. Usługi nie zawierają danych; po pokazie: docker compose down.
+name: weles-demo-lab
+
+services:
+  apache:            # Apache httpd 2.4.49 – CVE-2021-41773 (CISA KEV), CVE-2021-42013
+    image: httpd:2.4.49
+    ports: ["127.0.0.11:80:80"]
+    restart: "no"
+
+  nginx:             # nginx 1.18.0 – m.in. CVE-2021-23017
+    image: nginx:1.18.0
+    ports: ["127.0.0.12:80:80"]
+    restart: "no"
+
+  redis:             # Redis 5.0.7 – m.in. CVE-2021-32626, CVE-2022-0543 (dotyczy pakietów Debiana)
+    image: redis:5.0.7
+    command: ["redis-server", "--protected-mode", "yes"]
+    ports: ["127.0.0.13:6379:6379"]
+    restart: "no"
+
+  openssh:           # OpenSSH 7.9p1 z Alpine 3.9 – m.in. CVE-2023-38408; logowanie wyłączone
+    build: ./openssh
+    ports: ["127.0.0.14:22:22"]
+    restart: "no"
+
+  mysql:             # MySQL 5.7.30 – liczne CVE z biuletynów Oracle CPU; losowe hasło root, brak danych
+    image: mysql:5.7.30
+    environment:
+      MYSQL_RANDOM_ROOT_PASSWORD: "yes"
+    ports: ["127.0.0.15:3306:3306"]
+    restart: "no"

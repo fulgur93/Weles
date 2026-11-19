@@ -1,0 +1,114 @@
+@page "/vulnerabilities/{CveId}"
+@using Weles.Core.Vulnerabilities
+@using Weles.Infrastructure.Queries
+@inject VulnerabilityQueries Queries
+
+<PageTitle>@CveId · WELES</PageTitle>
+
+@if (_loaded && _detail is null)
+{
+    <section class="card empty"><p>Nie ma <span class="mono">@CveId</span> w lokalnej bazie podatności. <a href="vulnerabilities">Wróć do listy</a>.</p></section>
+}
+else if (_detail is { } d)
+{
+    var v = d.Vulnerability;
+    <div class="page-header">
+        <div>
+            <p class="muted small"><a href="vulnerabilities">Vulnerabilities</a> /</p>
+            <h1 class="mono">@v.CveId</h1>
+            <p class="page-subtitle">@(v.Title ?? "Opis z NVD (w języku angielskim). Wyjaśnienie po polsku przygotuje AI Analyst w Etapie 6.")</p>
+        </div>
+        <a class="btn btn-ghost" href="https://nvd.nist.gov/vuln/detail/@v.CveId" target="_blank" rel="noopener noreferrer">NVD ↗</a>
+    </div>
+
+    <section class="grid-2">
+        <div class="card">
+            <div class="card-title"><Icon Name="vulnerabilities" /> Opis</div>
+            <p>@v.Description</p>
+            <dl class="facts">
+                <dt>CVSS</dt><dd>@if (v.CvssScore is { } c) { <StatusPill Tone="@Labels.Tone(v.Severity)">@c.ToString("0.0") · @(v.Severity is { } sev ? Labels.Of(sev) : "")</StatusPill> <span class="mono small muted">v@v.CvssVersion @v.CvssVector</span> } else { <span class="muted">brak oceny NVD</span> }</dd>
+                <dt>EPSS</dt><dd>@if (v.EpssScore is { } e) { <span>@Labels.Epss(e) szans na wykorzystanie w 30 dni</span> <span class="muted small">· percentyl @((v.EpssPercentile ?? 0) * 100 is var p ? p.ToString("0.#") : "")</span> } else { <span class="muted">brak</span> }</dd>
+                <dt>CISA KEV</dt><dd>@if (v.IsKnownExploited) { <StatusPill Tone="bad">Wykorzystywana w atakach</StatusPill> <span class="small"> od @v.KevDateAdded?.ToString("d")@(v.KevRansomwareUse ? " · używana przez ransomware" : "")</span> } else { <span class="muted">nie ma w katalogu</span> }</dd>
+                <dt>Opublikowano</dt><dd>@v.PublishedAt?.ToLocalTime().ToString("d") <span class="muted small">· zmiana w NVD @v.LastModifiedAt?.ToLocalTime().ToString("d")</span></dd>
+                @if (v.Weaknesses is { } w) { <dt>Słabość (CWE)</dt><dd class="mono small">@w</dd> }
+                <dt>Źródło</dt><dd>@(v.Source == "nvd" ? "NVD (analiza konfiguracji CPE)" : v.Source)</dd>
+            </dl>
+        </div>
+        <div class="card">
+            <div class="card-title"><Icon Name="layers" /> Podatne produkty i wersje (NVD)</div>
+            <ul class="checklist">
+                @foreach (var p in v.AffectedProducts.Take(40))
+                {
+                    var record = new AffectedProductRecord(p.Part, p.Vendor, p.Product, p.Version, p.VersionStartIncluding, p.VersionStartExcluding, p.VersionEndIncluding, p.VersionEndExcluding, p.Condition);
+                    <li><span class="mono small">@PartLabel(p.Part) @p.Vendor:@p.Product</span> · @record.Describe()@if (p.Condition is not null) { <span class="muted small"> · razem z @p.Condition</span> }</li>
+                }
+            </ul>
+            @if (v.AffectedProducts.Count > 40) { <p class="muted small">… i @(v.AffectedProducts.Count - 40) kolejnych wpisów.</p> }
+            @if (d.References.Count > 0)
+            {
+                <div class="card-title" style="margin-top:14px"><Icon Name="reports" /> Referencje</div>
+                <ul class="refs">
+                    @foreach (var r in d.References) { <li><a href="@r" target="_blank" rel="noopener noreferrer" class="small break">@r</a></li> }
+                </ul>
+            }
+        </div>
+    </section>
+
+    <section class="card">
+        <div class="card-title"><Icon Name="assets" /> Urządzenia (@d.Findings.Count)</div>
+        @if (d.Findings.Count == 0)
+        {
+            <p class="muted">Żadne urządzenie nie zostało dopasowane do tej podatności.</p>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Urządzenie</th><th>Dopasowanie</th><th>Uzasadnienie</th><th>Wykryto</th><th>Status</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var f in d.Findings)
+                        {
+                            <tr>
+                                <td><a href="assets/@f.AssetId">@f.AssetName</a><div class="muted small mono">@f.AssetIp</div></td>
+                                <td title="@Labels.Describe(f.MatchStatus)"><StatusPill Tone="@Labels.Tone(f.MatchStatus)">@Labels.Of(f.MatchStatus)</StatusPill><div class="muted small">pewność @f.MatchConfidence%</div></td>
+                                <td class="small">@f.MatchReason</td>
+                                <td class="small">@Labels.Local(f.FirstDetectedAt)<div class="muted">ostatnio @Labels.Local(f.LastDetectedAt)</div>@if (f.ResolvedAt is { } r) { <div class="tone-ok">rozwiązane @Labels.Local(r)</div> }</td>
+                                <td><StatusPill Tone="@Labels.Tone(f.Status)">@Labels.Of(f.Status)</StatusPill></td>
+                                <td>
+                                    @if (f.Status == FindingStatus.Open) { <button class="btn btn-ghost btn-sm" title="Ryzyko świadomie zaakceptowane (np. urządzenie odizolowane). Dopasowanie zostaje w historii." @onclick="() => SetStatus(f.Id, FindingStatus.Accepted)">Akceptuj ryzyko</button> }
+                                    else if (f.Status == FindingStatus.Accepted) { <button class="btn btn-ghost btn-sm" @onclick="() => SetStatus(f.Id, FindingStatus.Open)">Otwórz ponownie</button> }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+}
+else
+{
+    <div class="card loading">Wczytywanie…</div>
+}
+
+@code {
+    [Parameter] public string CveId { get; set; } = "";
+    private CveDetail? _detail;
+    private bool _loaded;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _detail = System.Text.RegularExpressions.Regex.IsMatch(CveId, @"^CVE-\d{4}-\d{4,}$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+            ? await Queries.GetCveAsync(CveId)
+            : null;
+        _loaded = true;
+    }
+
+    private async Task SetStatus(int id, FindingStatus status)
+    {
+        await Queries.SetStatusAsync(id, status);
+        _detail = await Queries.GetCveAsync(CveId);
+    }
+
+    private static string PartLabel(string part) => part switch { "h" => "sprzęt", "o" => "system/firmware", _ => "aplikacja" };
+}

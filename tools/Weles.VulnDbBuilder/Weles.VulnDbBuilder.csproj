@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <Description>Narzędzie budujące offline'ową bazę podatności dołączaną do WELES (NVD, CISA KEV, FIRST EPSS) – uruchamiane przez deploy/tools/update-vulndb.sh przed wydaniem.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Weles.Infrastructure\Weles.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.15" />
+  </ItemGroup>
+
+</Project>

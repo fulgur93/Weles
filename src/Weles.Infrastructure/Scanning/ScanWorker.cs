@@ -27,6 +27,7 @@ public sealed class ScanWorker(
             {
                 var engine = services.GetRequiredService<ScanEngine>();
                 await engine.RunAsync(scanId, progress, cts.Token);
+                await MatchVulnerabilitiesAsync(scanId, stoppingToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException || !stoppingToken.IsCancellationRequested)
             {
@@ -36,6 +37,28 @@ public sealed class ScanWorker(
             {
                 coordinator.End(scanId);
             }
+        }
+    }
+
+    /// <summary>Matches the devices of a finished scan against the local vulnerability database.</summary>
+    private async Task MatchVulnerabilitiesAsync(int scanId, CancellationToken ct)
+    {
+        try
+        {
+            var summary = await services.GetRequiredService<Vulnerabilities.VulnerabilityMatchingService>().RefreshScanAsync(scanId, ct);
+            await using var db = await contextFactory.CreateDbContextAsync(ct);
+            db.ScanEvents.Add(new ScanEvent
+            {
+                ScanId = scanId,
+                Level = ScanEventLevel.Info,
+                Message = $"Dopasowanie podatności: {summary.Open} otwartych dla {summary.Assets} urządzeń (nowe: {summary.New}, rozwiązane: {summary.Resolved}).",
+                Timestamp = timeProvider.GetUtcNow().UtcDateTime
+            });
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Vulnerability matching failed for scan {ScanId}", scanId);
         }
     }
 

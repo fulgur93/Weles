@@ -3,7 +3,11 @@ namespace Weles.Core.Rules;
 /// <summary>Maps a product display name to its CPE vendor/product (as used by NVD).</summary>
 public static class ProductCatalog
 {
-    public sealed record Product(string Name, string CpeVendor, string CpeProduct);
+    /// <param name="Aliases">Other vendor:product pairs NVD has used for the same software (older records).</param>
+    public sealed record Product(string Name, string CpeVendor, string CpeProduct, params (string Vendor, string Product)[] Aliases)
+    {
+        public IEnumerable<(string Vendor, string Product)> AllCpes => Aliases.Prepend((CpeVendor, CpeProduct));
+    }
 
     private static readonly Dictionary<string, Product> ByName = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -22,7 +26,7 @@ public static class ProductCatalog
         ["Dovecot"] = new("Dovecot", "dovecot", "dovecot"),
         ["Courier"] = new("Courier", "courier-mta", "courier"),
         ["Apache httpd"] = new("Apache httpd", "apache", "http_server"),
-        ["nginx"] = new("nginx", "f5", "nginx"),
+        ["nginx"] = new("nginx", "f5", "nginx", ("nginx", "nginx")),
         ["Microsoft IIS"] = new("Microsoft IIS", "microsoft", "internet_information_services"),
         ["lighttpd"] = new("lighttpd", "lighttpd", "lighttpd"),
         ["OpenResty"] = new("OpenResty", "openresty", "openresty"),
@@ -35,9 +39,9 @@ public static class ProductCatalog
         ["Werkzeug"] = new("Werkzeug", "palletsprojects", "werkzeug"),
         ["gunicorn"] = new("gunicorn", "gunicorn", "gunicorn"),
         ["PHP"] = new("PHP", "php", "php"),
-        ["MySQL"] = new("MySQL", "oracle", "mysql"),
+        ["MySQL"] = new("MySQL", "oracle", "mysql", ("mysql", "mysql")),
         ["MariaDB"] = new("MariaDB", "mariadb", "mariadb"),
-        ["Redis"] = new("Redis", "redis", "redis"),
+        ["Redis"] = new("Redis", "redis", "redis", ("redislabs", "redis")),
         ["PostgreSQL"] = new("PostgreSQL", "postgresql", "postgresql"),
         ["Apache Tomcat"] = new("Apache Tomcat", "apache", "tomcat"),
         ["dnsmasq"] = new("dnsmasq", "thekelleys", "dnsmasq"),
@@ -49,6 +53,35 @@ public static class ProductCatalog
     };
 
     public static Product? Find(string name) => ByName.GetValueOrDefault(name);
+
+    /// <summary>
+    /// CPE hardware vendor/product for a model named by <see cref="DeviceModel"/>: "TP-Link TL-WR841N" →
+    /// tp-link:tl-wr841n, "TP-Link Archer C6" → tp-link:archer_c6 (NVD naming). Null for vendors not covered.
+    /// </summary>
+    public static (string Vendor, string Product)? Hardware(string? model)
+    {
+        if (string.IsNullOrWhiteSpace(model)) return null;
+        foreach (var (prefix, vendor) in HardwareVendors)
+        {
+            if (model.StartsWith(prefix + " ", StringComparison.OrdinalIgnoreCase))
+            {
+                var product = model[(prefix.Length + 1)..].Trim().ToLowerInvariant().Replace(' ', '_');
+                return product.Length == 0 ? null : (vendor, product);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Hardware vendors whose NVD records are bundled (their CVEs are downloaded vendor-wide).</summary>
+    private static readonly (string Prefix, string CpeVendor)[] HardwareVendors = [("TP-Link", "tp-link")];
+
+    /// <summary>Hardware/firmware vendors for which the vulnerability feed downloads all CVEs.</summary>
+    public static IReadOnlyList<string> HardwareCpeVendors => HardwareVendors.Select(v => v.CpeVendor).Distinct().ToList();
+
+    /// <summary>Distinct CPE vendor/product pairs of the software WELES can identify.</summary>
+    public static IReadOnlyList<(string Vendor, string Product)> SoftwareCpes =>
+        ByName.Values.SelectMany(p => p.AllCpes).Distinct().OrderBy(p => p.Vendor).ThenBy(p => p.Product).ToList();
 
     /// <summary>
     /// Builds a CPE 2.3 application string. OpenSSH-style "8.9p1" is split into version "8.9" and update "p1", as in NVD.

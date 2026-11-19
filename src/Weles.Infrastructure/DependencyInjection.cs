@@ -10,6 +10,7 @@ using Weles.Infrastructure.Scanning;
 using Weles.Infrastructure.Platform;
 using Weles.Infrastructure.Queries;
 using Weles.Infrastructure.Settings;
+using Weles.Infrastructure.Vulnerabilities;
 
 namespace Weles.Infrastructure;
 
@@ -29,6 +30,7 @@ public static class DependencyInjection
         services.AddSingleton<DashboardQueries>();
         services.AddSingleton<ScanQueries>();
         services.AddSingleton<AssetQueries>();
+        services.AddSingleton<VulnerabilityQueries>();
         services.AddSingleton<Assets.AssetService>();
 
         services.Configure<ScanOptions>(configuration.GetSection(ScanOptions.SectionName));
@@ -40,6 +42,18 @@ public static class DependencyInjection
         services.AddSingleton<ScanEngine>();
         services.AddSingleton<ScanTargetService>();
         services.AddHostedService<ScanWorker>();
+
+        services.Configure<VulnerabilityFeedOptions>(configuration.GetSection(VulnerabilityFeedOptions.SectionName));
+        services.AddHttpClient<VulnerabilityFeedClient>(client =>
+        {
+            // Generic client name only – nothing about the user or the scanned network.
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("WELES-vulnerability-feed/1.0");
+            client.Timeout = Timeout.InfiniteTimeSpan; // per-request timeouts in the client; EPSS/NVD pages can be large
+        });
+        services.AddSingleton<VulnerabilityStore>();
+        services.AddSingleton<VulnerabilityMatchingService>();
+        services.AddSingleton<VulnerabilityDatabaseService>();
+        services.AddHostedService<VulnerabilityStartupService>();
 
         services.Configure<AiOptions>(configuration.GetSection(AiOptions.SectionName));
         services.AddHttpClient<IAiService, OllamaAiService>((sp, client) =>

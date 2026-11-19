@@ -6,7 +6,14 @@ SQLite – Public Domain
 Microsoft.Data.Sqlite / SQLitePCLRaw – MIT / Apache-2.0
 Serilog – Apache-2.0
 
+Vulnerability data (bundled snapshot and online updates):
+  NVD – National Vulnerability Database, NIST. This product uses data from the NVD API but is not endorsed or
+        certified by the NVD. U.S. Government work (public domain).
+  CISA Known Exploited Vulnerabilities Catalog – CISA, public domain.
+  EPSS – Exploit Prediction Scoring System, FIRST.org (https://www.first.org/epss). Scores used with attribution:
+        Jay Jacobs, Sasha Romanosky, Benjamin Edwards, Michael Roytman, Idris Adjerid, "Exploit Prediction Scoring
+        System", Digital Threats Research and Practice, 2(3), 2021.
+
 Bundled in later stages (listed when added to the package):
   Ollama – MIT License
   Qwen3-4B-Instruct-2507 (GGUF Q4_K_M) – Apache-2.0, (c) Alibaba Cloud
-  NVD data – U.S. Government work (public domain); CISA KEV – public domain; EPSS – FIRST.org, attribution required

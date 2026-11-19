@@ -34,7 +34,7 @@ public static class ModuleCatalog
             "Zewnętrzna powierzchnia ataku: domeny, DNS, certyfikaty i publiczne usługi – tylko zasoby, do których masz uprawnienia.",
             ["Rekordy A, AAAA, MX, NS, TXT", "Subdomeny z autoryzowanych źródeł (Certificate Transparency)", "Rozdzielenie analizy pasywnej od aktywnego skanowania"]),
 
-        new("Vulnerabilities", "vulnerabilities", "vulnerabilities", "Analiza", 4, false,
+        new("Vulnerabilities", "vulnerabilities", "vulnerabilities", "Analiza", 4, true,
             "Dopasowanie wykrytych wersji do znanych podatności z lokalnej bazy NVD, CISA KEV i EPSS.",
             ["Lokalna baza działająca offline z datą aktualizacji", "Dopasowanie po producencie, produkcie i zakresach wersji", "Statusy: potwierdzone, prawdopodobne, wymaga weryfikacji, brak danych", "Uwzględnienie poprawek dystrybucyjnych (backporty)"]),
         new("Risk Assessment", "risk", "risk", "Analiza", 5, false,

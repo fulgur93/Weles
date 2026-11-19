@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Discovery\Data\oui.txt.gz" LogicalName="Weles.oui.txt.gz" />
+    <EmbeddedResource Include="Vulnerabilities\Data\vulndb.json.gz" LogicalName="Weles.vulndb.json.gz" Condition="Exists('Vulnerabilities\Data\vulndb.json.gz')" />
   </ItemGroup>
 
   <ItemGroup>

@@ -210,10 +210,10 @@ public sealed class ScanResultWriter(IDbContextFactory<WelesDbContext> contextFa
             await db.DiscoveredHosts.Where(h => h.AssetId == otherId).ExecuteUpdateAsync(u => u.SetProperty(h => h.AssetId, target.Id));
             await db.RiskFindings.Where(f => f.AssetId == otherId).ExecuteUpdateAsync(u => u.SetProperty(f => f.AssetId, target.Id));
             await db.RiskScores.Where(r => r.AssetId == otherId).ExecuteUpdateAsync(u => u.SetProperty(r => r.AssetId, target.Id));
-            var existing = await db.AssetVulnerabilities.Where(v => v.AssetId == target.Id).Select(v => new { v.VulnerabilityId, v.DiscoveredServiceId }).ToListAsync();
+            var existing = await db.AssetVulnerabilities.Where(v => v.AssetId == target.Id).Select(v => v.VulnerabilityId).ToListAsync();
             foreach (var v in await db.AssetVulnerabilities.Where(v => v.AssetId == otherId).ToListAsync())
             {
-                if (existing.Any(e => e.VulnerabilityId == v.VulnerabilityId && e.DiscoveredServiceId == v.DiscoveredServiceId)) db.AssetVulnerabilities.Remove(v);
+                if (existing.Contains(v.VulnerabilityId)) db.AssetVulnerabilities.Remove(v);
                 else v.AssetId = target.Id;
             }
 

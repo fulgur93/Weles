@@ -13,6 +13,7 @@ i monitorowania powierzchni ataku infrastruktury IT. Projekt na HackNation 2026 
 dotnet run --project src/Weles.App            # otwiera przeglądarkę z http://127.0.0.1:5080
 dotnet run --project src/Weles.App -- --demo  # osobna baza demonstracyjna
 dotnet test
+deploy/tools/update-vulndb.sh                 # odświeża dołączoną bazę podatności (NVD, KEV, EPSS)
 ```
 
 Przełączniki: `--port N`, `--data-dir PATH`, `--demo`, `--no-browser`.
@@ -39,5 +40,6 @@ pwsh deploy/windows/publish.ps1 -Rid win-x64 # artifacts/weles-<ver>-win-x64.zip
 | 1 | Fundament: solution, Blazor, EF Core + SQLite, logowanie, bezpieczny hosting, layout | ✅ |
 | 2 | Network Discovery: zakresy z zatwierdzaniem, ICMP/TCP/ARP, porty, banery, HTTP, TLS, klasyfikacja, historia, postęp na żywo | ✅ |
 | 3 | Assets: inwentarz z wyszukiwaniem, filtrami, sortowaniem, historią zmian i polami ręcznymi | ✅ |
-| 4 | Vulnerability Intelligence | ⏳ następny |
-| 5–11 | Risk Engine, AI, Monitoring/Topology, External, Raporty, Agenci, Pakowanie | planowane |
+| 4 | Vulnerability Intelligence: lokalna baza NVD/KEV/EPSS działająca offline, aktualizacja na żądanie, dopasowanie wersji ze statusami i uzasadnieniem, laboratorium demo | ✅ |
+| 5 | Risk Engine | ⏳ następny |
+| 6–11 | AI, Monitoring/Topology, External, Raporty, Agenci, Pakowanie | planowane |

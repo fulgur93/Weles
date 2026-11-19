@@ -142,9 +142,9 @@ Kluczowa decyzja: **rozdzielenie tożsamości od obserwacji**.
 | `DiscoveredPort` | `Port`, `Protocol`, `State`, `Reason` | FK `DiscoveredHost` (Cascade), unikalny `(HostId, Port, Protocol)`, check `Port BETWEEN 1 AND 65535` |
 | `DiscoveredService` | `ServiceName`, `Product`, `Vendor`, `Version`, `Cpe`, `Banner` (≤ 1024 zn.), `Confidence` (0–100), `DetectionMethod`, `IsTls` | 1‑1 z `DiscoveredPort` (Cascade), check `Confidence BETWEEN 0 AND 100` |
 | `Certificate` | `Subject`, `Issuer`, `NotBefore`, `NotAfter`, `Thumbprint`, `SubjectAlternativeNames`, `KeyAlgorithm`, `KeySize`, `SignatureAlgorithm`, `TlsProtocol`, `IsSelfSigned`, `HostnameMatches` | FK `DiscoveredService` (Cascade), indeks `Thumbprint` |
-| `Vulnerability` | `CveId` (unikalny), `Title`, `Description`, `CvssScore`, `CvssVector`, `CvssVersion`, `Severity`, `EpssScore`, `EpssPercentile`, `IsKnownExploited`, `KevDateAdded`, `Source`, `PublishedAt`, `LastModifiedAt`, `ReferencesJson` | 1‑N `VulnerabilityAffectedProduct` |
-| `VulnerabilityAffectedProduct` | `Vendor`, `Product`, `Cpe`, `VersionStartIncluding/Excluding`, `VersionEndIncluding/Excluding` | FK Cascade, indeks `(Vendor, Product)` |
-| `AssetVulnerability` | `MatchStatus` (Potwierdzone/Prawdopodobne/Wymaga weryfikacji/Brak danych), `MatchConfidence`, `MatchReason`, `Status` (Open/Resolved/Accepted), `FirstDetectedAt`, `LastDetectedAt` | FK `Asset`, `Vulnerability`, opcjonalnie `DiscoveredService` i `Scan`; unikalny `(AssetId, VulnerabilityId, DiscoveredServiceId)` |
+| `Vulnerability` | `CveId` (unikalny), `Title`, `Description`, `CvssScore`, `CvssVector`, `CvssVersion`, `Severity`, `EpssScore`, `EpssPercentile`, `IsKnownExploited`, `KevDateAdded`, `KevRansomwareUse`, `Source`, `PublishedAt`, `LastModifiedAt`, `ReferencesJson`, `Weaknesses` (CWE) | 1‑N `VulnerabilityAffectedProduct` |
+| `VulnerabilityAffectedProduct` | `Part` (a/o/h), `Vendor`, `Product`, `Version` (dokładna), `VersionStartIncluding/Excluding`, `VersionEndIncluding/Excluding`, `Condition` (warunek AND z konfiguracji CPE) | FK Cascade, indeks `(Vendor, Product)` |
+| `AssetVulnerability` | `MatchStatus` (Potwierdzone/Prawdopodobne/Wymaga weryfikacji/Brak danych), `MatchConfidence`, `MatchReason`, `Status` (Open/Resolved/Accepted), `Port`, `Product`, `DetectedVersion`, `FirstDetectedAt`, `LastDetectedAt`, `ResolvedAt` | FK `Asset`, `Vulnerability`, opcjonalnie `DiscoveredService` i `Scan`; unikalny `(AssetId, VulnerabilityId)` – jedno dopasowanie na urządzenie i CVE (Etap 4) |
 | `RiskFinding` | `RuleId`, `Title`, `Description`, `Category`, `Level`, `Score`, `Evidence`, `Recommendation` | FK `Scan` (Cascade), `Asset` (Cascade) |
 | `RiskScore` | `Score`, `Level`, `BreakdownJson`, `CalculatedAt` | FK `Scan` (Cascade), `Asset` opcjonalny (null = Security Posture Score całej infrastruktury) |
 
@@ -263,6 +263,24 @@ Ograniczenia znane po Etapie 2: brak UDP poza mDNS (SNMP, NetBIOS-NS, SSDP), bra
   i polskich znaków (z jawnym ł → l); facety z licznikami; sortowanie wielokolumnowe (Shift+klik); paginacja; wybór
   kolumn zapisany w `ApplicationSetting` (`ui.assets.columns`).
 
+## 5b. Vulnerability Intelligence (Etap 4)
+
+| Element | Implementacja |
+|---------|---------------|
+| Źródła | NVD CVE API 2.0 (`virtualMatchString` = CPE produktu z `ProductCatalog` + aliasy dawnych nazw producenta, np. `nginx:nginx`, `mysql:mysql`, `redislabs:redis`; dla sprzętu cały producent `cpe:2.3:h:tp-link` / `o:tp-link`), CISA KEV (pełny JSON), FIRST EPSS (pełny CSV.gz filtrowany do CVE z bazy). MITRE CVE – przez rekordy NVD (to te same identyfikatory i opisy). MITRE ATT&CK – Etap 5/6 (mapowanie technik do ryzyk i wyjaśnień AI). |
+| Offline | `tools/Weles.VulnDbBuilder` (uruchamiany przez `deploy/tools/update-vulndb.sh`) buduje `Vulnerabilities/Data/vulndb.json.gz` – zasób osadzony w `Weles.Infrastructure` (2026‑11‑19: 5064 CVE, 56 w KEV, EPSS dla wszystkich, 1,1 MB). `VulnerabilityStartupService` importuje go w tle przy starcie (≈ 5 s), jeśli dane w bazie są starsze; nowszych danych pobranych online nie nadpisuje. |
+| Aktualizacja | Tylko na żądanie użytkownika (`VulnerabilityDatabaseService.StartOnlineUpdate`): NVD przyrostowo (`lastModStartDate/EndDate`, maks. 119 dni; nowe zapytanie katalogu – pełne), limit 6,5 s między żądaniami bez klucza (0,7 s z kluczem), ponawianie 403/429/5xx; KEV jako pełny katalog (CVE usunięte z KEV tracą flagę); EPSS. Błąd jednego źródła nie przerywa pozostałych; stan każdego źródła i data w `ApplicationSetting` `vulndb.state`. |
+| Parser | `NvdCveParser`: odrzucone CVE pomijane; CVSS v3.1 → v4.0 → v3.0 → v2 (ocena NVD „Primary” przed CNA); konfiguracje CPE: każdy `vulnerable` wpis → `AffectedProductRecord`, węzły AND → `Condition`, węzły zanegowane pomijane; referencje tylko http(s), maks. 12. |
+| Wersje | `VersionComparer`: liczby numerycznie, końcowe zera bez znaczenia (`1.0` = `1.0.0`), `alpha/beta/rc/pre/dev` przed wydaniem, sufiksy `p1`, litery OpenSSL po wydaniu, znaczniki `-log` pomijane. Dokładny wpis NVD (`openssh:9.3:-`) nie obejmuje `9.3p2` – to wydanie z poprawką. |
+| Dopasowanie | `VulnerabilityMatcher` (Core, bez I/O): producent **i** produkt CPE muszą się zgadzać, wersja musi być w zakresie. Status: *Potwierdzone* – rozpoznanie ≥ 90%, dokładna wersja, bez warunków; *Prawdopodobne* – rozpoznanie 70–89% lub warunek AND (np. system); *Wymaga weryfikacji* – sufiks dystrybucji (backporty), wersja mniej dokładna niż granica zakresu, brak zakresu w NVD, uwaga o wersji (DNS `version.bind` może należeć do serwera nadrzędnego) lub rozpoznanie < 70%; *Brak wystarczających danych* – model sprzętu z NVD (`h:tp-link:tl-wr841n`, z uwzględnieniem rewizji `v9`) bez znanej wersji firmware – z zakresem podatnego firmware w uzasadnieniu. Usługa bez wersji nie daje dopasowań (to byłby szum, nie dowód). |
+| Cykl życia | `VulnerabilityMatchingService` po każdym skanie (`ScanWorker`) i po aktualizacji bazy: dowody z aktualnych portów urządzenia (`ObservationComparer.Replay` – port nieobjęty profilem ostatniego skanu zachowuje stan) i z `Asset.Model`. Nowe dopasowanie → *Otwarte*; dowód zniknął → *Rozwiązane* (`ResolvedAt`); powrót dowodu → ponowne otwarcie tego samego rekordu; *Zaakceptowane* przez użytkownika zostaje. `MatcherVersion` wymusza ponowne dopasowanie po zmianie reguł. |
+| UI | `/vulnerabilities` – stan bazy z datą każdego źródła, aktualizacja z postępem i przerwaniem, lista dopasowań (filtry statusu, KEV, rozwiązane, wyszukiwanie); `/vulnerabilities/{CVE}` – opis, CVSS, EPSS, KEV, zakresy, referencje, urządzenia z uzasadnieniem, akceptacja ryzyka; tabela podatności w szczegółach urządzenia. Liczniki na pulpicie i liście urządzeń pomijają „Brak wystarczających danych”. |
+
+Weryfikacja na kopii bazy użytkownika (2026‑11‑19, 14 urządzeń, 2 sieci): import 5064 CVE w 4,7 s, 0 dopasowań –
+poprawnie: jedyna usługa z wersją z katalogu to BIND 9.20.26 na routerze (najnowsza poprawka w NVD dla gałęzi 9.20 to
+9.20.23), MicroStack (radio internetowe) nie ma CPE w katalogu, a model routera nie został zapisany w tych skanach.
+Zapytanie przyrostowe NVD sprawdzone na żywo (47 zmian OpenSSH od 2026‑08‑01).
+
 ## 6. Bezpieczeństwo aplikacji (Etap 1)
 
 - Kestrel nasłuchuje **wyłącznie** na `127.0.0.1` (port 5080 albo pierwszy wolny).
@@ -276,7 +294,7 @@ Ograniczenia znane po Etapie 2: brak UDP poza mDNS (SNMP, NetBIOS-NS, SSDP), bra
 | Etap | Zakres | Demo MVP? |
 |------|--------|-----------|
 | 1 | Fundament: solution, Blazor, EF Core + SQLite, migracje, ścieżki danych, Serilog z rotacją, bezpieczny hosting localhost, layout, dashboard (dane z bazy), ustawienia | ✅ |
-| 2 | Network Discovery: interfejsy, CIDR, zakresy z zatwierdzaniem, ICMP/TCP/ARP, porty, banery, TLS, HTTP, zapis do bazy, postęp na żywo, zatrzymanie | ✅ (laboratorium demo → Etap 4) |
+| 2 | Network Discovery: interfejsy, CIDR, zakresy z zatwierdzaniem, ICMP/TCP/ARP, porty, banery, TLS, HTTP, zapis do bazy, postęp na żywo, zatrzymanie | ✅ (laboratorium demo → Etap 4: `deploy/demo-lab`) |
 | 3 | Assets: tabela (szukanie, sortowanie, filtry, paginacja, kolumny), szczegóły, historia, pola ręczne, status obecności | ✅ |
 | 4 | Vulnerability Intelligence: NVD/KEV/EPSS, snapshot offline, matcher wersji ze statusami | ✅ |
 | 5 | Risk Engine: reguły, scoring z wyjaśnieniem, Security Posture Score, trend | ✅ |
@@ -322,3 +340,9 @@ Ograniczenia znane po Etapie 2: brak UDP poza mDNS (SNMP, NetBIOS-NS, SSDP), bra
 | 2026‑11‑19 | Sieć skanu identyfikowana adresem MAC bramy: skan sieci przewodowej 192.168.0.0/24 oznaczał 12 urządzeń z domowej sieci 192.168.0.0/24 jako nieobecne. Komputer z WELES widziany przez Wi‑Fi i kabel występował jako dwa zasoby – teraz jeden. |
 | 2026‑11‑19 | Segment sieci identyfikowany przez CIDR **i** MAC bramy; lista domyślnie pokazuje bieżącą sieć (ukrywa tylko inne rozpoznane sieci, żeby nie gubić 127.0.0.1 ani podsieci za VPN – wykryte testem integracyjnym). |
 | 2026‑11‑19 | Status „Nieznane” dla urządzeń sieci, którą opuszczono: po skanie sieci przewodowej 11 urządzeń z sieci domowej było „Aktywnych”, choć nikt ich od dnia nie sprawdzał (zgłoszone przez użytkownika). |
+| 2026‑11‑19 | Etap 4: dane podatności w głównej bazie SQLite (tabele z Etapu 1), snapshot jako zasób osadzony – jeden plik do wydania, import ~5 s. Zakres snapshotu = produkty, które WELES potrafi rozpoznać (ok. 5 tys. CVE zamiast 300 tys.), więc baza ma 1,1 MB. |
+| 2026‑11‑19 | Aktualizacja z Internetu tylko na kliknięcie i tylko ze stałą listą produktów – zapytania o wykryte wersje/modele ujawniałyby zawartość sieci użytkownika. |
+| 2026‑11‑19 | Jedno `AssetVulnerability` na (urządzenie, CVE) zamiast na usługę z danego skanu – każdy skan tworzy nowe `DiscoveredService`, więc stary indeks powielałby dopasowania. Migracja usuwa ewentualne duplikaty. |
+| 2026‑11‑19 | Dokładne porównanie wersji: test wykazał, że tolerowanie sufiksu (`9.3` ≈ `9.3p2`) oznaczało naprawioną wersję OpenSSH jako podatną. |
+| 2026‑11‑19 | Model sprzętu bez wersji firmware → „Brak wystarczających danych”, a nie brak wyniku: dla routera to najcenniejsza wskazówka (sprawdź firmware), ale nie jest liczona jako otwarta podatność. |
+| 2026‑11‑19 | Laboratorium demo (`deploy/demo-lab`): prawdziwe stare obrazy usług tylko na 127.0.0.11–15 zamiast symulowanych banerów – symulacja byłaby udawaniem wyników. Nieuruchomione lokalnie (brak Dockera). |

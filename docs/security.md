@@ -42,6 +42,23 @@ WELES służy do legalnych audytów infrastruktury, do której masz uprawnienia.
 - Logi nie zawierają haseł, kluczy ani tokenów.
 - Lokalne AI działa offline; WELES nie wysyła danych infrastruktury do usług zewnętrznych.
 
+## Połączenia wychodzące (Etap 4)
+
+WELES łączy się z Internetem **tylko** po kliknięciu „Aktualizuj z Internetu” w module Vulnerabilities:
+
+| Host | Co pobiera |
+|------|------------|
+| `services.nvd.nist.gov` | CVE dla stałej listy produktów z katalogu WELES (np. `cpe:2.3:a:openbsd:openssh`) i producentów sprzętu (TP-Link) |
+| `www.cisa.gov` | pełny katalog KEV (JSON) |
+| `epss.empiricalsecurity.com` | pełny plik EPSS (CSV.gz), filtrowany lokalnie do CVE z bazy |
+
+- Zapytania zawierają wyłącznie **stałą listę produktów** – nigdy wersji, modeli, adresów ani nazw wykrytych w sieci
+  użytkownika. Nagłówek `User-Agent` jest ogólny (`WELES-vulnerability-feed/1.0`).
+- Opcjonalny klucz API NVD (`Weles:Vulnerabilities:NvdApiKey`) jest wysyłany tylko do NVD i nie trafia do logów.
+- Bez Internetu działa baza dołączona do aplikacji (`vulndb.json.gz`); UI zawsze pokazuje datę danych.
+- Opisy CVE i referencje są danymi z zewnątrz: Blazor koduje je jako tekst, linki są ograniczone do `http(s)` i
+  otwierane z `rel="noopener noreferrer"`.
+
 ## Planowane
 
 - Walidacja importowanych archiwów (ZIP slip, limity rozmiaru, schemat) – Etap 9.

@@ -4,6 +4,7 @@
 @using Weles.Core.Rules
 @inject AssetQueries Queries
 @inject AssetService AssetEditor
+@inject NavigationManager Navigation
 
 <PageTitle>@(_detail?.Asset.DisplayName ?? "Urządzenie") · WELES</PageTitle>
 
@@ -109,7 +110,7 @@ else
             <div class="card-title" style="margin-top:18px"><Icon Name="risk" /> Ryzyko i podatności</div>
             <dl class="facts">
                 <dt>Ocena ryzyka</dt><dd>@(a.CurrentRiskScore is { } score ? $"{score:0} ({a.CurrentRiskLevel})" : "brak – ocena ryzyka powstanie w Etapie 5")</dd>
-                <dt>Podatności</dt><dd>@(_detail.Vulnerabilities.Count > 0 ? $"{_detail.Vulnerabilities.Count(v => v.Status == FindingStatus.Open)} otwartych" : "brak dopasowań – baza podatności i dopasowanie wersji powstaną w Etapie 4")</dd>
+                <dt>Podatności</dt><dd>@VulnerabilitySummary()</dd>
                 <dt>Relacje</dt><dd class="muted">powiązania z innymi urządzeniami – Etap 7 (Network Topology)</dd>
             </dl>
         </div>
@@ -136,17 +137,34 @@ else
 
     @if (_detail.Vulnerabilities.Count > 0)
     {
+        var shown = _detail.Vulnerabilities.Where(v => _showAllVulns || v.Status != FindingStatus.Resolved).ToList();
         <section class="card">
-            <div class="card-title"><Icon Name="vulnerabilities" /> Podatności</div>
-            <table class="table">
-                <thead><tr><th>CVE</th><th>CVSS</th><th>KEV</th><th>Dopasowanie</th><th>Status</th></tr></thead>
-                <tbody>
-                    @foreach (var v in _detail.Vulnerabilities)
-                    {
-                        <tr><td class="mono">@v.Vulnerability!.CveId</td><td>@v.Vulnerability.CvssScore</td><td>@(v.Vulnerability.IsKnownExploited ? "tak" : "—")</td><td>@v.MatchStatus (@v.MatchConfidence%)</td><td>@v.Status</td></tr>
-                    }
-                </tbody>
-            </table>
+            <div class="card-title"><Icon Name="vulnerabilities" /> Podatności
+                <span class="muted small">· dopasowane do aktualnych usług i modelu urządzenia</span>
+                @if (_detail.Vulnerabilities.Any(v => v.Status == FindingStatus.Resolved))
+                {
+                    <button class="btn btn-ghost btn-sm" style="margin-left:auto" @onclick="() => _showAllVulns = !_showAllVulns">@(_showAllVulns ? "Ukryj rozwiązane" : "Pokaż rozwiązane")</button>
+                }
+            </div>
+            <div class="table-wrap">
+                <table class="table table-hover">
+                    <thead><tr><th>CVE</th><th>Wykryto</th><th>CVSS</th><th>EPSS</th><th>KEV</th><th>Dopasowanie</th><th>Status</th></tr></thead>
+                    <tbody>
+                        @foreach (var v in shown)
+                        {
+                            <tr class="clickable" title="@v.MatchReason" @onclick="@(() => Navigation.NavigateTo($"vulnerabilities/{v.Vulnerability!.CveId}"))">
+                                <td class="mono"><strong>@v.Vulnerability!.CveId</strong>@if (v.Vulnerability.Title is not null) { <div class="muted small">@v.Vulnerability.Title</div> }</td>
+                                <td>@v.Product @v.DetectedVersion @if (v.Port is { } p) { <span class="muted small">· port @p</span> }</td>
+                                <td>@if (v.Vulnerability.CvssScore is { } c) { <StatusPill Tone="@Labels.Tone(v.Vulnerability.Severity)">@c.ToString("0.0")</StatusPill> } else { <span class="muted">—</span> }</td>
+                                <td class="mono small">@Labels.Epss(v.Vulnerability.EpssScore)</td>
+                                <td>@if (v.Vulnerability.IsKnownExploited) { <StatusPill Tone="bad">KEV</StatusPill> } else { <span class="muted">—</span> }</td>
+                                <td title="@Labels.Describe(v.MatchStatus)"><StatusPill Tone="@Labels.Tone(v.MatchStatus)">@Labels.Of(v.MatchStatus)</StatusPill> <span class="muted small">@v.MatchConfidence%</span></td>
+                                <td><StatusPill Tone="@Labels.Tone(v.Status)">@Labels.Of(v.Status)</StatusPill></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
         </section>
     }
 
@@ -189,6 +207,20 @@ else
 }
 
 @code {
+    private bool _showAllVulns;
+
+    private string VulnerabilitySummary()
+    {
+        var open = _detail!.Vulnerabilities.Where(v => v.Status == FindingStatus.Open).ToList();
+        if (_detail.Vulnerabilities.Count == 0) return "brak dopasowań do lokalnej bazy podatności";
+        var real = open.Count(v => v.MatchStatus != VulnerabilityMatchStatus.InsufficientData);
+        var model = open.Count - real;
+        var parts = new List<string> { $"{real} otwartych" };
+        if (open.Count(v => v.Vulnerability!.IsKnownExploited) is > 0 and var kev) parts.Add($"{kev} w CISA KEV");
+        if (model > 0) parts.Add($"{model} dla modelu urządzenia – wymaga sprawdzenia wersji firmware");
+        return string.Join(" · ", parts);
+    }
+
     [Parameter] public int AssetId { get; set; }
 
     private sealed class EditModel

@@ -86,6 +86,74 @@ public static class Labels
         _ => ""
     };
 
+    public static string Of(VulnerabilityMatchStatus status) => status switch
+    {
+        VulnerabilityMatchStatus.Confirmed => "Potwierdzone",
+        VulnerabilityMatchStatus.Probable => "Prawdopodobne",
+        VulnerabilityMatchStatus.NeedsVerification => "Wymaga weryfikacji",
+        VulnerabilityMatchStatus.InsufficientData => "Brak wystarczających danych",
+        _ => status.ToString()
+    };
+
+    public static string Tone(VulnerabilityMatchStatus status) => status switch
+    {
+        VulnerabilityMatchStatus.Confirmed => "bad",
+        VulnerabilityMatchStatus.Probable => "warn",
+        VulnerabilityMatchStatus.NeedsVerification => "info",
+        _ => "muted"
+    };
+
+    public static string Describe(VulnerabilityMatchStatus status) => status switch
+    {
+        VulnerabilityMatchStatus.Confirmed => "Producent, produkt i dokładna wersja z pewnego rozpoznania (baner/protokół) mieszczą się w zakresie podanym przez NVD",
+        VulnerabilityMatchStatus.Probable => "Wersja w zakresie, ale rozpoznanie jest mniej pewne albo NVD wymaga dodatkowego warunku (np. systemu), którego skan nie potwierdza",
+        VulnerabilityMatchStatus.NeedsVerification => "Wersja pasuje, ale mogą istnieć poprawki dystrybucji (backport), wersja jest niedokładna lub pewność rozpoznania jest niska (< 70%)",
+        VulnerabilityMatchStatus.InsufficientData => "Model urządzenia jest wymieniony w NVD, ale skan nie zna wersji oprogramowania – trzeba ją sprawdzić ręcznie",
+        _ => ""
+    };
+
+    public static string Of(FindingStatus status) => status switch
+    {
+        FindingStatus.Open => "Otwarte",
+        FindingStatus.Resolved => "Rozwiązane",
+        FindingStatus.Accepted => "Zaakceptowane",
+        _ => status.ToString()
+    };
+
+    public static string Tone(FindingStatus status) => status switch
+    {
+        FindingStatus.Open => "warn",
+        FindingStatus.Resolved => "ok",
+        _ => "muted"
+    };
+
+    public static string Of(RiskLevel level) => level switch
+    {
+        RiskLevel.Critical => "Krytyczna",
+        RiskLevel.High => "Wysoka",
+        RiskLevel.Medium => "Średnia",
+        RiskLevel.Low => "Niska",
+        RiskLevel.Informational => "Informacyjna",
+        _ => level.ToString()
+    };
+
+    public static string Tone(RiskLevel? level) => level switch
+    {
+        RiskLevel.Critical or RiskLevel.High => "bad",
+        RiskLevel.Medium => "warn",
+        RiskLevel.Low => "info",
+        _ => "muted"
+    };
+
+    /// <summary>EPSS as a percentage with sensible precision: 0.00043 → "0,04%", 0.94432 → "94,4%".</summary>
+    public static string Epss(double? score) => score switch
+    {
+        null => "—",
+        < 0.001 => (score.Value * 100).ToString("0.00") + "%",
+        < 0.1 => (score.Value * 100).ToString("0.0#") + "%",
+        _ => (score.Value * 100).ToString("0.0") + "%"
+    };
+
     public static string Of(AssetCriticality criticality) => criticality switch
     {
         AssetCriticality.Low => "Niska",

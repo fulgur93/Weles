@@ -50,7 +50,7 @@ else
         </div>
         <a class="kpi card kpi-link" href="assets"><div class="kpi-label">Urządzenia</div><div class="kpi-value">@_summary.AssetCount</div><div class="kpi-hint">nowe od ostatniego skanu: @_summary.NewAssetsSinceLastScan</div></a>
         <div class="kpi card"><div class="kpi-label">Aktywne usługi</div><div class="kpi-value">@_summary.ActiveServiceCount</div><div class="kpi-hint">otwarte porty w ostatnim skanie</div></div>
-        <div class="kpi card"><div class="kpi-label">Podatności</div><div class="kpi-value">@_summary.VulnerabilityCount</div><div class="kpi-hint">otwarte dopasowania</div></div>
+        <div class="kpi card"><div class="kpi-label">Podatności</div><div class="kpi-value">@_summary.VulnerabilityCount</div><div class="kpi-hint">otwarte dopasowania (bez „brak danych”)</div></div>
         <div class="kpi card kpi-critical"><div class="kpi-label">Krytyczne problemy</div><div class="kpi-value">@_summary.CriticalFindingCount</div><div class="kpi-hint">w ostatnim skanie</div></div>
     </section>
 
@@ -79,12 +79,13 @@ else
         <div class="card-title"><Icon Name="vulnerabilities" /> Baza podatności</div>
         @if (_summary?.VulnerabilityDatabaseUpdatedAt is { } updated)
         {
-            <StatusPill Tone="ok">Aktualizacja: @updated.ToLocalTime().ToString("d")</StatusPill>
+            <StatusPill Tone="ok">Dane z @updated.ToLocalTime().ToString("d")</StatusPill>
+            <p class="muted small"><a href="vulnerabilities">Szczegóły i aktualizacja</a></p>
         }
         else
         {
-            <StatusPill Tone="muted">Nie załadowano</StatusPill>
-            <p class="muted small">Lokalna baza NVD / CISA KEV / EPSS – Etap 4.</p>
+            <StatusPill Tone="muted">Wczytywanie bazy…</StatusPill>
+            <p class="muted small">Lokalna baza NVD / CISA KEV / EPSS jest importowana w tle przy pierwszym uruchomieniu.</p>
         }
     </div>
     <div class="card">

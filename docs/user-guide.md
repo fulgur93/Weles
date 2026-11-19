@@ -14,7 +14,7 @@ otwiera istniejącą sesję zamiast startować drugi serwer.
 | Assets | inwentarz urządzeń, status obecności, historia zmian, nazwy i krytyczność | ✅ Etap 3 |
 | Network Discovery / Scans | zakresy, wykrywanie urządzeń, porty, usługi, historia skanów | ✅ Etap 2 |
 | Attack Surface | domeny, DNS, certyfikaty, usługi publiczne | Etap 8 |
-| Vulnerabilities | dopasowania CVE (NVD, KEV, EPSS) | Etap 4 |
+| Vulnerabilities | dopasowania CVE (NVD, KEV, EPSS), lokalna baza i jej aktualizacja | ✅ Etap 4 |
 | Risk Assessment | ocena ryzyka z uzasadnieniem | Etap 5 |
 | Network Topology / Attack Paths / Monitoring | mapa, ścieżki ekspozycji, zmiany w czasie | Etap 7 |
 | AI Analyst | lokalny asystent bezpieczeństwa | Etap 6 |
@@ -71,6 +71,26 @@ Limity (równoległość, tempo, timeouty, maks. liczba hostów) są w `appsetti
 - **Edytuj** – własna nazwa (np. „Telefon Xiaomi”), typ, krytyczność dla organizacji (użyta w ocenie ryzyka) i notatki.
   Skany nie nadpisują tych pól.
 
+## Podatności (Vulnerabilities)
+
+- **Lokalna baza** – przy pierwszym uruchomieniu WELES importuje dołączoną bazę (NVD, CISA KEV, EPSS dla produktów,
+  które rozpoznaje). Działa bez Internetu; karta na górze pokazuje datę danych każdego źródła.
+- **Aktualizuj z Internetu** – pobiera zmiany z NVD (przyrostowo), pełny katalog KEV i aktualne wyniki EPSS; można
+  przerwać. Wysyłana jest tylko stała lista produktów WELES – nic o Twojej sieci.
+- **Dopasowanie** odbywa się po każdym skanie i po każdej aktualizacji bazy – do aktualnych usług urządzenia (z wersją
+  z banera lub protokołu) i do modelu urządzenia. Usługa bez wersji nie daje dopasowania.
+- **Status dopasowania**:
+  *Potwierdzone* – producent, produkt i dokładna wersja (pewne rozpoznanie ≥ 90%) w zakresie NVD;
+  *Prawdopodobne* – rozpoznanie 70–89% albo NVD wymaga dodatkowego warunku (np. systemu);
+  *Wymaga weryfikacji* – pakiet dystrybucji (Ubuntu, Debian… – poprawki mogą być przeniesione bez zmiany wersji),
+  wersja niedokładna (np. `2.4` wobec granicy `2.4.52`) albo pewność rozpoznania < 70%;
+  *Brak wystarczających danych* – model urządzenia (np. router TP-Link) jest w NVD, ale wersji firmware skan nie zna –
+  sprawdź ją w panelu urządzenia.
+  Każde dopasowanie ma uzasadnienie (najedź na wiersz) i procent pewności.
+- **Status podatności**: *Otwarte*; *Rozwiązane* – kolejny skan nie potwierdził dowodu (np. nowsza wersja);
+  *Zaakceptowane* – świadoma decyzja w szczegółach CVE (przycisk „Akceptuj ryzyko”), zachowywana przez kolejne skany.
+- **Szczegóły CVE** – opis z NVD, CVSS, EPSS, obecność w CISA KEV, podatne zakresy wersji, referencje i lista urządzeń.
+
 ## Telefony i tablety
 
 WELES sprawdza, co telefon **wystawia w sieci**: otwarte porty, ADB przez sieć (z autoryzacją lub bez), debugowanie
@@ -81,6 +101,12 @@ Aby przetestować wykrywanie, włącz na telefonie *Opcje programisty → Debugo
 ## Motyw
 
 Domyślny jest ciemny. Przełącznik w prawym górnym rogu lub w Settings → Wygląd. Wybór zapisywany jest w bazie.
+
+## Laboratorium demonstracyjne
+
+`deploy/demo-lab` (Docker Compose) uruchamia prawdziwe, stare wersje usług wyłącznie na adresach 127.0.0.11–15.
+Skan tego zakresu z profilem Szybki pokazuje wykrywanie usług i dopasowania CVE bez skanowania sieci na sali
+(szczegóły w `deploy/demo-lab/README.md`).
 
 ## Tryb demonstracyjny
 

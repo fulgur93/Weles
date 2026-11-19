@@ -140,6 +140,10 @@ namespace Weles.Infrastructure.Database.Migrations
                     b.Property<int>("AssetId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("DetectedVersion")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("DiscoveredServiceId")
                         .HasColumnType("INTEGER");
 
@@ -160,6 +164,16 @@ namespace Weles.Infrastructure.Database.Migrations
                     b.Property<int>("MatchStatus")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("Port")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Product")
+                        .HasMaxLength(255)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("ScanId")
                         .HasColumnType("INTEGER");
 
@@ -179,7 +193,7 @@ namespace Weles.Infrastructure.Database.Migrations
 
                     b.HasIndex("VulnerabilityId");
 
-                    b.HasIndex("AssetId", "VulnerabilityId", "DiscoveredServiceId")
+                    b.HasIndex("AssetId", "VulnerabilityId")
                         .IsUnique();
 
                     b.ToTable("AssetVulnerabilities", t =>
@@ -770,6 +784,9 @@ namespace Weles.Infrastructure.Database.Migrations
                     b.Property<DateTime?>("KevDateAdded")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("KevRansomwareUse")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTime?>("LastModifiedAt")
                         .HasColumnType("TEXT");
 
@@ -788,6 +805,10 @@ namespace Weles.Infrastructure.Database.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Title")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Weaknesses")
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
@@ -812,8 +833,17 @@ namespace Weles.Infrastructure.Database.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("Condition")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Cpe")
                         .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Part")
+                        .IsRequired()
+                        .HasMaxLength(1)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Product")
@@ -824,6 +854,10 @@ namespace Weles.Infrastructure.Database.Migrations
                     b.Property<string>("Vendor")
                         .IsRequired()
                         .HasMaxLength(255)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Version")
+                        .HasMaxLength(100)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("VersionEndExcluding")

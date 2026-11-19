@@ -132,7 +132,7 @@ public sealed class AssetQueries(IDbContextFactory<WelesDbContext> contextFactor
                 GatewayVendor = a.NetworkSegment != null ? a.NetworkSegment.GatewayVendor : null,
                 GatewayMac = a.NetworkSegment != null ? a.NetworkSegment.GatewayMac : null,
                 a.CurrentRiskScore, a.CurrentRiskLevel, a.FirstSeenAt, a.LastSeenAt,
-                OpenVulns = a.Vulnerabilities.Count(v => v.Status == FindingStatus.Open)
+                OpenVulns = a.Vulnerabilities.Count(v => v.Status == FindingStatus.Open && v.MatchStatus != VulnerabilityMatchStatus.InsufficientData)
             })
             .ToListAsync(ct);
 
