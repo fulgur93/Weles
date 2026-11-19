@@ -5,6 +5,8 @@
 @inject AssetQueries Queries
 @inject AssetService AssetEditor
 @inject NavigationManager Navigation
+@inject RiskQueries RiskQueries
+@inject Weles.Infrastructure.Risk.RiskAssessmentService RiskAssessment
 
 <PageTitle>@(_detail?.Asset.DisplayName is { } title ? L.Message(title) : L.T("Urządzenie")) · WELES</PageTitle>
 
@@ -109,12 +111,78 @@ else
             }
             <div class="card-title" style="margin-top:18px"><Icon Name="risk" /> @L.T("Ryzyko i podatności")</div>
             <dl class="facts">
-                <dt>@L.T("Ocena ryzyka")</dt><dd>@(a.CurrentRiskScore is { } score ? $"{score:0} ({(a.CurrentRiskLevel is { } lvl ? Labels.Of(lvl) : "")})" : L.T("brak – ocena ryzyka powstanie w Etapie 5"))</dd>
+                <dt>@L.T("Ocena ryzyka")</dt><dd>@if (a.CurrentRiskScore is { } score) { <StatusPill Tone="@Labels.Tone(a.CurrentRiskLevel)">@score.ToString("0") · @(a.CurrentRiskLevel is { } lvl ? Labels.Of(lvl) : "")</StatusPill> <a class="small" href="#risk">@L.T("dlaczego?")</a> } else { <span class="muted">@L.T("brak – urządzenie nie było jeszcze ocenione")</span> }</dd>
                 <dt>@L.T("Podatności")</dt><dd>@VulnerabilitySummary()</dd>
                 <dt>@L.T("Relacje")</dt><dd class="muted">@L.T("powiązania z innymi urządzeniami – Etap 7 (Topologia sieci)")</dd>
             </dl>
         </div>
     </section>
+
+    @if (_risk is { } risk)
+    {
+        <section class="card" id="risk">
+            <div class="card-title"><Icon Name="risk" /> @L.T("Ocena ryzyka")
+                <StatusPill Tone="@Labels.Tone(risk.Result.Level)">@risk.Result.Score.ToString("0") · @Labels.Of(risk.Result.Level)</StatusPill>
+                <span class="muted small">· <a href="scans/@risk.ScanId">@L.F("Skan #{0}", risk.ScanId)</a> · @Labels.Local(risk.AssessedAt)</span>
+            </div>
+            <div class="grid-2 risk-detail">
+                <div>
+                    <div class="subtitle">@L.T("Jak powstał wynik")</div>
+                    <ul class="factor-list">
+                        @foreach (var f in risk.Result.Factors) { <li><span>@L.Message(f.Text)</span>@if (f.Points != 0) { <span class="mono">@f.Points.ToString("+0.#;-0.#")</span> }</li> }
+                        <li class="factor-total"><span>@L.T("Razem (0–100)")</span><span class="mono">@risk.Result.Score.ToString("0.#")</span></li>
+                    </ul>
+                    @if (risk.History.Count > 1)
+                    {
+                        <p class="muted small">@L.T("Historia:") @string.Join(" → ", risk.History.Select(h => h.Score.ToString("0")))</p>
+                    }
+                </div>
+                <div>
+                    <div class="subtitle">@L.T("Problemy do naprawy")</div>
+                    @if (risk.Result.Issues.Count == 0)
+                    {
+                        <p class="muted">@L.T("Brak wykrytych problemów i dopasowanych podatności.")</p>
+                    }
+                    <ol class="issue-list">
+                        @foreach (var i in risk.Result.Issues)
+                        {
+                            <li>
+                                <div><StatusPill Tone="@Labels.Tone(i.Level)">@i.Score.ToString("0")</StatusPill> <strong>@L.Message(i.Title)</strong></div>
+                                <ul class="reasons-list small">@foreach (var r in i.Reasons) { <li>@L.Message(r)</li> }</ul>
+                                <div class="small">@L.Message(i.Recommendation)</div>
+                                <AttackChips Techniques="i.AttackTechniques" />
+                            </li>
+                        }
+                    </ol>
+                </div>
+            </div>
+            @if (risk.Findings.Count > 0)
+            {
+                <div class="subtitle" style="margin-top:14px">@L.T("Problemy konfiguracji")</div>
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead><tr><th>@L.T("Problem")</th><th>@L.T("Port")</th><th>@L.T("Dowód")</th><th>@L.T("Pewność")</th><th>@L.T("Status")</th><th></th></tr></thead>
+                        <tbody>
+                            @foreach (var f in risk.Findings)
+                            {
+                                <tr>
+                                    <td>@L.Message(f.Title)</td>
+                                    <td class="mono">@(f.Port?.ToString() ?? "—")</td>
+                                    <td class="small">@L.Message(f.Evidence)</td>
+                                    <td>@f.Confidence%</td>
+                                    <td><StatusPill Tone="@Labels.Tone(f.Status)">@Labels.Of(f.Status)</StatusPill>@if (f.ResolvedAt is { } r) { <div class="muted small">@Labels.Local(r)</div> }</td>
+                                    <td>
+                                        @if (f.Status == FindingStatus.Open) { <button class="btn btn-ghost btn-sm" title="@L.T("Ryzyko świadomie zaakceptowane (np. urządzenie odizolowane). Dopasowanie zostaje w historii.")" @onclick="() => SetFindingAsync(f.Id, FindingStatus.Accepted)">@L.T("Akceptuj ryzyko")</button> }
+                                        else if (f.Status == FindingStatus.Accepted) { <button class="btn btn-ghost btn-sm" @onclick="() => SetFindingAsync(f.Id, FindingStatus.Open)">@L.T("Otwórz ponownie")</button> }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+    }
 
     <section class="card">
         <div class="card-title"><Icon Name="scans" /> @L.T("Aktualne usługi")
@@ -208,6 +276,15 @@ else
 
 @code {
     private bool _showAllVulns;
+    private AssetRiskDetail? _risk;
+
+    private async Task SetFindingAsync(int id, FindingStatus status)
+    {
+        await RiskQueries.SetFindingStatusAsync(id, status);
+        // The decision changes the score at once – re-assess the latest scan of this device.
+        if (await RiskQueries.LatestScanOfAssetAsync(AssetId) is { } scanId) await RiskAssessment.RefreshScanAsync(scanId);
+        await LoadAsync();
+    }
 
     private string VulnerabilitySummary()
     {
@@ -246,6 +323,7 @@ else
     private async Task LoadAsync()
     {
         _detail = await Queries.GetAsync(AssetId);
+        _risk = _detail is null ? null : await RiskQueries.AssetAsync(AssetId);
         _notFound = _detail is null;
     }
 

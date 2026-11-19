@@ -15,7 +15,7 @@ otwiera istniejącą sesję zamiast startować drugi serwer.
 | Network Discovery / Scans | zakresy, wykrywanie urządzeń, porty, usługi, historia skanów | ✅ Etap 2 |
 | Attack Surface | domeny, DNS, certyfikaty, usługi publiczne | Etap 8 |
 | Vulnerabilities | dopasowania CVE (NVD, KEV, EPSS), lokalna baza i jej aktualizacja | ✅ Etap 4 |
-| Risk Assessment | ocena ryzyka z uzasadnieniem | Etap 5 |
+| Ocena ryzyka | Security Posture Score, trend, priorytety napraw, ocena każdego urządzenia z uzasadnieniem | ✅ Etap 5 |
 | Network Topology / Attack Paths / Monitoring | mapa, ścieżki ekspozycji, zmiany w czasie | Etap 7 |
 | AI Analyst | lokalny asystent bezpieczeństwa | Etap 6 |
 | Reports | PDF, eksport/import audytu | Etap 9 |
@@ -92,6 +92,20 @@ Limity (równoległość, tempo, timeouty, maks. liczba hostów) są w `appsetti
 - **Status podatności**: *Otwarte*; *Rozwiązane* – kolejny skan nie potwierdził dowodu (np. nowsza wersja);
   *Zaakceptowane* – świadoma decyzja w szczegółach CVE (przycisk „Akceptuj ryzyko”), zachowywana przez kolejne skany.
 - **Szczegóły CVE** – opis z NVD, CVSS, EPSS, obecność w CISA KEV, podatne zakresy wersji, referencje i lista urządzeń.
+
+## Ocena ryzyka
+
+- **Security Posture Score** (0–100, wyżej = lepiej) dla każdej sieci: 100 − (½ oceny najbardziej zagrożonego
+  urządzenia + ½ średniej pięciu najbardziej zagrożonych). Zapisywany po każdym skanie – wykres pokazuje trend.
+- **Ocena urządzenia** (0–100, wyżej = gorzej): najpoważniejszy problem + 10% pozostałych, potem krytyczność
+  urządzenia (ustawiana w szczegółach urządzenia), rola (router, serwer, NAS), ekspozycja, liczba usług, wiek
+  oprogramowania i nowe porty. W szczegółach urządzenia widać każdy składnik z liczbą punktów.
+- **Problemy**: podatności (CVSS, CISA KEV, EPSS, pewność dopasowania; CVE jednego programu to jedna pozycja
+  „Zaktualizuj…”) i problemy konfiguracji (np. Telnet, Redis bez hasła, ADB przez sieć, logowanie bez szyfrowania,
+  certyfikaty). Każdy ma dowód, zalecenie i techniki MITRE ATT&CK.
+- **Priorytety napraw** – lista „co naprawić najpierw”: ocena problemu wzmocniona kontekstem urządzenia.
+- **Akceptuj ryzyko** (szczegóły urządzenia / CVE) – świadoma decyzja; problem zostaje w historii, ale nie podnosi oceny.
+- Poziomy: Critical ≥ 80, High ≥ 60, Medium ≥ 35, Low ≥ 15, Informational.
 
 ## Telefony i tablety
 

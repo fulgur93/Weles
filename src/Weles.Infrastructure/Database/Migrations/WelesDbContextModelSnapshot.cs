@@ -486,10 +486,17 @@ namespace Weles.Infrastructure.Database.Migrations
                     b.Property<int>("AssetId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("AttackTechniques")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Category")
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("Confidence")
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
@@ -502,11 +509,20 @@ namespace Weles.Infrastructure.Database.Migrations
                         .HasMaxLength(4000)
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime>("LastDetectedAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("Level")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("Port")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("Recommendation")
                         .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ResolvedAt")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("RuleId")
@@ -530,9 +546,9 @@ namespace Weles.Infrastructure.Database.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AssetId");
-
                     b.HasIndex("ScanId", "Level");
+
+                    b.HasIndex("AssetId", "RuleId", "Port");
 
                     b.ToTable("RiskFindings");
                 });

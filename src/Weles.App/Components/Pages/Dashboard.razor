@@ -1,6 +1,7 @@
 @page "/"
 @inject Weles.Infrastructure.Queries.DashboardQueries Queries
 @inject IAiService Ai
+@inject Weles.Infrastructure.Queries.RiskQueries RiskQueries
 
 <PageTitle>@L.T("Pulpit · WELES")</PageTitle>
 
@@ -43,16 +44,37 @@ else if (!_summary.HasAnyScan)
 else
 {
     <section class="kpi-grid">
-        <div class="kpi card">
+        <a class="kpi card kpi-link" href="risk">
             <div class="kpi-label">@L.T("Ocena stanu bezpieczeństwa")</div>
-            <div class="kpi-value">@(_summary.SecurityPostureScore is { } s ? s.ToString("0") : "—")</div>
-            <div class="kpi-hint">@(_summary.SecurityPostureScore is null ? L.T("Ocena ryzyka – Etap 5") : L.T("0–100, wyżej = lepiej"))</div>
-        </div>
+            <div class="kpi-value @(_summary.SecurityPostureScore is { } ps ? "tone-" + RiskPage.PostureTone(ps) : "")">@(_summary.SecurityPostureScore is { } s ? s.ToString("0") : "—")</div>
+            <div class="kpi-hint">@(_summary.SecurityPostureScore is null ? L.T("pojawi się po pierwszym skanie") : L.T("0–100, wyżej = lepiej"))</div>
+        </a>
         <a class="kpi card kpi-link" href="assets"><div class="kpi-label">@L.T("Urządzenia")</div><div class="kpi-value">@_summary.AssetCount</div><div class="kpi-hint">@L.F("nowe od ostatniego skanu: {0}", _summary.NewAssetsSinceLastScan)</div></a>
         <div class="kpi card"><div class="kpi-label">@L.T("Aktywne usługi")</div><div class="kpi-value">@_summary.ActiveServiceCount</div><div class="kpi-hint">@L.T("otwarte porty w ostatnim skanie")</div></div>
         <div class="kpi card"><div class="kpi-label">@L.T("Podatności")</div><div class="kpi-value">@_summary.VulnerabilityCount</div><div class="kpi-hint">@L.T("otwarte dopasowania (bez „brak danych”)")</div></div>
-        <div class="kpi card kpi-critical"><div class="kpi-label">@L.T("Krytyczne problemy")</div><div class="kpi-value">@_summary.CriticalFindingCount</div><div class="kpi-hint">@L.T("w ostatnim skanie")</div></div>
+        <a class="kpi card kpi-critical kpi-link" href="risk"><div class="kpi-label">@L.T("Krytyczne problemy")</div><div class="kpi-value">@_summary.CriticalFindingCount</div><div class="kpi-hint">@L.T("w ostatnim skanie")</div></a>
     </section>
+
+    @if (_priorities is { Count: > 0 })
+    {
+        <section class="card">
+            <div class="card-title"><Icon Name="alert" /> @L.T("Priorytety napraw") <a class="small" href="risk" style="margin-left:auto">@L.T("Wszystkie")</a></div>
+            <ol class="priority-list compact">
+                @foreach (var (p, i) in _priorities.Select((p, i) => (p, i)))
+                {
+                    <li class="priority">
+                        <a class="priority-head" href="assets/@p.AssetId">
+                            <span class="priority-rank">@(i + 1)</span>
+                            <StatusPill Tone="@Labels.Tone(p.Level)">@p.Priority.ToString("0")</StatusPill>
+                            <span class="priority-title">@L.Message(p.Issue.Title)</span>
+                            <span class="muted small">@L.Message(p.AssetName) · <span class="mono">@p.AssetIp</span></span>
+                            @if (p.Issue.KnownExploited > 0) { <StatusPill Tone="bad">@L.T("KEV")</StatusPill> }
+                        </a>
+                    </li>
+                }
+            </ol>
+        </section>
+    }
 
     @if (_summary.LastScan is { } last)
     {
@@ -97,10 +119,12 @@ else
 @code {
     private DashboardSummary? _summary;
     private AiEngineStatus? _ai;
+    private IReadOnlyList<Weles.Infrastructure.Queries.RemediationItem>? _priorities;
 
     protected override async Task OnInitializedAsync()
     {
         _summary = await Queries.GetSummaryAsync();
+        _priorities = await RiskQueries.PrioritiesAsync(3);
         _ai = await Ai.GetStatusAsync();
     }
 }

@@ -58,8 +58,12 @@ public class DashboardQueriesTests
                 Ports = [new DiscoveredPort { Port = 80, State = PortState.Open }, new DiscoveredPort { Port = 443, State = PortState.Open }, new DiscoveredPort { Port = 23, State = PortState.Closed }]
             });
             latest.Hosts.Add(new DiscoveredHost { IpAddress = "10.0.0.9", Asset = newAsset, DiscoveredAt = TestData.Now, Ports = [new DiscoveredPort { Port = 554, State = PortState.Open }] });
-            latest.Findings.Add(new RiskFinding { Asset = newAsset, RuleId = "R1", Title = "t", Category = "c", Level = RiskLevel.Critical, CreatedAt = TestData.Now });
-            latest.Findings.Add(new RiskFinding { Asset = oldAsset, RuleId = "R2", Title = "t", Category = "c", Level = RiskLevel.Low, CreatedAt = TestData.Now });
+            // Device assessments of the latest scan: one Critical issue in total (written as the risk engine stores them).
+            static string Breakdown(params RiskLevel[] issues) => System.Text.Json.JsonSerializer.Serialize(
+                new Weles.Core.Risk.AssetRiskResult(50, RiskLevel.Medium, [], issues.Select((l, i) => new Weles.Core.Risk.RiskIssue($"k{i}", "configuration", "t", 50, l, null, "r", [], [])).ToList()),
+                new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+            latest.RiskScores.Add(new RiskScore { Asset = newAsset, Score = 90, Level = RiskLevel.Critical, BreakdownJson = Breakdown(RiskLevel.Critical, RiskLevel.Low), CalculatedAt = TestData.Now });
+            latest.RiskScores.Add(new RiskScore { Asset = oldAsset, Score = 20, Level = RiskLevel.Low, BreakdownJson = Breakdown(RiskLevel.Low), CalculatedAt = TestData.Now });
             latest.RiskScores.Add(new RiskScore { Score = 72, Level = RiskLevel.Medium, BreakdownJson = "[]", CalculatedAt = TestData.Now });
 
             var running = new Scan { ScanTarget = target, Status = ScanStatus.Running, PortSpecification = "top100", CreatedAt = TestData.Now.AddHours(1), StartedAt = TestData.Now.AddHours(1) };

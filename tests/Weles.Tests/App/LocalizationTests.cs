@@ -173,6 +173,43 @@ public partial class LocalizationTests
         generated.AddRange(ObservationComparer.Compare(Host("10.0.0.1", "aa:aa:aa:aa:aa:aa", "8.9p1", 22, 80), Host("10.0.0.2", "bb:bb:bb:bb:bb:bb", "9.6p1", 22, 443)).Select(c => c.Description));
 
         generated.Add(new AffectedProductRecord("a", "x", "y").Describe());
+
+        // Risk engine: every rule (title, category, recommendation, evidence) and every score factor.
+        var now = new DateTime(2026, 11, 19, 0, 0, 0, DateTimeKind.Utc);
+        foreach (var rule in Weles.Core.Risk.RiskRules.All) generated.AddRange([rule.Title, rule.Category, rule.Recommendation]);
+        Weles.Core.Risk.ServiceFacts Svc(int port, string name, Dictionary<string, string> extra, Weles.Core.Risk.CertificateFacts? cert = null, string method = "banner") =>
+            new(port, name, "Product", 90, method, false, extra, cert);
+        var services = new[]
+        {
+            Svc(5555, "adb", new() { ["adb.auth"] = "none" }), Svc(5556, "adb", new() { ["adb.auth"] = "required" }), Svc(2375, "docker", []),
+            Svc(6379, "redis", new() { ["redis.auth"] = "none" }), Svc(9000, "http", new() { ["http.panel"] = "Portainer", ["http.panelCategory"] = "devops" }),
+            Svc(23, "telnet", []), Svc(80, "http", new() { ["http.basicOverHttp"] = "1", ["http.missingHeaders"] = "X-Frame-Options,X-Content-Type-Options", ["http.upnp"] = "1", ["http.poweredBy"] = "PHP/7.4" }),
+            Svc(8080, "http", new() { ["http.requiresAuth"] = "1" }), Svc(21, "ftp", [], method: "port-hint"), Svc(3389, "rdp", new() { ["rdp.security"] = "RDP standard" }),
+            Svc(3390, "rdp", []), Svc(5900, "vnc", []), Svc(445, "microsoft-ds", []), Svc(5432, "postgresql", new() { ["postgresql.ssl"] = "unsupported" }),
+            Svc(1883, "mqtt", []), Svc(53, "dns", new() { ["dns.version"] = "9.18" }),
+            Svc(443, "https", new() { ["tls.legacy"] = "TLS 1.0" }, new Weles.Core.Risk.CertificateFacts(now.AddDays(-1), true, null, 1024, "RSA")),
+            Svc(8443, "https", [], new Weles.Core.Risk.CertificateFacts(now.AddDays(90), false, false, 2048, "RSA"))
+        };
+        var findings = services.SelectMany(x => Weles.Core.Risk.RiskRules.Evaluate(x, now)).ToList();
+        Assert.Equal(Weles.Core.Risk.RiskRules.All.Count, findings.Select(f => f.Rule.Id).Distinct().Count()); // every rule exercised
+        generated.AddRange(findings.Select(f => f.Evidence));
+        var risk = Weles.Core.Risk.RiskEngine.ScoreAsset(new Weles.Core.Risk.AssetRiskInput(AssetType.Router, AssetCriticality.High, true, true, 9, findings,
+        [
+            new("CVE-2017-7494", 9.8, 0.94, true, VulnerabilityMatchStatus.NeedsVerification, 445, "Samba", "4.4", now.AddYears(-9)),
+            new("CVE-2020-1", null, 0.02, false, VulnerabilityMatchStatus.Confirmed, 445, "Samba", "4.4", now.AddYears(-3)),
+            new("CVE-2023-2", 8.8, null, false, VulnerabilityMatchStatus.InsufficientData, null, "TP-Link TL-WR841N", null, now.AddYears(-1))
+        ], [445], 2), now);
+        generated.AddRange(risk.Factors.Select(f => f.Text));
+        generated.AddRange(risk.Issues.SelectMany(i => i.Reasons.Append(i.Title).Append(i.Recommendation)));
+        foreach (var c in Enum.GetValues<AssetCriticality>())
+        {
+            generated.AddRange(Weles.Core.Risk.RiskEngine.ScoreAsset(new Weles.Core.Risk.AssetRiskInput(AssetType.Server, c, false, false, 1, findings.Take(1).ToList(), [], []), now).Factors.Select(f => f.Text));
+        }
+
+        generated.AddRange(Weles.Core.Risk.RiskEngine.ScoreAsset(new Weles.Core.Risk.AssetRiskInput(AssetType.MobileDevice, AssetCriticality.Medium, false, false, 0, [], [], []), now).Factors.Select(f => f.Text));
+        generated.AddRange(Weles.Core.Risk.RiskEngine.Posture([("TP-LINK (192.168.0.1)", 92), ("NAS", 70), ("TV", 5)]).Factors.Select(f => f.Text));
+        generated.AddRange(Weles.Core.Risk.RiskEngine.Posture([]).Factors.Select(f => f.Text));
+        generated.Add("Ocena ryzyka: Security Posture Score 54/100, urządzenia Critical: 1, High: 2 (nowe problemy konfiguracji: 3, rozwiązane: 0).");
         Assert.True(generated.Count > 15);
 
         using var english = new English();

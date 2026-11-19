@@ -37,7 +37,7 @@ public static class ModuleCatalog
         new("Podatności", "vulnerabilities", "vulnerabilities", "Analiza", 4, true,
             "Dopasowanie wykrytych wersji do znanych podatności z lokalnej bazy NVD, CISA KEV i EPSS.",
             ["Lokalna baza działająca offline z datą aktualizacji", "Dopasowanie po producencie, produkcie i zakresach wersji", "Statusy: potwierdzone, prawdopodobne, wymaga weryfikacji, brak danych", "Uwzględnienie poprawek dystrybucyjnych (backporty)"]),
-        new("Ocena ryzyka", "risk", "risk", "Analiza", 5, false,
+        new("Ocena ryzyka", "risk", "risk", "Analiza", 5, true,
             "Kontekstowa ocena ryzyka z pełnym uzasadnieniem każdej oceny.",
             ["CVSS, EPSS, KEV, ekspozycja, krytyczność zasobu i pewność wykrycia", "Klasyfikacja Critical / High / Medium / Low / Informational", "Security Posture Score i trend w czasie", "Priorytety napraw"]),
         new("Topologia sieci", "topology", "topology", "Analiza", 7, false,

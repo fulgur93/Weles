@@ -281,6 +281,20 @@ poprawnie: jedyna usługa z wersją z katalogu to BIND 9.20.26 na routerze (najn
 9.20.23), MicroStack (radio internetowe) nie ma CPE w katalogu, a model routera nie został zapisany w tych skanach.
 Zapytanie przyrostowe NVD sprawdzone na żywo (47 zmian OpenSSH od 2026‑08‑01).
 
+## 5b'. Risk Engine (Etap 5)
+
+| Element | Implementacja |
+|---------|---------------|
+| Reguły konfiguracji | `RiskRules` (Core): 24 reguły z dowodem z sieci – ADB bez autoryzacji, API Dockera, Redis bez hasła, panel administracyjny w sieci, Telnet, HTTP Basic / logowanie bez TLS, FTP, RDP (bez NLA), VNC, SMB, bazy danych, PostgreSQL bez SSL, MQTT, TLS 1.0/1.1, certyfikaty (wygasły, słaby klucz, samopodpisany, zła nazwa), UPnP, nagłówki HTTP, ujawnianie wersji. Każda ma kategorię, ocenę bazową, zalecenie i techniki MITRE ATT&CK. Reguła „usługa dostępna” oparta tylko na numerze portu ma pewność 60 i wagę × 0,8. Panel administracyjny bez uwierzytelnienia HTTP to *ekspozycja* (40), nie „dostęp bez hasła” – logowanie bywa formularzem na stronie. |
+| Ocena problemu | CVE: CVSS × 10 (+20 CISA KEV, +4/10/15 przy EPSS ≥ 1/10/50%) × pewność dopasowania (1,0 / 0,85 / 0,6 / 0,25); CVE jednego produktu na jednym porcie = jedna pozycja naprawy (+1 za każde kolejne CVE, maks. +10). Konfiguracja: ocena bazowa reguły. |
+| Ocena urządzenia | najpoważniejszy problem + 10% pozostałych (maks. +15) → × krytyczność (0,8 / 1 / 1,15 / 1,3) → + rola (brama/router +8, serwer/NAS/urządzenie sieciowe +5) → + ekspozycja (adres publiczny +15, UPnP na routerze +5; dla sieci lokalnej czynnik „nie badano”, 0 pkt) → + usługi (> 5 portów, maks. +8) → + wiek oprogramowania (najstarsza niezałatana CVE ≥ 2 lata +3, ≥ 5 lat +6) → + zmiany (nowe porty od poprzedniego skanu +5). Poziomy: ≥ 80 Critical, ≥ 60 High, ≥ 35 Medium, ≥ 15 Low, inaczej Informational. Każdy krok zapisany jako `RiskFactor` – UI pokazuje pełne wyliczenie. |
+| Security Posture Score | dla sieci skanu: 100 − (½ najbardziej zagrożonego urządzenia + ½ średniej pięciu najbardziej zagrożonych); zapisywany per skan (`RiskScore` z `AssetId = null`), więc trend to prawdziwa historia. |
+| Priorytety napraw | priorytet = ocena problemu × krytyczność + kontekst urządzenia (rola, ekspozycja, usługi, wiek, zmiany); sortowanie po priorytecie, potem KEV. |
+| Cykl życia | `RiskAssessmentService` po każdym skanie (po dopasowaniu podatności), po aktualizacji bazy podatności i przy zmianie `EngineVersion`: `RiskFinding` – jedno na (urządzenie, reguła, port), otwierane/rozwiązywane/ponownie otwierane; „Zaakceptowane” przez użytkownika nie wlicza się do oceny (czynnik „zaakceptowane ryzyka”) i wywołuje natychmiastową ponowną ocenę. Teksty zapisywane z formatowaniem niezależnym od kultury („CVSS 9.8”). |
+| UI | `/risk` – Security Posture Score każdej sieci z czynnikami i zmianą od poprzedniego skanu, trend (SVG bez JavaScriptu), priorytety napraw z uzasadnieniem, zaleceniem, CVE i ATT&CK, ranking urządzeń; szczegóły urządzenia – wyliczenie oceny, problemy do naprawy, problemy konfiguracji z akceptacją; pulpit – wynik, krytyczne problemy, 3 priorytety. |
+
+Weryfikacja na kopii bazy użytkownika (2026‑11‑19): sieć przewodowa 47/100 (Raspberry Pi 84 – OpenSSH 8.4p1 Debian, 35 CVE „Wymaga weryfikacji”, w tym 1 z KEV, najstarsza z 2021 r.), sieć domowa 62/100 (router 52 – panel w sieci, certyfikat samopodpisany, nagłówki, ujawniona wersja DNS); wszystkie strony po angielsku bez polskiego tekstu.
+
 ## 5c. Język interfejsu (PL / EN)
 
 - Polski jest językiem źródłowym: każdy tekst w kodzie jest po polsku i jest jednocześnie kluczem słownika
@@ -313,7 +327,7 @@ Zapytanie przyrostowe NVD sprawdzone na żywo (47 zmian OpenSSH od 2026‑08‑0
 | 2 | Network Discovery: interfejsy, CIDR, zakresy z zatwierdzaniem, ICMP/TCP/ARP, porty, banery, TLS, HTTP, zapis do bazy, postęp na żywo, zatrzymanie | ✅ (laboratorium demo → Etap 4: `deploy/demo-lab`) |
 | 3 | Assets: tabela (szukanie, sortowanie, filtry, paginacja, kolumny), szczegóły, historia, pola ręczne, status obecności | ✅ |
 | 4 | Vulnerability Intelligence: NVD/KEV/EPSS, snapshot offline, matcher wersji ze statusami | ✅ |
-| 5 | Risk Engine: reguły, scoring z wyjaśnieniem, Security Posture Score, trend | ✅ |
+| 5 | Risk Engine: reguły, scoring z wyjaśnieniem, Security Posture Score, trend, priorytety napraw, MITRE ATT&CK | ✅ |
 | 6 | AI Security Analyst: Ollama jako proces potomny, model, czat ze strumieniowaniem, kontekst z bazy | ✅ |
 | 7 | Monitoring (diff skanów, harmonogram) + Topology (SVG) + Attack Paths | diff ✅, reszta ⏸ |
 | 8 | External Attack Surface: DNS, subdomeny (CT), certyfikaty | ⏸ |
@@ -364,3 +378,6 @@ Zapytanie przyrostowe NVD sprawdzone na żywo (47 zmian OpenSSH od 2026‑08‑0
 | 2026‑11‑19 | Laboratorium demo (`deploy/demo-lab`): prawdziwe stare obrazy usług tylko na 127.0.0.11–15 zamiast symulowanych banerów – symulacja byłaby udawaniem wyników. Nieuruchomione lokalnie (brak Dockera). |
 | 2026‑11‑19 | Dwa języki interfejsu (zgłoszone przez użytkownika: „część po polsku, część po angielsku”). Polskie teksty są kluczami słownika, a komunikaty zapisane w bazie tłumaczone przy wyświetlaniu wzorcami – zapisywanie kluczy zamiast tekstów wymagałoby migracji danych i zmiany każdego producenta komunikatów. Nazwy modułów w trybie polskim też po polsku (Pulpit, Urządzenia, Podatności…). |
 | 2026‑11‑19 | Dopasowania: wpis NVD bez zakresu wersji („wszystkie wersje”) → „Brak wystarczających danych”; warunek NVD wskazujący inną dystrybucję niż baner (CVE-2008-3844 – tylko pakiety Red Hata) → brak dopasowania. Wykryte na Raspberry Pi użytkownika (OpenSSH 8.4p1 Debian). |
+| 2026‑11‑19 | Etap 5: ocena addytywna z jawnymi składnikami zamiast modelu statystycznego – każdy punkt da się pokazać użytkownikowi („Nie ukrywaj powodów”). CVE grupowane po produkcie i porcie, bo jedna aktualizacja usuwa je razem; Security Posture Score liczony z najgorszego urządzenia i pięciu najgorszych, żeby jedno bardzo słabe urządzenie było widoczne. |
+| 2026‑11‑19 | Reguła panelu administracyjnego obniżona do „dostępny w sieci” (40): na kopii bazy router domowy dostał 78 pkt za stronę startową bez uwierzytelnienia HTTP, a TP-Link loguje formularzem – skan nie dowodzi dostępu bez hasła. |
+| 2026‑11‑19 | Dostępność z Internetu: tylko adres publiczny podnosi ocenę; dla sieci lokalnej czynnik jest pokazany jako „nie badano” (0 pkt) – bez zgadywania przekierowań portów (zewnętrzna powierzchnia ataku to Etap 8). |

@@ -31,7 +31,7 @@ public sealed class DashboardQueries(IDbContextFactory<WelesDbContext> contextFa
         if (lastScan is not null)
         {
             activeServices = await db.DiscoveredPorts.CountAsync(p => p.Host!.ScanId == lastScan.Id && p.State == PortState.Open, cancellationToken);
-            criticalFindings = await db.RiskFindings.CountAsync(f => f.ScanId == lastScan.Id && f.Level == RiskLevel.Critical && f.Status == FindingStatus.Open, cancellationToken);
+            criticalFindings = await RiskQueries.CriticalIssuesAsync(db, lastScan.Id, cancellationToken);
             posture = await db.RiskScores.Where(r => r.ScanId == lastScan.Id && r.AssetId == null).Select(r => (double?)r.Score).FirstOrDefaultAsync(cancellationToken);
 
             if (lastScan.StartedAt is { } started)

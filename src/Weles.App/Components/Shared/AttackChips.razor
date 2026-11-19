@@ -1,0 +1,15 @@
+@using Weles.Core.Risk
+@if (Techniques.Count > 0)
+{
+    <div class="chips attack">
+        <span class="muted small">@L.T("MITRE ATT&CK:")</span>
+        @foreach (var t in Techniques)
+        {
+            <a class="chip mono" href="@AttackTechniques.Url(t)" target="_blank" rel="noopener noreferrer" title="@AttackTechniques.Names.GetValueOrDefault(t, t)">@t</a>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<string> Techniques { get; set; } = [];
+}

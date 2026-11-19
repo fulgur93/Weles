@@ -498,6 +498,32 @@ th.sortable:hover { color: var(--text); }
 .refs { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 @media (max-width: 860px) { .vulndb-grid { grid-template-columns: 1fr; } }
 
+/* ---------- Risk ---------- */
+.posture-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.posture-value { font-size: 52px; font-weight: 700; line-height: 1; margin: 6px 0 8px; font-variant-numeric: tabular-nums; }
+.posture-value span { font-size: 18px; color: var(--text-faint); font-weight: 500; margin-left: 4px; }
+.level-counts { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; font-size: 12.5px; }
+.factor-list { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 6px; font-size: 13px; }
+.factor-list li { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px dashed var(--border); padding-bottom: 4px; }
+.factor-list li .mono { color: var(--text-muted); white-space: nowrap; }
+.factor-list .factor-total { border-bottom: 0; font-weight: 650; }
+.subtitle { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-faint); margin-bottom: 6px; }
+.priority-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.priority { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
+.priority.open { border-color: var(--border-strong); }
+.priority-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; width: 100%; padding: 9px 12px; background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.priority-rank { width: 22px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.priority-title { font-weight: 600; }
+.priority-body { padding: 0 12px 12px 44px; display: grid; gap: 8px; font-size: 13px; }
+.reasons-list { margin: 4px 0 0; padding-left: 18px; color: var(--text-muted); }
+.issue-list { margin: 0; padding-left: 18px; display: grid; gap: 10px; }
+.chips.attack a { text-decoration: none; }
+.trend svg { width: 100%; height: auto; display: block; }
+.trend-grid { stroke: var(--border); stroke-width: 1; }
+.trend-axis { fill: var(--text-faint); font-size: 11px; }
+.trend-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 6px; }
+.trend-legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+
 /* ---------- Blazor error UI ---------- */
 #blazor-error-ui {
     display: none;

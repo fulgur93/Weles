@@ -40,7 +40,7 @@ public sealed class ScanWorker(
         }
     }
 
-    /// <summary>Matches the devices of a finished scan against the local vulnerability database.</summary>
+    /// <summary>Matches the devices of a finished scan against the local vulnerability database, then assesses their risk.</summary>
     private async Task MatchVulnerabilitiesAsync(int scanId, CancellationToken ct)
     {
         try
@@ -59,6 +59,25 @@ public sealed class ScanWorker(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "Vulnerability matching failed for scan {ScanId}", scanId);
+        }
+
+        try
+        {
+            var risk = await services.GetRequiredService<Risk.RiskAssessmentService>().RefreshScanAsync(scanId, ct);
+            if (risk.Assets == 0) return;
+            await using var db = await contextFactory.CreateDbContextAsync(ct);
+            db.ScanEvents.Add(new ScanEvent
+            {
+                ScanId = scanId,
+                Level = risk.Critical > 0 ? ScanEventLevel.Warning : ScanEventLevel.Info,
+                Message = $"Ocena ryzyka: Security Posture Score {risk.Posture:0}/100, urządzenia Critical: {risk.Critical}, High: {risk.High} (nowe problemy konfiguracji: {risk.NewFindings}, rozwiązane: {risk.ResolvedFindings}).",
+                Timestamp = timeProvider.GetUtcNow().UtcDateTime
+            });
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Risk assessment failed for scan {ScanId}", scanId);
         }
     }
 

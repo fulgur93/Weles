@@ -31,6 +31,7 @@ public static class DependencyInjection
         services.AddSingleton<ScanQueries>();
         services.AddSingleton<AssetQueries>();
         services.AddSingleton<VulnerabilityQueries>();
+        services.AddSingleton<RiskQueries>();
         services.AddSingleton<Assets.AssetService>();
 
         services.Configure<ScanOptions>(configuration.GetSection(ScanOptions.SectionName));
@@ -52,6 +53,7 @@ public static class DependencyInjection
         });
         services.AddSingleton<VulnerabilityStore>();
         services.AddSingleton<VulnerabilityMatchingService>();
+        services.AddSingleton<Risk.RiskAssessmentService>();
         services.AddSingleton<VulnerabilityDatabaseService>();
         services.AddHostedService<VulnerabilityStartupService>();
 

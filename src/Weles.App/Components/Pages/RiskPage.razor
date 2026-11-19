@@ -1,0 +1,148 @@
+@page "/risk"
+@using Weles.Core.Risk
+@using Weles.Infrastructure.Queries
+@inject RiskQueries Queries
+
+<PageTitle>@L.T("Ocena ryzyka · WELES")</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>@L.T("Ocena ryzyka")</h1>
+        <p class="page-subtitle">@L.T("Własna ocena WELES: CVSS, EPSS i CISA KEV dopasowanych podatności, problemy konfiguracji, krytyczność i rola urządzenia, ekspozycja, liczba usług, wiek oprogramowania i zmiany. Każdy wynik ma pełne uzasadnienie.")</p>
+    </div>
+</div>
+
+@if (_overview is null)
+{
+    <div class="card loading">@L.T("Wczytywanie…")</div>
+}
+else if (_overview.Networks.Count == 0)
+{
+    <section class="card empty"><p>@L.T("Ocena ryzyka pojawi się po pierwszym zakończonym skanie.") <a href="discovery">@L.T("Wykrywanie sieci")</a></p></section>
+}
+else
+{
+    <section class="posture-grid">
+        @foreach (var n in _overview.Networks)
+        {
+            var delta = n.Previous is { } prev ? n.Latest.Score - prev : (double?)null;
+            <div class="card posture-card">
+                <div class="card-title"><Icon Name="risk" /> @L.T("Ocena stanu bezpieczeństwa")</div>
+                <div class="posture-value tone-@PostureTone(n.Latest.Score)">@n.Latest.Score.ToString("0")<span>/100</span></div>
+                <div class="muted small">
+                    <span class="mono">@(n.Latest.Network ?? L.T("sieć bez rozpoznanej bramy"))</span> ·
+                    <a href="scans/@n.Latest.ScanId">@L.F("Skan #{0}", n.Latest.ScanId)</a> · @Labels.Local(n.Latest.At)
+                    @if (delta is { } d && Math.Abs(d) >= 0.5) { <span class="@(d > 0 ? "tone-ok" : "tone-bad")"> · @(d > 0 ? "▲" : "▼") @Math.Abs(d).ToString("0.#") @L.T("od poprzedniego skanu")</span> }
+                </div>
+                <div class="level-counts">
+                    @foreach (var level in new[] { RiskLevel.Critical, RiskLevel.High, RiskLevel.Medium, RiskLevel.Low, RiskLevel.Informational })
+                    {
+                        <span title="@Labels.Of(level)"><StatusPill Tone="@Labels.Tone(level)">@Labels.Of(level)</StatusPill> @n.Breakdown.AssetsByLevel.GetValueOrDefault(level)</span>
+                    }
+                </div>
+                <ul class="factor-list">
+                    @foreach (var f in n.Breakdown.Factors) { <li><span>@L.Message(f.Text)</span>@if (f.Points != 0) { <span class="mono">@f.Points.ToString("+0.#;-0.#")</span> }</li> }
+                </ul>
+                <p class="muted small">@L.T("Wynik = 100 − (½ najbardziej zagrożonego urządzenia + ½ średniej pięciu najbardziej zagrożonych). Wyżej = lepiej.")</p>
+            </div>
+        }
+    </section>
+
+    @if (_overview.Trend.Count > 1)
+    {
+        <section class="card">
+            <div class="card-title"><Icon Name="monitoring" /> @L.T("Trend w czasie")</div>
+            <PostureTrend Points="_overview.Trend" />
+        </section>
+    }
+
+    <section class="card">
+        <div class="card-title"><Icon Name="alert" /> @L.T("Priorytety napraw")
+            <span class="muted small">· @L.T("priorytet = ocena problemu + kontekst urządzenia (rola, ekspozycja, wiek oprogramowania, zmiany, krytyczność)")</span>
+        </div>
+        @if (_overview.Priorities.Count == 0)
+        {
+            <p class="muted">@L.T("Brak problemów do naprawy w ostatnich skanach.")</p>
+        }
+        else
+        {
+            <ol class="priority-list">
+                @foreach (var (item, index) in _overview.Priorities.Take(_limit).Select((p, i) => (p, i)))
+                {
+                    var open = _expanded.Contains(index);
+                    <li class="priority @(open ? "open" : "")">
+                        <button class="priority-head" @onclick="() => Toggle(index)">
+                            <span class="priority-rank">@(index + 1)</span>
+                            <StatusPill Tone="@Labels.Tone(item.Level)">@item.Priority.ToString("0")</StatusPill>
+                            <span class="priority-title">@L.Message(item.Issue.Title)</span>
+                            <span class="muted small">@L.Message(item.AssetName) · <span class="mono">@item.AssetIp</span></span>
+                            @if (item.Issue.KnownExploited > 0) { <StatusPill Tone="bad">@L.T("KEV")</StatusPill> }
+                        </button>
+                        @if (open)
+                        {
+                            <div class="priority-body">
+                                <div><strong>@L.T("Dlaczego:")</strong>
+                                    <ul class="reasons-list">
+                                        <li>@L.F("ocena problemu: {0}", item.Issue.Score.ToString("0.#"))</li>
+                                        @foreach (var r in item.Issue.Reasons) { <li>@L.Message(r)</li> }
+                                        @foreach (var c in item.Context) { <li>@L.Message(c.Text) <span class="mono">@c.Points.ToString("+0.#;-0.#")</span></li> }
+                                    </ul>
+                                </div>
+                                <div><strong>@L.T("Co zrobić:")</strong> @L.Message(item.Issue.Recommendation)</div>
+                                @if (item.Issue.CveIds is { Count: > 0 } cves)
+                                {
+                                    <div class="chips">@foreach (var cve in cves.Take(8)) { <a class="chip mono" href="vulnerabilities/@cve">@cve</a> }@if (cves.Count > 8) { <span class="muted small">@L.F("… i {0} kolejnych", cves.Count - 8)</span> }</div>
+                                }
+                                <AttackChips Techniques="item.Issue.AttackTechniques" />
+                                <a class="small" href="assets/@item.AssetId">@L.T("Szczegóły urządzenia")</a>
+                            </div>
+                        }
+                    </li>
+                }
+            </ol>
+            @if (_overview.Priorities.Count > _limit)
+            {
+                <div class="pager"><span class="muted small">@L.F("Pokazano {0} z {1}", _limit, _overview.Priorities.Count)</span><button class="btn btn-ghost btn-sm" @onclick="() => _limit += 20">@L.T("Pokaż więcej")</button></div>
+            }
+        }
+    </section>
+
+    <section class="card">
+        <div class="card-title"><Icon Name="assets" /> @L.T("Urządzenia według ryzyka")</div>
+        <div class="table-wrap">
+            <table class="table table-hover">
+                <thead><tr><th>@L.T("Urządzenie")</th><th>@L.T("Typ")</th><th>@L.T("Krytyczność")</th><th class="right">@L.T("Ryzyko")</th><th>@L.T("Najpoważniejszy problem")</th><th class="right">@L.T("Problemy")</th><th>@L.T("Ocena z")</th></tr></thead>
+                <tbody>
+                    @foreach (var a in _overview.Assets)
+                    {
+                        <tr class="clickable" @onclick="@(() => Navigation.NavigateTo($"assets/{a.AssetId}"))">
+                            <td><strong>@L.Message(a.Name)</strong><div class="muted small mono">@a.Ip</div></td>
+                            <td>@Labels.Of(a.Type)</td>
+                            <td>@Labels.Of(a.Criticality)</td>
+                            <td class="right"><StatusPill Tone="@Labels.Tone(a.Level)">@a.Score.ToString("0") · @Labels.Of(a.Level)</StatusPill></td>
+                            <td class="small">@(a.TopIssue is { } t ? L.Message(t) : "—")@if (a.KnownExploited > 0) { <span> · <StatusPill Tone="bad">@L.T("KEV")</StatusPill></span> }</td>
+                            <td class="right">@a.Issues</td>
+                            <td class="small"><a href="scans/@a.ScanId" @onclick:stopPropagation="true">#@a.ScanId</a> · @Labels.Local(a.AssessedAt)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+}
+
+@code {
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+    private RiskOverview? _overview;
+    private readonly HashSet<int> _expanded = [0];
+    private int _limit = 20;
+
+    protected override async Task OnInitializedAsync() => _overview = await Queries.OverviewAsync();
+
+    private void Toggle(int index)
+    {
+        if (!_expanded.Remove(index)) _expanded.Add(index);
+    }
+
+    internal static string PostureTone(double score) => score >= 80 ? "ok" : score >= 60 ? "info" : score >= 40 ? "warn" : "bad";
+}

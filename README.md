@@ -41,5 +41,6 @@ pwsh deploy/windows/publish.ps1 -Rid win-x64 # artifacts/weles-<ver>-win-x64.zip
 | 2 | Network Discovery: zakresy z zatwierdzaniem, ICMP/TCP/ARP, porty, banery, HTTP, TLS, klasyfikacja, historia, postęp na żywo | ✅ |
 | 3 | Assets: inwentarz z wyszukiwaniem, filtrami, sortowaniem, historią zmian i polami ręcznymi | ✅ |
 | 4 | Vulnerability Intelligence: lokalna baza NVD/KEV/EPSS działająca offline, aktualizacja na żądanie, dopasowanie wersji ze statusami i uzasadnieniem, laboratorium demo | ✅ |
-| 5 | Risk Engine | ⏳ następny |
-| 6–11 | AI, Monitoring/Topology, External, Raporty, Agenci, Pakowanie | planowane |
+| 5 | Risk Engine: reguły konfiguracji z MITRE ATT&CK, ocena urządzeń z uzasadnieniem, Security Posture Score z trendem, priorytety napraw | ✅ |
+| 6 | AI Security Analyst | ⏳ następny |
+| 7–11 | Monitoring/Topology, External, Raporty, Agenci, Pakowanie | planowane |

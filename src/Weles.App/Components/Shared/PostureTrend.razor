@@ -1,0 +1,49 @@
+@* Security Posture Score over time – plain SVG rendered on the server, no JavaScript chart library. One line per network. *@
+@using Weles.Infrastructure.Queries
+
+@{
+    var series = Points.GroupBy(p => p.Fingerprint ?? "").Select((g, i) => (Name: g.First().Network ?? L.T("sieć bez rozpoznanej bramy"), Color: Palette[i % Palette.Length], Points: g.OrderBy(p => p.At).ToList())).ToList();
+    var min = Points.Min(p => p.At);
+    var max = Points.Max(p => p.At);
+    var span = Math.Max(1, (max - min).TotalSeconds);
+    double X(DateTime at) => Left + (Width - Left - Right) * ((at - min).TotalSeconds / span);
+    double Y(double score) => Top + (Height - Top - Bottom) * (1 - score / 100.0);
+}
+
+<figure class="trend">
+    <svg viewBox="0 0 @Width @Height" role="img" aria-label="@L.T("Ocena stanu bezpieczeństwa w kolejnych skanach")">
+        @foreach (var level in new[] { 0, 25, 50, 75, 100 })
+        {
+            <line x1="@Left" x2="@(Width - Right)" y1="@Inv(Y(level))" y2="@Inv(Y(level))" class="trend-grid" />
+            @SvgText(Left - 8, Y(level) + 4, "end", level.ToString())
+        }
+        @foreach (var s in series)
+        {
+            <polyline fill="none" stroke="@s.Color" stroke-width="2.5" stroke-linejoin="round" points="@string.Join(" ", s.Points.Select(p => $"{Inv(X(p.At))},{Inv(Y(p.Score))}"))" />
+            @foreach (var p in s.Points)
+            {
+                <a href="scans/@p.ScanId">
+                    <circle cx="@Inv(X(p.At))" cy="@Inv(Y(p.Score))" r="5" fill="@s.Color"><title>@L.F("Skan #{0}", p.ScanId) · @Labels.Local(p.At) · @p.Score.ToString("0")</title></circle>
+                </a>
+            }
+        }
+        @SvgText(Left, Height - 6, "start", Labels.Local(min))
+        @SvgText(Width - Right, Height - 6, "end", Labels.Local(max))
+    </svg>
+    <figcaption class="trend-legend">
+        @foreach (var s in series) { <span><span class="swatch" style="background:@s.Color"></span><span class="mono small">@s.Name</span></span> }
+    </figcaption>
+</figure>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<PosturePoint> Points { get; set; } = [];
+
+    private const int Width = 900, Height = 240, Left = 40, Right = 16, Top = 12, Bottom = 28;
+    private static readonly string[] Palette = ["#4f8cff", "#2fbf71", "#f2a93b", "#c26bff", "#ef5b6b"];
+
+    /// <summary>SVG &lt;text&gt; cannot be written directly – Razor reserves the &lt;text&gt; tag.</summary>
+    private static MarkupString SvgText(double x, double y, string anchor, string content) =>
+        new($"<text x=\"{Inv(x)}\" y=\"{Inv(y)}\" class=\"trend-axis\" text-anchor=\"{anchor}\">{System.Net.WebUtility.HtmlEncode(content)}</text>");
+
+    private static string Inv(double v) => v.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+}
