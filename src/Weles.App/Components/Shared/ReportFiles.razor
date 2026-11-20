@@ -1,0 +1,68 @@
+@* Generated report and export files with download, SHA-256 and delete. *@
+@using Weles.Infrastructure.Reports
+@inject AuditReportService Service
+
+@if (Files.Count == 0)
+{
+    <p class="muted">@L.T("Nie wygenerowano jeszcze żadnych plików.")</p>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table">
+            <thead><tr><th>@L.T("Plik")</th>@if (ShowAudit) { <th>@L.T("Audyt")</th> }<th>@L.T("Utworzono")</th><th class="right">@L.T("Rozmiar")</th><th>SHA-256</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var f in Files)
+                {
+                    <tr class="@(f.Id == Highlight ? "row-highlight" : "")">
+                        <td><StatusPill Tone="info">@f.Format.ToString().ToUpperInvariant()</StatusPill>@if (f.Language == "en") { <span class="muted small"> EN</span> }
+                            <div class="small mono break">@f.FileName</div></td>
+                        @if (ShowAudit)
+                        {
+                            <td class="small">@if (f.ScanId is { } s) { <a href="reports/audit/@s">@L.Message(f.AuditTitle)</a> } else if (f.ImportedAuditId is { } i) { <a href="reports/imported/@i">@L.Message(f.AuditTitle)</a> }</td>
+                        }
+                        <td>@Labels.Local(f.CreatedAt)</td>
+                        <td class="right">@Format.Bytes(f.SizeBytes)</td>
+                        <td class="small mono" title="@f.Sha256">@f.Sha256[..16]…</td>
+                        <td class="right nowrap">
+                            @if (f.Exists)
+                            {
+                                <a class="btn btn-ghost btn-sm" href="api/reports/@f.Id/download" download="@f.FileName"><Icon Name="download" Size="14" /> @L.T("Pobierz")</a>
+                            }
+                            else
+                            {
+                                <span class="muted small">@L.T("plik usunięty z dysku")</span>
+                            }
+                            @if (_confirm == f.Id)
+                            {
+                                <button class="btn btn-danger btn-sm" @onclick="() => DeleteAsync(f.Id)">@L.T("Usuń")</button>
+                                <button class="btn btn-ghost btn-sm" @onclick="() => _confirm = null">@L.T("Anuluj")</button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-ghost btn-sm" @onclick="() => _confirm = f.Id">@L.T("Usuń")</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <p class="muted small">@L.T("Pliki PDF są w katalogu reports, eksporty JSON/ZIP w katalogu exports (Ustawienia → Ścieżki danych). Suma SHA-256 pozwala sprawdzić, że przekazana kopia nie została zmieniona.")</p>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<ReportFileItem> Files { get; set; } = [];
+    [Parameter] public bool ShowAudit { get; set; } = true;
+    [Parameter] public int? Highlight { get; set; }
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private int? _confirm;
+
+    private async Task DeleteAsync(int id)
+    {
+        _confirm = null;
+        await Service.DeleteReportAsync(id);
+        await Changed.InvokeAsync();
+    }
+}

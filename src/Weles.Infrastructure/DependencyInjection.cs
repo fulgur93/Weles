@@ -36,6 +36,8 @@ public static class DependencyInjection
         services.AddSingleton<TopologyQueries>();
         services.AddSingleton<NetworkQueries>();
         services.AddSingleton<Assets.AssetService>();
+        services.AddSingleton<Reports.AuditDocumentBuilder>();
+        services.AddSingleton<Reports.AuditReportService>();
 
         services.Configure<ScanOptions>(configuration.GetSection(ScanOptions.SectionName));
         services.AddSingleton<OuiDatabase>();
@@ -86,6 +88,7 @@ public static class DependencyInjection
         services.AddHostedService(sp => sp.GetRequiredService<OllamaProcessHost>());
         services.AddSingleton<AiContextBuilder>();
         services.AddSingleton<AiAnalystService>();
+        services.AddSingleton<AuditSummaryService>();
 
         return services;
     }

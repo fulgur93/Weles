@@ -1,0 +1,207 @@
+@* The content of an audit document – the same sections as the PDF report. Used for local and imported audits. *@
+@using Weles.Core.Reports
+@using Weles.App.Reports
+
+@{ var a = Document.Audit; }
+<section class="kpi-grid kpi-grid-4">
+    <div class="card">
+        <div class="kpi-label">@L.T("Security Posture Score")</div>
+        <div class="kpi-value tone-@(Document.Posture is { } ps ? Pages.RiskPage.PostureTone(ps.Score) : "muted")">@(Document.Posture?.Score.ToString("0") ?? "—")<span class="muted small">/100</span></div>
+        <div class="kpi-hint">@(Document.Posture?.Previous is { } prev ? L.F("poprzednio {0}", prev.ToString("0")) : L.T("100 = najlepiej"))</div>
+    </div>
+    <div class="card">
+        <div class="kpi-label">@L.T("Urządzenia")</div>
+        <div class="kpi-value">@Document.Devices.Count</div>
+        <div class="kpi-hint">@L.F("{0} usług", Document.ServiceCount)</div>
+    </div>
+    <div class="card @(Document.KnownExploitedCount > 0 ? "kpi-critical" : "")">
+        <div class="kpi-label">@L.T("Podatności (CVE)")</div>
+        <div class="kpi-value">@Document.VulnerabilityCount</div>
+        <div class="kpi-hint">@L.F("{0} w CISA KEV", Document.KnownExploitedCount)</div>
+    </div>
+    <div class="card">
+        <div class="kpi-label">@L.T("Problemy konfiguracji")</div>
+        <div class="kpi-value">@ConfigurationCount</div>
+        <div class="kpi-hint">@L.T("np. FTP bez szyfrowania")</div>
+    </div>
+</section>
+
+<section class="card">
+    <div class="card-title"><Icon Name="scans" /> @L.T("Dane audytu")</div>
+    <dl class="facts">
+        <dt>@L.T("Audyt")</dt><dd>@if (Imported) { @L.F("Skan #{0}", a.ScanId) <span class="muted small"> · @L.T("numer w instalacji, która wyeksportowała audyt")</span> } else { <a href="scans/@a.ScanId">@L.F("Skan #{0}", a.ScanId)</a> }
+            @if (a.Trigger == ScanTrigger.Scheduled) { <span class="muted small"> · @L.T("z harmonogramu")</span> }</dd>
+        <dt>@L.T("Data")</dt><dd>@Labels.Local(a.StartedAt) – @Labels.Local(a.CompletedAt) <span class="muted small">(@Labels.Duration(a.StartedAt, a.CompletedAt))</span></dd>
+        <dt>@L.T("Zakres skanowania")</dt><dd>@L.Message(a.ScopeName) <div class="chips">@foreach (var s in a.Scope) { <span class="chip mono @(s.StartsWith("wyklucz ") ? "chip-exclude" : "")">@L.Message(s)</span> }</div></dd>
+        <dt>@L.T("Sieć")</dt><dd>@L.Message(a.Network)@if (a.IsExternal) { <span class="muted small"> · @L.T("hosty publiczne skanowane przez Internet")</span> }</dd>
+        <dt>@L.T("Porty")</dt><dd class="mono">@a.PortSpecification</dd>
+        <dt>@L.T("Wynik skanu")</dt><dd>@L.F("{0} aktywnych urządzeń z {1} adresów, {2} otwartych portów", a.HostsAlive, a.HostsTargeted, a.OpenPorts)</dd>
+    </dl>
+    @if (a.IsDemo) { <div class="alert alert-warn">@L.T("Dane demonstracyjne – nie pochodzą z prawdziwego skanowania.")</div> }
+    @if (Document.Posture is { Factors.Count: > 0 } posture)
+    {
+        <ul class="factor-list">
+            @foreach (var f in posture.Factors) { <li><span>@L.Message(f.Text)</span>@if (f.Points != 0) { <span class="mono">@f.Points.ToString("+0.#;-0.#")</span> }</li> }
+        </ul>
+    }
+</section>
+
+<section class="card">
+    <div class="card-title"><Icon Name="alert" /> @L.T("Rekomendacje – kolejność napraw")</div>
+    @if (Document.Recommendations.Count == 0)
+    {
+        <p class="muted">@L.T("Brak problemów do naprawy w tym audycie.")</p>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>#</th><th>@L.T("Priorytet")</th><th>@L.T("Urządzenie")</th><th>@L.T("Problem")</th><th>@L.T("Co zrobić")</th></tr></thead>
+                <tbody>
+                    @foreach (var (r, i) in Document.Recommendations.Select((r, i) => (r, i)))
+                    {
+                        <tr>
+                            <td class="muted">@(i + 1)</td>
+                            <td><StatusPill Tone="@Labels.Tone(r.Level)">@r.Priority.ToString("0") · @Labels.Of(r.Level)</StatusPill></td>
+                            <td>@L.Message(r.Device)<div class="muted small mono">@r.Ip</div></td>
+                            <td>@L.Message(r.Title)@if (r.Port is { } port) { <span class="muted small"> · @L.F("port {0}", port)</span> }
+                                @if (r.KnownExploited > 0) { <span> <StatusPill Tone="bad">@L.T("KEV")</StatusPill></span> }
+                                @if (r.CveIds.Count > 0) { <div class="muted small mono">@string.Join(", ", r.CveIds.Take(5))@(r.CveIds.Count > 5 ? " …" : "")</div> }</td>
+                            <td class="small">@L.Message(r.Recommendation)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<section class="card">
+    <div class="card-title"><Icon Name="monitoring" /> @L.T("Zmiany od poprzedniego audytu")</div>
+    @if (Document.Changes is not { } ch)
+    {
+        <p class="muted">@L.T("To pierwszy audyt tej sieci – nie ma z czym porównać.")</p>
+    }
+    else
+    {
+        <p class="muted small">@L.F("Porównanie ze skanem #{0} z {1}.", ch.PreviousScanId, Labels.Local(ch.PreviousAt))
+            @if (ch.PostureBefore is { } b && ch.PostureAfter is { } af) { <span> @L.F("Security Posture Score: {0} → {1}.", b.ToString("0"), af.ToString("0"))</span> }</p>
+        @if (ch.Items.Count == 0)
+        {
+            <p>@L.T("Brak zmian – sieć wygląda tak samo jak podczas poprzedniego audytu.")</p>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>@L.T("Zmiana")</th><th>@L.T("Urządzenie")</th><th>@L.T("Szczegóły")</th></tr></thead>
+                    <tbody>
+                        @foreach (var item in ch.Items.OrderBy(i => i.Kind))
+                        {
+                            <tr><td>@AuditPdfRenderer.ChangeLabel(item.Kind)</td><td>@L.Message(item.Device)</td><td class="small">@L.Message(item.Description)</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+</section>
+
+<section class="card">
+    <div class="card-title"><Icon Name="assets" /> @L.T("Lista urządzeń") <span class="muted small">· @L.T("kliknij urządzenie, aby zobaczyć usługi, podatności i problemy")</span></div>
+    @if (Document.Devices.Count == 0)
+    {
+        <p class="muted">@L.T("Skan nie wykrył żadnego urządzenia.")</p>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table table-hover">
+                <thead><tr><th>@L.T("Urządzenie")</th><th>@L.T("Typ")</th><th>@L.T("Krytyczność")</th><th class="right">@L.T("Usługi")</th><th class="right">CVE</th><th class="right">@L.T("Problemy konfiguracji")</th><th class="right">@L.T("Ryzyko")</th></tr></thead>
+                <tbody>
+                    @foreach (var (dev, i) in Document.Devices.Select((d, i) => (d, i)))
+                    {
+                        var index = i;
+                        <tr class="clickable" @onclick="() => Toggle(index)">
+                            <td><strong>@L.Message(dev.Name)</strong>@if (dev.IsGateway) { <span class="muted small"> · @L.T("brama")</span> }<div class="muted small mono">@dev.Ip@(dev.Vendor is null ? "" : " · " + dev.Vendor)</div></td>
+                            <td>@Labels.Of(dev.Type)</td>
+                            <td>@Labels.Of(dev.Criticality)</td>
+                            <td class="right">@dev.Services.Count</td>
+                            <td class="right">@dev.Vulnerabilities.Count(v => v.Status == FindingStatus.Open)</td>
+                            <td class="right">@dev.Findings.Count(f => f.Status == FindingStatus.Open)</td>
+                            <td class="right">@if (dev.RiskLevel is { } level) { <StatusPill Tone="@Labels.Tone(level)">@dev.RiskScore!.Value.ToString("0") · @Labels.Of(level)</StatusPill> } else { <span class="muted">—</span> }</td>
+                        </tr>
+                        @if (_open.Contains(index))
+                        {
+                            <tr class="audit-device-detail">
+                                <td colspan="7">
+                                    @if (dev.Services.Count > 0)
+                                    {
+                                        <div class="section-title">@L.T("Wykryte usługi")</div>
+                                        <table class="table">
+                                            <thead><tr><th>@L.T("Port")</th><th>@L.T("Usługa")</th><th>@L.T("Produkt i wersja")</th><th>TLS</th></tr></thead>
+                                            <tbody>
+                                                @foreach (var s in dev.Services)
+                                                {
+                                                    <tr><td class="mono">@s.Port/@s.Protocol.ToString().ToLowerInvariant()</td><td>@(s.Name ?? "—")</td>
+                                                        <td>@(string.Join(" ", new[] { s.Product, s.Version }.Where(x => !string.IsNullOrEmpty(x))) is { Length: > 0 } pv ? pv : "—")</td>
+                                                        <td class="small">@if (s.Certificate is { } c) { @AuditPdfRenderer.Tls(c.TlsProtocol) <span class="muted"> · @L.F("ważny do {0}", c.NotAfter.ToLocalTime().ToString("d"))@(c.IsSelfSigned ? " · " + L.T("samopodpisany") : "")@(c.HostnameMatches == false ? " · " + L.T("nazwa nie pasuje") : "")</span> } else { @(s.IsTls ? "TLS" : "—") }</td></tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    }
+                                    @if (dev.Vulnerabilities.Count > 0)
+                                    {
+                                        <div class="section-title">@L.T("Podatności (CVE)")</div>
+                                        <table class="table">
+                                            <thead><tr><th>CVE</th><th class="right">CVSS</th><th class="right">EPSS</th><th>@L.T("Pewność dopasowania")</th><th>@L.T("Opis")</th></tr></thead>
+                                            <tbody>
+                                                @foreach (var v in dev.Vulnerabilities)
+                                                {
+                                                    <tr><td class="mono">@if (Imported) { @v.CveId } else { <a href="vulnerabilities/@v.CveId">@v.CveId</a> }@if (v.IsKnownExploited) { <span> <StatusPill Tone="bad">@L.T("KEV")</StatusPill></span> }</td>
+                                                        <td class="right">@(v.CvssScore?.ToString("0.0") ?? "—")</td><td class="right">@Labels.Epss(v.EpssScore)</td>
+                                                        <td><StatusPill Tone="@Labels.Tone(v.MatchStatus)">@Labels.Of(v.MatchStatus)</StatusPill><div class="muted small">@v.Product @v.Version@(v.Status == FindingStatus.Accepted ? " · " + Labels.Of(v.Status) : "")</div></td>
+                                                        <td class="small">@(v.Title ?? "—")</td></tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    }
+                                    @if (dev.Findings.Count > 0)
+                                    {
+                                        <div class="section-title">@L.T("Problemy konfiguracji")</div>
+                                        <table class="table">
+                                            <thead><tr><th>@L.T("Problem konfiguracji")</th><th>@L.T("Poziom")</th><th>@L.T("Dowód")</th><th>@L.T("Co zrobić")</th></tr></thead>
+                                            <tbody>
+                                                @foreach (var f in dev.Findings)
+                                                {
+                                                    <tr><td>@L.Message(f.Title)@(f.Status == FindingStatus.Accepted ? " · " + Labels.Of(f.Status) : "")</td><td><StatusPill Tone="@Labels.Tone(f.Level)">@Labels.Of(f.Level)</StatusPill></td>
+                                                        <td class="small">@L.Message(f.Evidence)</td><td class="small">@L.Message(f.Recommendation)</td></tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    }
+                                    @if (dev.Services.Count == 0 && dev.Vulnerabilities.Count == 0 && dev.Findings.Count == 0) { <p class="muted small">@L.T("Brak otwartych portów i problemów.")</p> }
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public AuditDocument Document { get; set; } = default!;
+    /// <summary>Imported from another installation – no links to local scans, devices or CVE pages.</summary>
+    [Parameter] public bool Imported { get; set; }
+
+    private readonly HashSet<int> _open = [];
+
+    private int ConfigurationCount => Document.Devices.Sum(d => d.Findings.Count(f => f.Status == FindingStatus.Open));
+
+    private void Toggle(int index)
+    {
+        if (!_open.Remove(index)) _open.Add(index);
+    }
+}

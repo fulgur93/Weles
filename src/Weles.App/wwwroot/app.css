@@ -701,3 +701,12 @@ tr.dim td { opacity: .5; }
 .page-network { margin: -6px 0 14px; }
 .section-title { display: flex; align-items: center; gap: 8px; font-size: 15px; margin: 18px 0 10px; color: var(--text-muted); }
 @media (max-width: 640px) { .network-picker { width: 100%; } .network-picker select { max-width: none; flex: 1; } }
+
+/* Reports (Stage 9) */
+.ai-summary { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); padding: 10px 14px; margin: 8px 0; }
+.row-highlight td { background: var(--accent-soft); }
+.audit-device-detail > td { background: var(--surface); padding: 4px 14px 14px; }
+.audit-device-detail .table { margin-bottom: 6px; }
+.nowrap { white-space: nowrap; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+label.btn { cursor: pointer; position: relative; }

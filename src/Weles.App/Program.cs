@@ -113,6 +113,7 @@ app.UseAntiforgery();
 
 app.MapStaticAssets();
 app.MapLogEndpoints();
+app.MapReportEndpoints();
 app.MapLanguageEndpoints();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

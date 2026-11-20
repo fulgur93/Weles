@@ -173,7 +173,7 @@ Kluczowa decyzja: **rozdzielenie tożsamości od obserwacji**.
 | `NetworkRelationship` | 7 | `SourceAssetId`, `TargetAssetId`, `Kind` (same‑segment, gateway, reachable‑service), `Evidence`, `Confidence`, `ScanId` |
 | `AttackPath` + `AttackPathStep` | 7 | uporządkowane kroki z `Justification` i `Confidence`, `IsHypothetical = true` zawsze, dopóki nie ma dowodu |
 | `ExternalTarget` + `ExternalAnalysis` | 8 | domena lub adres publiczny z datą potwierdzenia uprawnień, opcja CT, znane nazwy, FK `ScanTarget` (zakres skanu aktywnego); analiza pasywna jako migawka JSON (rekordy, hosty ze źródłem, certyfikaty CT) – reguły oceniają ją przy odczycie |
-| `AuditReport` | 9 | `ScanId`, `Format`, `FilePath`, `Sha256`, `CreatedAt`, `AiSummary` |
+| `AuditReport`, `AuditAiSummary`, `ImportedAudit` | 9 | **Utworzone (migracja `Stage9Reports`).** `AuditReport`: plik PDF/JSON/ZIP (`ScanId` albo `ImportedAuditId` – check constraint: dokładnie jedno), `FileName` (generowana, nigdy od użytkownika), `SizeBytes`, `Sha256`, `Language`. `AuditAiSummary`: jedno podsumowanie AI na skan (`Text`, `Model`, `Language`). `ImportedAudit`: zweryfikowany dokument audytu jako JSON, unikalny `Sha256` |
 | `AIConversation`, `AIMessage` | 6 | rozmowy + wiadomości (`Role`, `Content`, `ContextSnapshotJson`, `Model`, `TokensIn/Out`) |
 | `Agent`, `AgentScan` | 10 | `Name`, `TokenHash` (nigdy jawny token), `Status`, `LastSeenAt`, `RevokedAt`, dozwolone zakresy |
 
@@ -341,6 +341,17 @@ Weryfikacja na kopii bazy użytkownika (2026‑11‑19): sieć przewodowa 47/100
 | Skanowanie aktywne | Rozdzielone od pasywnego: użytkownik zaznacza nazwy wskazujące na adres publiczny → `PrepareActiveScopeAsync` tworzy (lub podmienia, co cofa zatwierdzenie) **niezatwierdzony** zakres „Zewnętrzny: …” z `AllowPublicAddresses`; skan uruchamia się dopiero po zatwierdzeniu w Wykrywaniu sieci istniejącym silnikiem (TCP connect, banery, TLS, HTTP – bez logowania i exploitów). Silnik przekazuje nazwę domeny z zakresu jako SNI/Host. Wynik: porty publiczne (porty administracyjne wyróżnione), certyfikaty (wygasły, samopodpisany, niezgodna nazwa), uwagi Risk Engine. |
 | Analityk AI | pytania o domenę/DNS/SPF/DMARC/subdomeny dostają uwagi analizy pasywnej i wynik skanu aktywnego (albo informację, że dostępność z Internetu jest nieznana). |
 
+## 5g. Raporty, eksport i import audytu (Etap 9)
+
+| Element | Implementacja |
+|---------|---------------|
+| Model | `AuditDocument` (Core) – audyt = zakończony skan, zamrożony stan: zakres z chwili skanu, sieć, urządzenia z usługami i certyfikatami, CVE i problemy konfiguracji **otwarte w chwili skanu** (okno `MatchingWindow`), ocena urządzeń i Security Posture Score z tego skanu, rekomendacje (`RiskQueries.Prioritize`, max 30), zmiany od poprzedniego skanu tej samej sieci (`MonitoringQueries`), podsumowanie AI. Jeden model zasila PDF, eksport i podgląd importu. |
+| Budowa | `AuditDocumentBuilder` – późniejsze skany nie zmieniają starszego audytu (dopasowania rozwiązane później są pokazane jako otwarte w chwili audytu). Urządzenie z kilkoma adresami w skanie ma wszystkie adresy. |
+| PDF | `AuditPdfRenderer` (Weles.App, QuestPDF Community, czcionka Lato z paczki – bez czcionek systemowych): dane audytu, podsumowanie infrastruktury, podsumowanie AI, rekomendacje, zmiany, lista urządzeń, szczegóły (usługi, CVE z pewnością dopasowania, problemy konfiguracji z dowodem), metodyka i ograniczenia. Język interfejsu; teksty zapisane po polsku tłumaczone `L.Message`. |
+| Eksport | JSON (`audit.json`) lub ZIP: `manifest.json` (format, wersja schematu, SHA‑256 i rozmiar każdego pliku) + `audit.json` + `report.pdf`. Pliki w `reports/` (PDF) i `exports/` (JSON/ZIP), nazwy generowane, SHA‑256 w bazie, pobieranie `GET /api/reports/{id}/download` za strażnikiem sesji. Eksport jest logowany (bez treści). |
+| Import | `AuditArchive.ReadAsync`: limit 50 MB czytany asynchronicznie (deklarowany rozmiar nie jest zaufany), nic nie jest rozpakowywane na dysk, tylko trzy znane nazwy wpisów (każda inna – w tym `../` – odrzuca plik), limit na wpis (manifest 64 KB, audit.json 20 MB, PDF 40 MB) liczony przy czytaniu, SHA‑256 i rozmiar zgodne z manifestem, JSON z `MaxDepth` 16, walidacja schematu (format, wersja ≤ obsługiwanej, wymagane części, długości tekstów, liczności list, oceny 0–100). Zaimportowany audyt jest tylko do odczytu i **nie trafia do inwentarza** – opisuje inną sieć w innym czasie. Ten sam audyt (SHA‑256 JSON) nie jest importowany dwa razy. |
+| Podsumowanie AI | `AuditSummaryService` – tylko na żądanie, lokalny model, dane wyłącznie z dokumentu audytu (te same, które pokazuje PDF), teksty z sieci czyszczone. Jawne znaczniki „POPRZEDNI AUDYT”/„PIERWSZY AUDYT” – bez nich model na prawdziwych danych pisał „to pierwszy audyt” mimo porównania w danych. W PDF opisane jako interpretacja z nazwą modelu i datą. |
+
 ## 5c. Język interfejsu (PL / EN)
 
 - Polski jest językiem źródłowym: każdy tekst w kodzie jest po polsku i jest jednocześnie kluczem słownika
@@ -377,7 +388,7 @@ Weryfikacja na kopii bazy użytkownika (2026‑11‑19): sieć przewodowa 47/100
 | 6 | AI Security Analyst: dołączona Ollama jako proces potomny, model Qwen3‑4B Q4, czat ze strumieniowaniem, kontekst z bazy, historia rozmów | ✅ |
 | 7 | Monitoring (porównanie skanów, zmiany w czasie, harmonogram z blokadą innej sieci) + topologia (SVG) + ścieżki ataku (hipotezy z pewnością kroków) | ✅ |
 | 8 | External Attack Surface: DNS, SPF/DMARC/CAA, subdomeny z CT, certyfikaty, usługi publiczne; pasywna analiza oddzielona od aktywnego skanu | ✅ |
-| 9 | Raporty PDF, eksport/import JSON/ZIP | PDF ✅ |
+| 9 | Raporty PDF, eksport JSON/ZIP z manifestem SHA‑256, import audytu z walidacją, podsumowanie AI audytu | ✅ |
 | 10 | Agenci (Worker Service, HTTPS, rejestracja, unieważnianie) | ⏸ |
 | 11 | Pakowanie: ZIP/TAR.GZ → instalatory (Inno Setup / AppImage+DEB), Ollama + model | ZIP/TAR.GZ ✅ |
 
@@ -438,3 +449,4 @@ Weryfikacja na kopii bazy użytkownika (2026‑11‑19): sieć przewodowa 47/100
 | 2026‑11‑20 | Skan aktywny zasobów publicznych nie ma własnego silnika ani przycisku „skanuj” – moduł tylko przygotowuje niezatwierdzony zakres; zatwierdzenie i uruchomienie przechodzą tą samą ścieżką co w sieci lokalnej (zgoda, limit szybkości, zatrzymanie). |
 | 2026‑11‑20 | Etap 8 (po teście na prawdziwych danych): zakres z modułu Powierzchnia ataku ma znacznik `ScanTarget.IsExternal`. Jego skany nie zmieniają oceny i KPI sieci lokalnej (Pulpit, Ocena ryzyka), nie są domyślnym porównaniem w Monitorowaniu, a skany bez bramy porównuje się tylko w obrębie jednego zakresu. Hosty publiczne na mapie tworzą osobną grupę „Internet” bez połączeń „ta sama sieć lokalna”. Dodano regułę DMARC `pct<100` i ponawianie zapytań do crt.sh przy 429/502/503/504. |
 | 2026‑11‑20 | Podział na sieci na stronach analizy (Pulpit, Ocena ryzyka, Ścieżki ataku, Podatności, Topologia, Monitorowanie): `NetworkQueries` przypisuje każde urządzenie i skan do sieci – router (MAC bramy), segment bez bramy (VPN), zakres zewnętrzny (każda domena osobno, `ext:{id}`). Wspólny przełącznik `NetworkPicker` (bieżąca / wszystkie / konkretna sieć / Internet – wszystkie zasoby publiczne), wybór w adresie `?net=`. Ocena stanu bezpieczeństwa liczona osobno dla każdej sieci – bez porównań między różnymi serwisami. Ścieżki ataku hosta publicznego zaczynają się od „Internet” z dostępem potwierdzonym skanem (95%). Interfejsy VPN (tun/wg/tap/ppp) nie dostają propozycji zakresu całej sieci. |
+| 2026‑11‑20 | Etap 9: PDF renderowany w warstwie aplikacji (QuestPDF), bo korzysta ze słownika PL/EN interfejsu; dokument audytu i archiwum w Core/Infrastructure. Zaimportowany audyt przechowywany jako zweryfikowana migawka JSON tylko do odczytu – łączenie z lokalnym inwentarzem zafałszowałoby ocenę ryzyka, monitoring i podział na sieci. PDF z archiwum importu nie jest przechowywany (raport generowany ponownie z danych). |

@@ -27,6 +27,9 @@ public class WelesDbContext(DbContextOptions<WelesDbContext> options) : DbContex
     public DbSet<ScanSchedule> ScanSchedules => Set<ScanSchedule>();
     public DbSet<ExternalTarget> ExternalTargets => Set<ExternalTarget>();
     public DbSet<ExternalAnalysis> ExternalAnalyses => Set<ExternalAnalysis>();
+    public DbSet<AuditReport> AuditReports => Set<AuditReport>();
+    public DbSet<AuditAiSummary> AuditAiSummaries => Set<AuditAiSummary>();
+    public DbSet<ImportedAudit> ImportedAudits => Set<ImportedAudit>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

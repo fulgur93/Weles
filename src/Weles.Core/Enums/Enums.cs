@@ -127,3 +127,10 @@ public enum FindingStatus
     Resolved = 1,
     Accepted = 2
 }
+
+public enum ReportFormat
+{
+    Pdf = 0,
+    Json = 1,
+    Zip = 2
+}

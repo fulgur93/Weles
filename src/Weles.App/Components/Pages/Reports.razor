@@ -1,0 +1,182 @@
+@page "/reports"
+@using Weles.Infrastructure.Queries
+@using Weles.Infrastructure.Reports
+@inject AuditReportService Service
+@inject NetworkQueries Networks
+@inject NavigationManager Navigation
+
+<PageTitle>@L.T("Raporty · WELES")</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>@L.T("Raporty")</h1>
+        <p class="page-subtitle">@L.T("Audyt to jeden zakończony skan. Z każdego możesz wygenerować raport PDF, wyeksportować go do JSON lub ZIP i otworzyć na innym komputerze z WELES przez import. Pliki powstają lokalnie.")</p>
+    </div>
+    @if (_networks is not null) { <NetworkPicker Context="_networks" Value="@_filter" /> }
+</div>
+@if (_networks is not null && _networks.Networks.Count > 1)
+{
+    <p class="muted small page-network">@NetworkPicker.Describe(_networks, _filter)</p>
+}
+
+@if (_audits is null)
+{
+    <div class="card loading">@L.T("Wczytywanie…")</div>
+}
+else
+{
+    <section class="card">
+        <div class="card-title"><Icon Name="scans" /> @L.T("Audyty")</div>
+        @if (Visible.Count == 0)
+        {
+            <p class="empty">@(_audits.Count == 0 ? L.T("Brak zakończonych skanów – raport powstaje z zakończonego skanu.") : L.T("Brak audytów w wybranej sieci."))
+                <a href="discovery">@L.T("Wykrywanie sieci")</a></p>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="table table-hover">
+                    <thead><tr><th>@L.T("Audyt")</th><th>@L.T("Data")</th><th>@L.T("Zakres")</th><th class="right">@L.T("Urządzenia")</th><th class="right">@L.T("Porty")</th><th class="right">@L.T("Wynik")</th><th>@L.T("Podsumowanie AI")</th><th class="right">@L.T("Pliki")</th></tr></thead>
+                    <tbody>
+                        @foreach (var a in Visible.Take(_limit))
+                        {
+                            <tr class="clickable" @onclick="@(() => Navigation.NavigateTo($"reports/audit/{a.ScanId}"))">
+                                <td><a href="reports/audit/@a.ScanId" @onclick:stopPropagation="true">@L.F("Skan #{0}", a.ScanId)</a>@if (a.IsDemo) { <span> <StatusPill Tone="warn">@L.T("demo")</StatusPill></span> }</td>
+                                <td>@Labels.Local(a.At)</td>
+                                <td>@L.Message(a.ScopeName)<div class="muted small">@L.Message(_networks!.LabelOf(_networks.ScanNetworkKey(a.ScanId)))</div></td>
+                                <td class="right">@a.Devices</td>
+                                <td class="right">@a.OpenPorts</td>
+                                <td class="right">@if (a.Posture is { } p) { <span class="tone-@RiskPage.PostureTone(p)">@p.ToString("0")</span> } else { <span class="muted">—</span> }</td>
+                                <td>@(a.HasAiSummary ? L.T("tak") : "—")</td>
+                                <td class="right">@(a.Files > 0 ? a.Files.ToString() : "—")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (Visible.Count > _limit)
+            {
+                <div class="pager"><span class="muted small">@L.F("Pokazano {0} z {1}", _limit, Visible.Count)</span><button class="btn btn-ghost btn-sm" @onclick="() => _limit += 20">@L.T("Pokaż więcej")</button></div>
+            }
+        }
+    </section>
+
+    <section class="card">
+        <div class="card-title"><Icon Name="folder" /> @L.T("Import audytu")</div>
+        <p class="muted small">@L.T("Wybierz plik ZIP lub JSON wyeksportowany z WELES (do 50 MB). Plik jest sprawdzany: dozwolone pliki w archiwum, sumy SHA-256 z manifestu, format i rozmiary danych. Nic nie jest rozpakowywane na dysk.")</p>
+        <p class="muted small">@L.T("Zaimportowany audyt jest tylko do odczytu i nie trafia do inwentarza, oceny ryzyka ani monitoringu – opisuje inną sieć w innym czasie.")</p>
+        <label class="btn btn-ghost">
+            <Icon Name="folder" Size="15" /> @(_importing ? L.T("Importowanie…") : L.T("Wybierz plik audytu"))
+            <InputFile OnChange="ImportAsync" accept=".zip,.json" class="visually-hidden" disabled="@_importing" />
+        </label>
+        @if (_importError is not null) { <div class="alert alert-bad">@L.Message(_importError)</div> }
+        @if (_importedNow is not null) { <div class="alert alert-ok">@L.F("Zaimportowano audyt „{0}”.", L.Message(_importedNow.Title)) <a href="reports/imported/@_importedNow.Id">@L.T("Otwórz")</a></div> }
+
+        @if (_imported is { Count: > 0 })
+        {
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>@L.T("Audyt")</th><th>@L.T("Data audytu")</th><th class="right">@L.T("Urządzenia")</th><th class="right">@L.T("Wynik")</th><th>@L.T("Plik")</th><th>@L.T("Zaimportowano")</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var x in _imported)
+                        {
+                            <tr>
+                                <td><a href="reports/imported/@x.Id">@L.Message(x.Title)</a><div class="muted small">@L.F("Skan #{0}", x.OriginalScanId) · @x.ExportedBy</div></td>
+                                <td>@Labels.Local(x.AuditStartedAt)</td>
+                                <td class="right">@x.DeviceCount</td>
+                                <td class="right">@(x.PostureScore?.ToString("0") ?? "—")</td>
+                                <td class="small mono">@x.SourceFileName</td>
+                                <td>@Labels.Local(x.ImportedAt)</td>
+                                <td class="right">@if (_confirmDelete == x.Id)
+                                    {
+                                        <button class="btn btn-danger btn-sm" @onclick="() => DeleteImportedAsync(x.Id)">@L.T("Usuń")</button>
+                                        <button class="btn btn-ghost btn-sm" @onclick="() => _confirmDelete = null">@L.T("Anuluj")</button>
+                                    }
+                                    else
+                                    {
+                                        <button class="btn btn-ghost btn-sm" @onclick="() => _confirmDelete = x.Id">@L.T("Usuń")</button>
+                                    }</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <section class="card">
+        <div class="card-title"><Icon Name="reports" /> @L.T("Wygenerowane pliki")</div>
+        <ReportFiles Files="_files" Changed="LoadAsync" />
+    </section>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "net")] public string? NetworkParameter { get; set; }
+
+    private IReadOnlyList<AuditListItem>? _audits;
+    private IReadOnlyList<ImportedAuditItem>? _imported;
+    private IReadOnlyList<ReportFileItem> _files = [];
+    private NetworkContext? _networks;
+    private string _filter = NetworkContext.All;
+    private int _limit = 20;
+    private bool _importing;
+    private string? _importError;
+    private ImportedAuditItem? _importedNow;
+    private int? _confirmDelete;
+
+    private List<AuditListItem> Visible => _audits?.Where(a => _networks is null || _networks.IncludesScan(_filter, a.ScanId)).ToList() ?? [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _networks = await Networks.ContextAsync();
+        // Reports cover every audit, also of other networks – "all" unless the user picks one.
+        _filter = NetworkParameter is null ? NetworkContext.All : _networks.Normalize(NetworkParameter);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _audits = await Service.AuditsAsync();
+        _imported = await Service.ImportedAsync();
+        _files = await Service.ReportsAsync();
+    }
+
+    private async Task ImportAsync(InputFileChangeEventArgs e)
+    {
+        _importError = null;
+        _importedNow = null;
+        if (e.File.Size > AuditArchive.MaxImportBytes)
+        {
+            _importError = "Plik jest większy niż 50 MB.";
+            return;
+        }
+
+        _importing = true;
+        try
+        {
+            await using var stream = e.File.OpenReadStream(AuditArchive.MaxImportBytes);
+            _importedNow = await Service.ImportAsync(stream, e.File.Name);
+            await LoadAsync();
+        }
+        catch (AuditImportException ex)
+        {
+            _importError = ex.Message;
+        }
+        catch (IOException)
+        {
+            _importError = "Nie udało się odczytać pliku.";
+        }
+        finally
+        {
+            _importing = false;
+        }
+    }
+
+    private async Task DeleteImportedAsync(int id)
+    {
+        _confirmDelete = null;
+        await Service.DeleteImportedAsync(id);
+        if (_importedNow?.Id == id) _importedNow = null;
+        await LoadAsync();
+    }
+}

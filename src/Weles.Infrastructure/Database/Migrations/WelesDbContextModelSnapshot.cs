@@ -284,6 +284,89 @@ namespace Weles.Infrastructure.Database.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Weles.Core.Entities.AuditAiSummary", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .HasMaxLength(5)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Model")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ScanId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(20000)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ScanId")
+                        .IsUnique();
+
+                    b.ToTable("AuditAiSummaries");
+                });
+
+            modelBuilder.Entity("Weles.Core.Entities.AuditReport", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Format")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ImportedAuditId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Language")
+                        .HasMaxLength(5)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("ScanId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("ImportedAuditId");
+
+                    b.HasIndex("ScanId");
+
+                    b.ToTable("AuditReports", t =>
+                        {
+                            t.HasCheckConstraint("CK_AuditReports_Source", "(ScanId IS NULL) <> (ImportedAuditId IS NULL)");
+                        });
+                });
+
             modelBuilder.Entity("Weles.Core.Entities.Certificate", b =>
                 {
                     b.Property<int>("Id")
@@ -598,6 +681,64 @@ namespace Weles.Infrastructure.Database.Migrations
                     b.HasIndex("ScanTargetId");
 
                     b.ToTable("ExternalTargets");
+                });
+
+            modelBuilder.Entity("Weles.Core.Entities.ImportedAudit", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("AuditStartedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("DeviceCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("DocumentJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ExportedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ExportedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ImportedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("OriginalScanId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double?>("PostureScore")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("SchemaVersion")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SourceFileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Sha256")
+                        .IsUnique();
+
+                    b.ToTable("ImportedAudits");
                 });
 
             modelBuilder.Entity("Weles.Core.Entities.NetworkSegment", b =>
@@ -1173,6 +1314,34 @@ namespace Weles.Infrastructure.Database.Migrations
                     b.Navigation("Scan");
 
                     b.Navigation("Vulnerability");
+                });
+
+            modelBuilder.Entity("Weles.Core.Entities.AuditAiSummary", b =>
+                {
+                    b.HasOne("Weles.Core.Entities.Scan", "Scan")
+                        .WithMany()
+                        .HasForeignKey("ScanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Scan");
+                });
+
+            modelBuilder.Entity("Weles.Core.Entities.AuditReport", b =>
+                {
+                    b.HasOne("Weles.Core.Entities.ImportedAudit", "ImportedAudit")
+                        .WithMany()
+                        .HasForeignKey("ImportedAuditId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("Weles.Core.Entities.Scan", "Scan")
+                        .WithMany()
+                        .HasForeignKey("ScanId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("ImportedAudit");
+
+                    b.Navigation("Scan");
                 });
 
             modelBuilder.Entity("Weles.Core.Entities.Certificate", b =>

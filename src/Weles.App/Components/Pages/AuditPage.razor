@@ -1,0 +1,221 @@
+@page "/reports/audit/{ScanId:int}"
+@page "/reports/imported/{ImportId:int}"
+@using System.Threading
+@using Weles.Core.Reports
+@using Weles.App.Reports
+@using Weles.Infrastructure.AI
+@using Weles.Infrastructure.Reports
+@implements IDisposable
+@inject AuditReportService Service
+@inject AuditDocumentBuilder Builder
+@inject AuditSummaryService Summaries
+@inject IAiService Ai
+
+<PageTitle>@L.T("Audyt · WELES")</PageTitle>
+
+<div class="page-header">
+    <div>
+        <a class="back-link small" href="reports"><Icon Name="arrow-left" Size="14" /> @L.T("Raporty")</a>
+        <h1>@(ImportId is null ? L.F("Audyt – skan #{0}", ScanId ?? 0) : L.T("Audyt zaimportowany"))</h1>
+        @if (_document is not null) { <p class="page-subtitle">@AuditPdfRenderer.Title(_document.Audit) · @Labels.Local(_document.Audit.StartedAt)</p> }
+    </div>
+</div>
+
+@if (_loading)
+{
+    <div class="card loading">@L.T("Wczytywanie…")</div>
+}
+else if (_document is null)
+{
+    <section class="card empty"><p>@(ImportId is null ? L.T("Nie znaleziono zakończonego skanu – raport powstaje z zakończonego skanu.") : L.T("Nie znaleziono zaimportowanego audytu.")) <a href="reports">@L.T("Raporty")</a></p></section>
+}
+else
+{
+    @if (_imported is { } info)
+    {
+        <div class="alert alert-info"><Icon Name="info" Size="15" />
+            @L.F("Audyt zaimportowany z pliku „{0}” ({1}). Wyeksportowany {2} przez {3}, oryginalnie skan #{4}.", info.SourceFileName, Labels.Local(info.ImportedAt), Labels.Local(info.ExportedAt), info.ExportedBy ?? "WELES", info.OriginalScanId)
+            @L.T("Dane są tylko do odczytu i nie są łączone z lokalnym inwentarzem.")
+        </div>
+    }
+
+    <section class="card">
+        <div class="card-title"><Icon Name="reports" /> @L.T("Raport i eksport")</div>
+        <div class="actions">
+            <button class="btn btn-primary" disabled="@_busy" @onclick="() => GenerateAsync(ReportFormat.Pdf)"><Icon Name="reports" Size="15" /> @L.T("Raport PDF")</button>
+            <button class="btn btn-ghost" disabled="@_busy" @onclick="() => GenerateAsync(ReportFormat.Zip)"><Icon Name="download" Size="15" /> @L.T("Eksport ZIP (JSON + PDF)")</button>
+            <button class="btn btn-ghost" disabled="@_busy" @onclick="() => GenerateAsync(ReportFormat.Json)"><Icon Name="download" Size="15" /> @L.T("Eksport JSON")</button>
+            @if (_busy) { <span class="muted small">@L.T("Generowanie…")</span> }
+        </div>
+        <p class="muted small">@L.T("PDF jest w języku interfejsu. ZIP zawiera dane audytu (audit.json), raport PDF i manifest z sumami SHA-256 – możesz go otworzyć w innym WELES przez import.")</p>
+        @if (_error is not null) { <div class="alert alert-bad">@L.Message(_error)</div> }
+        @if (_files.Count > 0)
+        {
+            <ReportFiles Files="_files" ShowAudit="false" Highlight="_highlight" Changed="LoadFilesAsync" />
+        }
+    </section>
+
+    <section class="card">
+        <div class="card-title"><Icon Name="ai" /> @L.T("Podsumowanie AI")</div>
+        @if (_streaming is not null)
+        {
+            <div class="ai-summary markdown">@SafeMarkdown.Render(_streaming)</div>
+            <div class="actions"><span class="muted small">@L.T("Lokalny model pisze podsumowanie…")</span><button class="btn btn-ghost btn-sm" @onclick="StopSummary">@L.T("Zatrzymaj")</button></div>
+        }
+        else
+        {
+            @if (_document.AiSummary is { } ai)
+            {
+                <p class="muted small">@L.F("Wygenerowane przez lokalny model {0} ({1}) wyłącznie z danych tego audytu. To interpretacja – fakty znajdziesz w kolejnych sekcjach.", ai.Model ?? "AI", Labels.Local(ai.CreatedAt))</p>
+                <div class="ai-summary markdown">@SafeMarkdown.Render(ai.Text)</div>
+            }
+            else
+            {
+                <p class="muted">@(ImportId is null
+                    ? L.T("Brak podsumowania. Lokalny model może je przygotować z danych tego audytu – zostanie dołączone do raportu PDF i eksportu.")
+                    : L.T("Eksport nie zawierał podsumowania AI."))</p>
+            }
+
+            @if (ImportId is null)
+            {
+                <div class="actions">
+                    <button class="btn btn-ghost" disabled="@(_busy || _aiReady == false)" @onclick="SummarizeAsync"><Icon Name="ai" Size="15" /> @(_document.AiSummary is null ? L.T("Wygeneruj podsumowanie AI") : L.T("Wygeneruj ponownie"))</button>
+                    @if (_document.AiSummary is not null) { <button class="btn btn-ghost" disabled="@_busy" @onclick="DeleteSummaryAsync">@L.T("Usuń podsumowanie")</button> }
+                    @if (_aiReady == false) { <span class="muted small">@L.T("Silnik AI nie jest gotowy –") <a href="ai">@L.T("Analityk AI")</a></span> }
+                </div>
+            }
+        }
+        @if (_summaryError is not null) { <div class="alert alert-bad">@L.Message(_summaryError)</div> }
+    </section>
+
+    <AuditView Document="_document" Imported="ImportId is not null" />
+}
+
+@code {
+    [Parameter] public int? ScanId { get; set; }
+    [Parameter] public int? ImportId { get; set; }
+
+    private AuditDocument? _document;
+    private ImportedAuditItem? _imported;
+    private IReadOnlyList<ReportFileItem> _files = [];
+    private bool _loading = true;
+    private bool _busy;
+    private string? _error;
+    private int? _highlight;
+    private bool? _aiReady;
+    private string? _streaming;
+    private string? _summaryError;
+    private CancellationTokenSource? _summaryCts;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        await LoadDocumentAsync();
+        await LoadFilesAsync();
+        _loading = false;
+        if (ImportId is null && _document is not null)
+        {
+            var status = await Ai.GetStatusAsync();
+            _aiReady = status.IsReady;
+        }
+    }
+
+    private async Task LoadDocumentAsync()
+    {
+        if (ImportId is { } id)
+        {
+            var result = await Service.ImportedDocumentAsync(id);
+            _imported = result?.Info;
+            _document = result?.Document;
+        }
+        else
+        {
+            _document = await Builder.BuildAsync(ScanId ?? 0);
+        }
+    }
+
+    private async Task LoadFilesAsync() =>
+        _files = (await Service.ReportsAsync(500)).Where(f => ImportId is { } id ? f.ImportedAuditId == id : f.ScanId == ScanId).ToList();
+
+    private async Task GenerateAsync(ReportFormat format)
+    {
+        if (_document is null) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            // Local audits are rebuilt, so the file carries the latest AI summary and device names.
+            if (ImportId is null) await LoadDocumentAsync();
+            var document = _document!;
+            var imported = ImportId is not null;
+            var data = format switch
+            {
+                ReportFormat.Pdf => await Task.Run(() => AuditPdfRenderer.Render(document, imported)),
+                ReportFormat.Json => AuditArchive.ToJson(document),
+                _ => await Task.Run(() =>
+                {
+                    var pdf = AuditPdfRenderer.Render(document, imported);
+                    using var zip = new MemoryStream();
+                    AuditArchive.WriteZip(zip, document, pdf);
+                    return zip.ToArray();
+                })
+            };
+            var file = await Service.SaveAsync(ImportId is null ? ScanId : null, ImportId, format, data, format == ReportFormat.Pdf ? (L.IsEnglish ? "en" : "pl") : null);
+            _highlight = file.Id;
+            await LoadFilesAsync();
+        }
+        catch (IOException ex)
+        {
+            _error = $"Nie udało się zapisać pliku: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SummarizeAsync()
+    {
+        if (ScanId is not { } scanId) return;
+        _busy = true;
+        _summaryError = null;
+        _streaming = "";
+        _summaryCts = new CancellationTokenSource();
+        try
+        {
+            await foreach (var e in Summaries.GenerateAsync(scanId, L.IsEnglish ? "en" : "pl", _summaryCts.Token))
+            {
+                switch (e)
+                {
+                    case SummaryText t:
+                        _streaming += t.Text;
+                        StateHasChanged();
+                        break;
+                    case SummaryFinished f when f.Error is not null:
+                        _summaryError = f.Error;
+                        break;
+                }
+            }
+        }
+        finally
+        {
+            _streaming = null;
+            _busy = false;
+            _summaryCts.Dispose();
+            _summaryCts = null;
+        }
+
+        await LoadDocumentAsync();
+    }
+
+    private void StopSummary() => _summaryCts?.Cancel();
+
+    private async Task DeleteSummaryAsync()
+    {
+        if (ScanId is not { } scanId) return;
+        await Service.DeleteAiSummaryAsync(scanId);
+        await LoadDocumentAsync();
+    }
+
+    public void Dispose() => _summaryCts?.Cancel();
+}

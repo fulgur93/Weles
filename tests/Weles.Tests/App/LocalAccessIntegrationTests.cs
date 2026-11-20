@@ -293,11 +293,29 @@ public class Stage7PagesTests(WelesAppFactory factory) : IClassFixture<WelesAppF
     [InlineData("/attack-paths")]
     [InlineData("/attack-surface")]
     [InlineData("/attack-surface?id=999")]
+    [InlineData("/reports")]
+    [InlineData("/reports?net=all")]
+    [InlineData("/reports/audit/999")]
+    [InlineData("/reports/imported/999")]
     public async Task Pages_render_without_redirects(string path)
     {
         var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, BaseAddress = new Uri("http://localhost") });
         await client.GetAsync($"/auth?token={Uri.EscapeDataString(factory.Services.GetRequiredService<LocalAccessToken>().Value)}");
         var response = await client.GetAsync(path);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+}
+
+public class ReportEndpointTests(WelesAppFactory factory) : IClassFixture<WelesAppFactory>
+{
+    [Fact]
+    public async Task Report_downloads_need_the_session_and_unknown_files_are_not_found()
+    {
+        var anonymous = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, BaseAddress = new Uri("http://localhost") });
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/reports/1/download")).StatusCode);
+
+        var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, BaseAddress = new Uri("http://localhost") });
+        await client.GetAsync($"/auth?token={Uri.EscapeDataString(factory.Services.GetRequiredService<LocalAccessToken>().Value)}");
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/reports/424242/download")).StatusCode);
     }
 }

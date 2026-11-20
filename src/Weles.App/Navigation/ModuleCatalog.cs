@@ -53,7 +53,7 @@ public static class ModuleCatalog
         new("Analityk AI", "ai", "ai", "Inteligencja", 6, true,
             "Lokalny asystent bezpieczeństwa (Ollama + model Q4 dołączone do instalatora). Analizuje wyłącznie dane z bazy WELES.",
             ["Wyjaśnianie podatności prostym językiem", "Priorytety napraw i rekomendacje", "Podsumowania audytów i zmian między skanami", "Działa offline – dane nie opuszczają komputera"]),
-        new("Raporty", "reports", "reports", "Inteligencja", 9, false,
+        new("Raporty", "reports", "reports", "Inteligencja", 9, true,
             "Raporty PDF oraz eksport/import audytu (JSON/ZIP) do przeniesienia na inny komputer.",
             ["Raport PDF z podsumowaniem, urządzeniami, podatnościami i rekomendacjami", "Zmiany od poprzedniego audytu", "Eksport i import pełnego audytu"]),
 

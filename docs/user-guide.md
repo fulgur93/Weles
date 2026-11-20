@@ -18,7 +18,7 @@ otwiera istniejącą sesję zamiast startować drugi serwer.
 | Ocena ryzyka | Security Posture Score, trend, priorytety napraw, ocena każdego urządzenia z uzasadnieniem | ✅ Etap 5 |
 | Topologia / Ścieżki ataku / Monitorowanie | mapa sieci, hipotetyczne ścieżki ekspozycji, zmiany między skanami, harmonogram | ✅ Etap 7 |
 | Analityk AI | lokalny asystent: wyjaśnia podatności, ryzyko, zmiany, priorytety napraw | ✅ Etap 6 |
-| Reports | PDF, eksport/import audytu | Etap 9 |
+| Raporty | raport PDF, eksport JSON/ZIP, import audytu, podsumowanie AI audytu | ✅ Etap 9 |
 | Agents | zdalne agenty | Etap 10 |
 | Settings | wersja, ścieżki, baza, AI, motyw, pobieranie logów | Etap 1 |
 
@@ -156,6 +156,23 @@ adresem** – WELES nie proponuje zakresu całej sieci VPN, bo są w niej komput
   w Wykrywaniu sieci (ponowne potwierdzenie uprawnień) → uruchom skan (zalecany profil Szybki). Wyniki – otwarte porty
   publiczne, usługi administracyjne dostępne z Internetu, certyfikaty TLS i uwagi – pojawią się na stronie Powierzchni ataku.
   Upewnij się, że dostawca hostingu pozwala na skanowanie.
+
+## Raporty
+
+Audyt to jeden zakończony skan. **Raporty** pokazują wszystkie audyty (z przełącznikiem sieci); przycisk **Raport audytu**
+jest też na stronie skanu.
+
+- **Raport PDF** – dane audytu, data, zakres, podsumowanie infrastruktury, lista urządzeń, usługi, podatności (CVE)
+  i problemy konfiguracji (np. FTP bez szyfrowania), poziomy ryzyka, rekomendacje w kolejności napraw, zmiany od
+  poprzedniego audytu tej sieci oraz podsumowanie AI, jeśli je wygenerowano. Język PDF = język interfejsu.
+- **Eksport ZIP** – `audit.json` + `report.pdf` + `manifest.json` z sumami SHA‑256; **Eksport JSON** – sam `audit.json`.
+  Pliki trafiają do katalogów `reports/` i `exports/`; lista „Wygenerowane pliki” pozwala je pobrać ponownie.
+- **Podsumowanie AI** – na żądanie, przez lokalny model, wyłącznie z danych tego audytu.
+- **Import audytu** – wybierz ZIP lub JSON z innego WELES. Plik jest sprawdzany (dozwolone pliki, sumy SHA‑256, format,
+  rozmiary). Zaimportowany audyt otwiera się tylko do odczytu i nie miesza się z urządzeniami tego komputera; można
+  z niego wygenerować PDF.
+
+Raport opisuje stan z chwili skanu – późniejsze skany nie zmieniają starszego raportu.
 
 ## Analityk AI
 

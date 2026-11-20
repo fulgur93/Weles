@@ -46,5 +46,6 @@ pwsh deploy/windows/publish.ps1 -Rid win-x64 # artifacts/weles-<ver>-win-x64.zip
 | 6 | AI Security Analyst: dołączona Ollama + Qwen3‑4B Q4 jako proces potomny, czat ze strumieniowaniem, kontekst wyłącznie z bazy WELES | ✅ |
 | 7 | Monitoring (porównanie skanów, zmiany w czasie, harmonogram tylko w zatwierdzonej sieci), topologia SVG, ścieżki ataku jako hipotezy | ✅ |
 | 8 | External Attack Surface: DNS, SPF/DMARC, subdomeny z CT, certyfikaty, usługi publiczne (pasywnie lub przez zatwierdzony zakres) | ✅ |
-| 9 | Raporty | ⏳ następny |
-| 10–11 | Agenci, Pakowanie | planowane |
+| 9 | Raporty: PDF, eksport JSON/ZIP z SHA‑256, import audytu z walidacją, podsumowanie AI audytu | ✅ |
+| 10 | Agenci | ⏳ następny |
+| 11 | Pakowanie | planowane |

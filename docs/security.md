@@ -96,7 +96,17 @@ WELES łączy się z Internetem **tylko** po kliknięciu „Aktualizuj z Interne
   zewnętrznych).
 - Rozmowy są przechowywane tylko w lokalnej bazie; można je usuwać.
 
+## Raporty i import audytu (Etap 9)
+
+- Raporty i eksporty powstają lokalnie (QuestPDF w procesie), w katalogach danych użytkownika (0700). Nazwy plików
+  generuje WELES; pobieranie po identyfikatorze rekordu, ścieżka ograniczona do katalogu, za strażnikiem sesji.
+- Import: limit 50 MB czytany strumieniowo, żadnego rozpakowywania na dysk (brak ZIP slip z założenia), wyłącznie
+  wpisy `manifest.json`, `audit.json`, `report.pdf`, limit rozmiaru każdego wpisu liczony przy czytaniu (ochrona przed
+  „bombą ZIP”), zgodność SHA‑256 i rozmiaru z manifestem, JSON z ograniczoną głębokością, walidacja schematu i długości
+  tekstów. Odrzucony plik nie zostawia żadnych danych. Teksty z importu są wyświetlane po zakodowaniu HTML.
+- Zaimportowany audyt nie jest łączony z inwentarzem i nie uruchamia żadnych skanów.
+- Log zawiera tylko fakt eksportu/importu (format, rozmiar, nazwa pliku) – nie treść audytu.
+
 ## Planowane
 
-- Walidacja importowanych archiwów (ZIP slip, limity rozmiaru, schemat) – Etap 9.
 - Agenci: rejestracja jednorazowym kodem, tokeny przechowywane jako hash, unieważnianie, ograniczenie do przypisanych zakresów – Etap 10.
