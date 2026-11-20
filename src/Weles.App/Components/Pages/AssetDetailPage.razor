@@ -135,6 +135,7 @@ else
             <div class="card-title"><Icon Name="risk" /> @L.T("Ocena ryzyka")
                 <StatusPill Tone="@Labels.Tone(risk.Result.Level)">@risk.Result.Score.ToString("0") · @Labels.Of(risk.Result.Level)</StatusPill>
                 <span class="muted small">· <a href="scans/@risk.ScanId">@L.F("Skan #{0}", risk.ScanId)</a> · @Labels.Local(risk.AssessedAt)</span>
+                <a class="btn btn-ghost btn-sm" style="margin-left:auto" href="ai?asset=@AssetId"><Icon Name="ai" Size="14" /> @L.T("Zapytaj Analityka AI")</a>
             </div>
             <div class="grid-2 risk-detail">
                 <div>

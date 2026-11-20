@@ -13,7 +13,16 @@ dotnet publish "$ROOT/src/Weles.App/Weles.App.csproj" -c Release -r "$RID" --sel
 
 install -m 0755 "$ROOT/deploy/linux/weles.sh" "$OUT/weles"
 cp "$ROOT/deploy/THIRD-PARTY-NOTICES.txt" "$OUT/"
-# Stage 6/11: runtime/ollama and models/ are added here.
+# Local AI: Ollama + model prepared by deploy/tools/fetch-ai-runtime.sh (nothing is downloaded on the user's machine).
+AI="$ROOT/artifacts/ai-runtime"
+if [ -x "$AI/ollama/bin/ollama" ] && [ -d "$AI/models/manifests" ]; then
+  mkdir -p "$OUT/runtime"
+  cp -a "$AI/ollama" "$OUT/runtime/ollama"
+  cp -a "$AI/models" "$OUT/runtime/models"
+  echo "AI runtime included: $(du -sh "$OUT/runtime" | cut -f1)"
+else
+  echo "WARNING: artifacts/ai-runtime missing – run deploy/tools/fetch-ai-runtime.sh; the package will have no local AI." >&2
+fi
 
 tar -C "$ROOT/artifacts" -czf "$OUT.tar.gz" "$(basename "$OUT")"
 echo "Package: $OUT.tar.gz"

@@ -4,6 +4,7 @@
 @inject Weles.Infrastructure.Database.DatabaseInfoService DatabaseInfo
 @inject IAiService Ai
 @inject ThemeState ThemeState
+@inject Weles.Infrastructure.AI.OllamaProcessHost EngineHost
 @inject Microsoft.Extensions.Options.IOptions<Weles.Infrastructure.AI.AiOptions> AiOptions
 
 <PageTitle>@L.T("Ustawienia · WELES")</PageTitle>
@@ -73,6 +74,12 @@
             <dt>@L.T("Silnik")</dt><dd>@(_ai?.EngineName ?? "Ollama") @(_ai?.EngineVersion is { } v ? $"v{v}" : "")</dd>
             <dt>@L.T("Endpoint")</dt><dd class="mono">@AiOptions.Value.Endpoint</dd>
             <dt>@L.T("Model")</dt><dd class="mono">@AiOptions.Value.Model</dd>
+            <dt>@L.T("Uruchamianie")</dt><dd>@EngineHostText()</dd>
+            @if (EngineHost.Runtime is { } runtime)
+            {
+                <dt>@L.T("Silnik (plik)")</dt><dd class="mono break">@runtime.Executable</dd>
+                <dt>@L.T("Modele")</dt><dd class="mono break">@runtime.ModelsDirectory</dd>
+            }
             @if (_ai?.InstalledModels.Count > 0)
             {
                 <dt>@L.T("Zainstalowane")</dt><dd class="mono">@string.Join(", ", _ai.InstalledModels)</dd>
@@ -105,6 +112,16 @@
         _db = await DatabaseInfo.GetInfoAsync();
         _ai = await Ai.GetStatusAsync();
     }
+
+    private string EngineHostText() => EngineHost.State switch
+    {
+        Weles.Infrastructure.AI.EngineHostState.Running => L.T("dołączony silnik uruchomiony przez WELES (tylko 127.0.0.1)"),
+        Weles.Infrastructure.AI.EngineHostState.Starting => L.T("uruchamianie…"),
+        Weles.Infrastructure.AI.EngineHostState.External => L.T("silnik już działał na tym adresie – WELES z niego korzysta"),
+        Weles.Infrastructure.AI.EngineHostState.NotBundled => L.T("brak dołączonego silnika"),
+        Weles.Infrastructure.AI.EngineHostState.Disabled => L.T("wyłączone w konfiguracji"),
+        _ => L.Message(EngineHost.Message ?? L.T("błąd uruchamiania"))
+    };
 
     private async Task RefreshAiAsync()
     {

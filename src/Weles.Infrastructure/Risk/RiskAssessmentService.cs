@@ -26,7 +26,7 @@ public sealed record PostureBreakdown(IReadOnlyList<RiskFactor> Factors, IReadOn
 public sealed class RiskAssessmentService(IDbContextFactory<WelesDbContext> contextFactory, SettingsService settings, TimeProvider timeProvider, ILogger<RiskAssessmentService> logger)
 {
     /// <summary>Bump when rules or weights change – the latest scans are re-assessed on the next start.</summary>
-    public const int EngineVersion = 2;
+    public const int EngineVersion = 3;
     public const string EngineVersionKey = "risk.engineVersion";
 
     internal static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);

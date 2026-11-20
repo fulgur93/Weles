@@ -10,4 +10,10 @@ public interface IAiService
 {
     /// <summary>Checks the engine and model availability. Never throws for connectivity problems.</summary>
     Task<AiEngineStatus> GetStatusAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Streams the model's answer. The model only receives the messages given here – it has no tools and cannot run
+    /// commands or scans.
+    /// </summary>
+    IAsyncEnumerable<AiChatChunk> ChatAsync(IReadOnlyList<AiChatMessage> messages, CancellationToken cancellationToken = default);
 }

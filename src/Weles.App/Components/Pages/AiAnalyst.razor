@@ -1,0 +1,283 @@
+@page "/ai"
+@using System.Text
+@using Weles.Infrastructure.AI
+@implements IDisposable
+@inject AiAnalystService Analyst
+@inject IAiService Ai
+@inject OllamaProcessHost EngineHost
+@inject Weles.Infrastructure.Queries.AssetQueries AssetQueries
+@inject NavigationManager Navigation
+
+<PageTitle>@L.T("Analityk AI · WELES")</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>@L.T("Analityk AI")</h1>
+        <p class="page-subtitle">@L.T("Lokalny model językowy odpowiada wyłącznie na podstawie danych z bazy WELES. Działa na tym komputerze, bez Internetu – dane nie opuszczają komputera. Nie uruchamia skanów ani poleceń; tylko wyjaśnia i doradza.")</p>
+    </div>
+    <div class="header-actions">
+        @if (_status is { } st)
+        {
+            <span title="@st.Endpoint"><StatusPill Tone="@(st.IsReady ? "ok" : EngineHost.State == EngineHostState.Starting ? "info" : "warn")">@StatusText(st)</StatusPill></span>
+            <span class="muted small mono">@st.ConfiguredModel</span>
+        }
+    </div>
+</div>
+
+@if (_status is { IsReady: false } notReady)
+{
+    <div class="alert alert-info">@NotReadyHelp(notReady)</div>
+}
+
+<section class="ai-layout">
+    <aside class="card ai-conversations">
+        <button class="btn btn-primary btn-sm" @onclick="NewConversation" disabled="@_busy"><Icon Name="ai" Size="14" /> @L.T("Nowa rozmowa")</button>
+        <ul>
+            @foreach (var c in _conversations)
+            {
+                <li class="@(c.Id == _conversationId ? "active" : "")">
+                    <button class="link" disabled="@_busy" @onclick="() => OpenAsync(c.Id)" title="@c.Title">@c.Title</button>
+                    <span class="muted small">@Labels.Local(c.UpdatedAt)</span>
+                    <button class="icon-button" title="@L.T("Usuń rozmowę")" disabled="@_busy" @onclick="() => DeleteAsync(c.Id)">×</button>
+                </li>
+            }
+        </ul>
+        @if (_conversations.Count == 0) { <p class="muted small">@L.T("Rozmowy są zapisywane tylko w lokalnej bazie WELES.")</p> }
+    </aside>
+
+    <div class="card ai-chat">
+        <div class="ai-messages">
+            @if (_messages.Count == 0 && _pending is null)
+            {
+                <div class="ai-empty">
+                    <p class="muted">@L.T("Zapytaj o swoją sieć, np.:")</p>
+                    <div class="chips">
+                        @foreach (var s in Suggestions) { <button class="chip" disabled="@(_busy || _status?.IsReady != true)" @onclick="() => AskAsync(s)">@s</button> }
+                    </div>
+                </div>
+            }
+            @foreach (var m in _messages)
+            {
+                <div class="ai-message @m.Role">
+                    @if (m.Role == "user")
+                    {
+                        <div class="bubble">@m.Content</div>
+                    }
+                    else
+                    {
+                        <div class="bubble markdown">@SafeMarkdown.Render(m.Content)</div>
+                        <MessageMeta Message="m" />
+                    }
+                </div>
+            }
+            @if (_pending is { } p)
+            {
+                <div class="ai-message user"><div class="bubble">@p.Question</div></div>
+                <div class="ai-message assistant">
+                    <div class="bubble markdown">
+                        @if (p.Answer.Length == 0)
+                        {
+                            <span class="muted"><span class="spinner" aria-hidden="true"></span> @(p.Sources is null ? L.T("Zbieranie danych z bazy WELES…") : L.T("Model analizuje dane… (na procesorze pierwsza odpowiedź może potrwać kilkanaście sekund)"))</span>
+                        }
+                        else
+                        {
+                            @SafeMarkdown.Render(p.Answer.ToString())
+                        }
+                    </div>
+                    @if (p.Sources is { Count: > 0 } sources)
+                    {
+                        <details class="ai-sources"><summary>@L.F("Dane przekazane modelowi ({0})", sources.Count)</summary><ul>@foreach (var s in sources) { <li>@L.Message(s)</li> }</ul></details>
+                    }
+                </div>
+            }
+        </div>
+
+        <form class="ai-input" @onsubmit="SubmitAsync" @onsubmit:preventDefault="true">
+            <textarea class="input" rows="2" maxlength="@AiAnalystService.MaxQuestionLength" @bind="_question" @bind:event="oninput"
+                      placeholder="@L.T("Zadaj pytanie o swoją sieć… (Ctrl+Enter wysyła)")" disabled="@(_status?.IsReady != true)"
+                      @onkeydown="OnKeyDown"></textarea>
+            @if (_busy)
+            {
+                <button type="button" class="btn btn-danger" @onclick="Stop">@L.T("Zatrzymaj")</button>
+            }
+            else
+            {
+                <button type="submit" class="btn btn-primary" disabled="@(string.IsNullOrWhiteSpace(_question) || _status?.IsReady != true)">@L.T("Wyślij")</button>
+            }
+        </form>
+    </div>
+</section>
+
+@code {
+    [SupplyParameterFromQuery(Name = "cve")] public string? Cve { get; set; }
+    [SupplyParameterFromQuery(Name = "asset")] public int? AssetId { get; set; }
+
+    private sealed class Pending
+    {
+        public required string Question { get; init; }
+        public StringBuilder Answer { get; } = new();
+        public IReadOnlyList<string>? Sources { get; set; }
+    }
+
+    private AiEngineStatus? _status;
+    private IReadOnlyList<Weles.Core.Entities.AiConversation> _conversations = [];
+    private List<Weles.Core.Entities.AiMessage> _messages = [];
+    private int? _conversationId;
+    private string? _question;
+    private bool _busy;
+    private Pending? _pending;
+    private CancellationTokenSource? _answerCts;
+    private CancellationTokenSource? _pollCts;
+    private bool _autoAsked;
+
+    private string Language => L.IsEnglish ? "en" : "pl";
+
+    private IReadOnlyList<string> Suggestions =>
+    [
+        L.T("Jakie są trzy największe zagrożenia w mojej sieci?"),
+        L.T("Które podatności powinienem naprawić najpierw?"),
+        L.T("Czy pojawiły się nowe urządzenia od ostatniego skanowania?"),
+        L.T("Wyjaśnij Security Posture Score mojej sieci."),
+        L.T("Przygotuj podsumowanie ostatniego audytu.")
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _status = await Ai.GetStatusAsync();
+        _conversations = await Analyst.ConversationsAsync();
+        _pollCts = new CancellationTokenSource();
+        _ = PollStatusAsync(_pollCts.Token);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // "Wyjaśnij z Analitykiem AI" on a CVE or device page: ask once, as soon as the engine is ready.
+        if (_autoAsked || _busy || _status?.IsReady != true) return;
+        if (Cve is { } cve && System.Text.RegularExpressions.Regex.IsMatch(cve, @"^CVE-\d{4}-\d{4,}$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+        {
+            _autoAsked = true;
+            await AskAsync(L.F("Wyjaśnij {0} prostym językiem: na czym polega, czy dotyczy moich urządzeń i co powinienem zrobić.", cve.ToUpperInvariant()), new AiFocus(CveId: cve));
+        }
+        else if (AssetId is { } id && await AssetQueries.GetAsync(id) is { } asset)
+        {
+            _autoAsked = true;
+            await AskAsync(L.F("Jakie są najważniejsze zagrożenia dla urządzenia {0} ({1}) i co powinienem zrobić?", asset.Asset.CustomName ?? asset.Asset.DisplayName, asset.Asset.PrimaryIpAddress), new AiFocus(AssetId: id));
+        }
+    }
+
+    private async Task PollStatusAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                if (_busy) continue;
+                var status = await Ai.GetStatusAsync(ct);
+                if (status.State == _status?.State) continue;
+                _status = status;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Page closed.
+        }
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && e.CtrlKey) await SubmitAsync();
+    }
+
+    private Task SubmitAsync() => string.IsNullOrWhiteSpace(_question) ? Task.CompletedTask : AskAsync(_question!);
+
+    private async Task AskAsync(string question, AiFocus? focus = null)
+    {
+        if (_busy || _status?.IsReady != true) return;
+        _busy = true;
+        _question = null;
+        _pending = new Pending { Question = question.Trim() };
+        _answerCts = new CancellationTokenSource();
+        StateHasChanged();
+
+        var lastRender = DateTime.UtcNow;
+        try
+        {
+            await foreach (var e in Analyst.AskAsync(_conversationId, question, Language, focus, _answerCts.Token))
+            {
+                switch (e)
+                {
+                    case AnalystStarted started:
+                        _conversationId = started.ConversationId;
+                        _pending.Sources = started.Sources;
+                        StateHasChanged();
+                        break;
+                    case AnalystText text:
+                        _pending.Answer.Append(text.Text);
+                        if (DateTime.UtcNow - lastRender > TimeSpan.FromMilliseconds(80))
+                        {
+                            lastRender = DateTime.UtcNow;
+                            StateHasChanged();
+                        }
+
+                        break;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Stopped before the answer started; the question is stored.
+        }
+        finally
+        {
+            _busy = false;
+            _pending = null;
+            if (_conversationId is { } id) _messages = [.. await Analyst.MessagesAsync(id)];
+            _conversations = await Analyst.ConversationsAsync();
+            StateHasChanged();
+        }
+    }
+
+    private void Stop() => _answerCts?.Cancel();
+
+    private void NewConversation()
+    {
+        _conversationId = null;
+        _messages = [];
+    }
+
+    private async Task OpenAsync(int id)
+    {
+        _conversationId = id;
+        _messages = [.. await Analyst.MessagesAsync(id)];
+    }
+
+    private async Task DeleteAsync(int id)
+    {
+        await Analyst.DeleteConversationAsync(id);
+        if (_conversationId == id) NewConversation();
+        _conversations = await Analyst.ConversationsAsync();
+    }
+
+    private string StatusText(AiEngineStatus st) => st.State switch
+    {
+        AiEngineState.Ready => L.T("Gotowe"),
+        AiEngineState.ModelMissing => L.T("Brak modelu"),
+        _ => EngineHost.State == EngineHostState.Starting ? L.T("Uruchamianie silnika…") : L.T("Niedostępne")
+    };
+
+    private string NotReadyHelp(AiEngineStatus st) => st.State switch
+    {
+        AiEngineState.ModelMissing => L.F("Silnik działa, ale nie ma modelu {0}. W paczce WELES model jest dołączony; w wersji deweloperskiej uruchom deploy/tools/fetch-ai-runtime.sh.", st.ConfiguredModel),
+        _ when EngineHost.State == EngineHostState.Starting => L.T("Uruchamianie lokalnego silnika AI – zwykle kilka sekund."),
+        _ when EngineHost.State == EngineHostState.NotBundled => L.T("Nie znaleziono dołączonego silnika AI (runtime/ollama). W paczce WELES jest on dołączony; w wersji deweloperskiej uruchom deploy/tools/fetch-ai-runtime.sh."),
+        _ => L.F("Lokalny silnik AI nie odpowiada ({0}). Reszta WELES działa normalnie.", L.Message(EngineHost.Message ?? st.Message))
+    };
+
+    public void Dispose()
+    {
+        _pollCts?.Cancel();
+        _answerCts?.Cancel();
+    }
+}

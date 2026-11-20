@@ -17,7 +17,7 @@ otwiera istniejącą sesję zamiast startować drugi serwer.
 | Vulnerabilities | dopasowania CVE (NVD, KEV, EPSS), lokalna baza i jej aktualizacja | ✅ Etap 4 |
 | Ocena ryzyka | Security Posture Score, trend, priorytety napraw, ocena każdego urządzenia z uzasadnieniem | ✅ Etap 5 |
 | Network Topology / Attack Paths / Monitoring | mapa, ścieżki ekspozycji, zmiany w czasie | Etap 7 |
-| AI Analyst | lokalny asystent bezpieczeństwa | Etap 6 |
+| Analityk AI | lokalny asystent: wyjaśnia podatności, ryzyko, zmiany, priorytety napraw | ✅ Etap 6 |
 | Reports | PDF, eksport/import audytu | Etap 9 |
 | Agents | zdalne agenty | Etap 10 |
 | Settings | wersja, ścieżki, baza, AI, motyw, pobieranie logów | Etap 1 |
@@ -117,6 +117,20 @@ aplikacji (wtedy skan jest oznaczany jako przerwany).
 - **Priorytety napraw** – lista „co naprawić najpierw”: ocena problemu wzmocniona kontekstem urządzenia.
 - **Akceptuj ryzyko** (szczegóły urządzenia / CVE) – świadoma decyzja; problem zostaje w historii, ale nie podnosi oceny.
 - Poziomy: Critical ≥ 80, High ≥ 60, Medium ≥ 35, Low ≥ 15, Informational.
+
+## Analityk AI
+
+- Lokalny model językowy (Qwen3‑4B, dołączony do WELES) odpowiada na pytania o Twoją sieć **wyłącznie na podstawie
+  danych WELES**; działa bez Internetu i nic nie wysyła poza komputer. Uruchamia się sam przy starcie WELES.
+- Przykłady: „Jakie są trzy największe zagrożenia w mojej sieci?”, „Które podatności powinienem naprawić najpierw?”,
+  „Czy pojawiły się nowe urządzenia od ostatniego skanowania?”, „Wyjaśnij CVE‑2023‑38408”, „Przygotuj podsumowanie
+  ostatniego audytu”. Przyciski „Wyjaśnij z Analitykiem AI” (strona CVE) i „Zapytaj Analityka AI” (ocena ryzyka
+  urządzenia) zadają pytanie od razu.
+- Pod odpowiedzią widać, jakie dane dostał model, ile trwała odpowiedź i z jaką szybkością. Odpowiedź można zatrzymać.
+- Analityk nie uruchamia skanów ani poleceń – tylko wyjaśnia i doradza. Gdy danych brakuje, mówi to i podpowiada, co
+  zrobić w WELES.
+- Na komputerze bez karty graficznej pierwsza odpowiedź trwa zwykle od kilkunastu sekund do ok. minuty (czytanie danych
+  przez model), potem tekst pojawia się na bieżąco.
 
 ## Telefony i tablety
 

@@ -508,6 +508,34 @@ th.sortable:hover { color: var(--text); }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
 @media (max-width: 860px) { .scan-indicator .muted { display: none; } }
 
+/* ---------- AI analyst ---------- */
+.ai-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px; margin-top: 16px; align-items: start; }
+.ai-conversations ul { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 4px; }
+.ai-conversations li { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 6px; padding: 6px 8px; border-radius: 6px; }
+.ai-conversations li.active { background: var(--accent-soft); }
+.ai-conversations li .link { grid-column: 1; background: none; border: 0; padding: 0; color: var(--text); font: inherit; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-conversations li .muted { grid-column: 1; }
+.ai-conversations li .icon-button { grid-column: 2; grid-row: 1 / span 2; }
+.ai-chat { display: flex; flex-direction: column; min-height: 60vh; }
+.ai-messages { flex: 1; display: grid; gap: 14px; align-content: start; overflow-y: auto; max-height: 65vh; padding-right: 4px; }
+.ai-message { display: grid; gap: 4px; }
+.ai-message.user { justify-items: end; }
+.ai-message .bubble { max-width: 85%; padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.55; white-space: pre-wrap; }
+.ai-message.user .bubble { background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
+.ai-message.assistant .bubble { background: var(--surface-2); border: 1px solid var(--border); max-width: 100%; white-space: normal; }
+.markdown h3, .markdown h4, .markdown h5 { margin: 10px 0 6px; font-size: 14.5px; }
+.markdown p { margin: 6px 0; }
+.markdown ul, .markdown ol { margin: 6px 0; padding-left: 20px; }
+.markdown code { font-family: var(--font-mono); font-size: 12.5px; background: var(--surface); padding: 1px 4px; border-radius: 4px; }
+.ai-meta { display: flex; flex-wrap: wrap; gap: 2px; align-items: baseline; }
+.ai-sources { width: 100%; }
+.ai-sources summary { cursor: pointer; }
+.ai-sources ul { margin: 4px 0; padding-left: 18px; }
+.ai-input { display: grid; grid-template-columns: 1fr auto; gap: 10px; margin-top: 14px; align-items: end; }
+.ai-input textarea { resize: vertical; }
+.ai-empty { padding: 20px 0; }
+@media (max-width: 860px) { .ai-layout { grid-template-columns: 1fr; } }
+
 /* ---------- AI question ---------- */
 .ai-question blockquote { margin: 8px 0 12px; padding: 10px 14px; border-left: 3px solid var(--accent); background: var(--surface-2); border-radius: 6px; font-size: 14px; }
 section.card.ai-question + section.card { margin-top: 16px; }

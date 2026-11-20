@@ -1,0 +1,21 @@
+@* Under every answer: what data the model received, how long it took, and whether it was stopped or failed. *@
+@using Weles.Core.Entities
+@if (!string.IsNullOrEmpty(Message.Error))
+{
+    <div class="detail-warn small">@L.Message(Message.Error)</div>
+}
+<div class="ai-meta muted small">
+    @if (Message.ContextSources is { Length: > 0 } src)
+    {
+        var sources = src.Split('\n');
+        <details class="ai-sources"><summary>@L.F("Dane przekazane modelowi ({0})", sources.Length)</summary><ul>@foreach (var s in sources) { <li>@L.Message(s)</li> }</ul></details>
+    }
+    <span>@Labels.Local(Message.CreatedAt)</span>
+    @if (Message.DurationMs is { } ms) { <span> · @L.F("{0} s", (ms / 1000.0).ToString("0.0"))</span> }
+    @if (Message.TokensPerSecond is { } tps) { <span> · @L.F("{0} tok/s", tps.ToString("0.0"))</span> }
+    <span> · @L.T("odpowiedź modelu językowego – sprawdzaj ważne decyzje w danych WELES")</span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public AiMessage Message { get; set; } = default!;
+}

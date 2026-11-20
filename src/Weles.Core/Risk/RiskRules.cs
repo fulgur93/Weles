@@ -121,7 +121,7 @@ public static class RiskRules
         var requiresAuth = x.ContainsKey("http.requiresAuth");
         if (!requiresAuth && x.GetValueOrDefault("http.panelCategory") is "admin-panel" or "devops" && x.TryGetValue("http.panel", out var panel))
         {
-            yield return new ConfigFinding(AdminPanelExposed, s.Port, $"Port {s.Port}: {panel} – strona startowa bez uwierzytelnienia HTTP (logowanie może być w formularzu strony)", 80);
+            yield return new ConfigFinding(AdminPanelExposed, s.Port, $"Port {s.Port}: {panel} – panel zarządzania osiągalny w sieci (WELES nie sprawdza, czy wymaga hasła)", 80);
         }
 
         if (name == "telnet") yield return new ConfigFinding(Telnet, s.Port, $"Port {s.Port}: usługa Telnet", portOnlyConfidence);

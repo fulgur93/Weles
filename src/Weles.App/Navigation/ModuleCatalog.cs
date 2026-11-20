@@ -50,7 +50,7 @@ public static class ModuleCatalog
             "Co zmieniło się w sieci od ostatniego audytu.",
             ["Nowe i znikające urządzenia, porty, usługi i podatności", "Zmiany wersji i certyfikatów", "Harmonogram skanów – wyłącznie dla zatwierdzonych zakresów"]),
 
-        new("Analityk AI", "ai", "ai", "Inteligencja", 6, false,
+        new("Analityk AI", "ai", "ai", "Inteligencja", 6, true,
             "Lokalny asystent bezpieczeństwa (Ollama + model Q4 dołączone do instalatora). Analizuje wyłącznie dane z bazy WELES.",
             ["Wyjaśnianie podatności prostym językiem", "Priorytety napraw i rekomendacje", "Podsumowania audytów i zmian między skanami", "Działa offline – dane nie opuszczają komputera"]),
         new("Raporty", "reports", "reports", "Inteligencja", 9, false,

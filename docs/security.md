@@ -66,6 +66,19 @@ WELES łączy się z Internetem **tylko** po kliknięciu „Aktualizuj z Interne
 - Opisy CVE i referencje są danymi z zewnątrz: Blazor koduje je jako tekst, linki są ograniczone do `http(s)` i
   otwierane z `rel="noopener noreferrer"`.
 
+## Lokalne AI (Etap 6)
+
+- Silnik (Ollama) i model są dołączone do paczki; WELES uruchamia go jako proces potomny nasłuchujący wyłącznie na
+  `127.0.0.1:11435`, z wyłączonymi funkcjami chmurowymi (`OLLAMA_NO_CLOUD`), bez dopuszczonych źródeł CORS poza stałą
+  listą localhost Ollamy (strony z Internetu: 403; ochrona przed DNS rebinding: 403 dla obcego nagłówka Host).
+- Model dostaje tylko dane z lokalnej bazy WELES wybrane do pytania; nic nie jest wysyłane poza komputer.
+- Model nie ma narzędzi (brak tool calling): nie może uruchomić skanu, polecenia systemowego ani połączenia sieciowego.
+  Skany uruchamia wyłącznie użytkownik w Wykrywaniu sieci, dla zatwierdzonego zakresu.
+- Dane z sieci (banery, tytuły, nazwy urządzeń) są przed przekazaniem modelowi czyszczone i oznaczone jako dane – zasady
+  każą ignorować zawarte w nich instrukcje. Odpowiedź jest renderowana po zakodowaniu HTML (bez skryptów i linków
+  zewnętrznych).
+- Rozmowy są przechowywane tylko w lokalnej bazie; można je usuwać.
+
 ## Planowane
 
 - Walidacja importowanych archiwów (ZIP slip, limity rozmiaru, schemat) – Etap 9.

@@ -13,7 +13,16 @@ if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed" }
 
 Copy-Item "$PSScriptRoot/WELES.cmd" $out
 Copy-Item "$root/deploy/THIRD-PARTY-NOTICES.txt" $out
-# Stage 6/11: runtime\ollama and models\ are added here.
+# Local AI: Ollama for Windows + model in artifacts\ai-runtime-win\{ollama,models} (same layout as the Linux
+# deploy/tools/fetch-ai-runtime.sh produces; a Windows variant of that script is part of Stage 11 packaging).
+$ai = Join-Path $root "artifacts\ai-runtime-win"
+if ((Test-Path (Join-Path $ai "ollama\ollama.exe")) -and (Test-Path (Join-Path $ai "models\manifests"))) {
+    New-Item -ItemType Directory -Force -Path (Join-Path $out "runtime") | Out-Null
+    Copy-Item -Recurse (Join-Path $ai "ollama") (Join-Path $out "runtime\ollama")
+    Copy-Item -Recurse (Join-Path $ai "models") (Join-Path $out "runtime\models")
+} else {
+    Write-Warning "artifacts\ai-runtime-win missing – the package will have no local AI."
+}
 
 Compress-Archive -Path $out -DestinationPath "$out.zip" -Force
 Write-Host "Package: $out.zip"

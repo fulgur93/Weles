@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Localization\en.json" LogicalName="Weles.App.Localization.en.json" />
+    <Content Remove="Localization\en.json" />
   </ItemGroup>
 
   <PropertyGroup>

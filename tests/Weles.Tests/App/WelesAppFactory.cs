@@ -16,6 +16,7 @@ public sealed class WelesAppFactory : WebApplicationFactory<Program>
         builder.UseSetting("Weles:SingleInstance", "false");
         builder.UseSetting("Weles:Ai:Endpoint", "http://127.0.0.1:9"); // nothing listens – AI must degrade gracefully
         builder.UseSetting("Weles:Ai:StatusTimeoutSeconds", "1");
+        builder.UseSetting("Weles:Ai:ManageEngine", "false"); // tests never start the bundled engine
     }
 
     public override async ValueTask DisposeAsync()

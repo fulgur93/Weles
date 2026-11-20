@@ -62,7 +62,12 @@ public static class DependencyInjection
         {
             var endpoint = sp.GetRequiredService<IOptions<AiOptions>>().Value.Endpoint;
             client.BaseAddress = new Uri(endpoint.EndsWith('/') ? endpoint : endpoint + "/");
+            client.Timeout = Timeout.InfiniteTimeSpan; // answers stream for minutes on a CPU; per-request timeouts in the service
         });
+        services.AddSingleton<OllamaProcessHost>();
+        services.AddHostedService(sp => sp.GetRequiredService<OllamaProcessHost>());
+        services.AddSingleton<AiContextBuilder>();
+        services.AddSingleton<AiAnalystService>();
 
         return services;
     }

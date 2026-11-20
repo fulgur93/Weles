@@ -14,6 +14,7 @@ dotnet run --project src/Weles.App            # otwiera przeglądarkę z http://
 dotnet run --project src/Weles.App -- --demo  # osobna baza demonstracyjna
 dotnet test
 deploy/tools/update-vulndb.sh                 # odświeża dołączoną bazę podatności (NVD, KEV, EPSS)
+deploy/tools/fetch-ai-runtime.sh              # Ollama + model do artifacts/ai-runtime (lokalne AI, ~2,5 GB)
 ```
 
 Przełączniki: `--port N`, `--data-dir PATH`, `--demo`, `--no-browser`.
@@ -42,5 +43,6 @@ pwsh deploy/windows/publish.ps1 -Rid win-x64 # artifacts/weles-<ver>-win-x64.zip
 | 3 | Assets: inwentarz z wyszukiwaniem, filtrami, sortowaniem, historią zmian i polami ręcznymi | ✅ |
 | 4 | Vulnerability Intelligence: lokalna baza NVD/KEV/EPSS działająca offline, aktualizacja na żądanie, dopasowanie wersji ze statusami i uzasadnieniem, laboratorium demo | ✅ |
 | 5 | Risk Engine: reguły konfiguracji z MITRE ATT&CK, ocena urządzeń z uzasadnieniem, Security Posture Score z trendem, priorytety napraw | ✅ |
-| 6 | AI Security Analyst | ⏳ następny |
-| 7–11 | Monitoring/Topology, External, Raporty, Agenci, Pakowanie | planowane |
+| 6 | AI Security Analyst: dołączona Ollama + Qwen3‑4B Q4 jako proces potomny, czat ze strumieniowaniem, kontekst wyłącznie z bazy WELES | ✅ |
+| 7 | Monitoring i topologia | ⏳ następny |
+| 8–11 | External, Raporty, Agenci, Pakowanie | planowane |
