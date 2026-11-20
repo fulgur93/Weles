@@ -321,6 +321,16 @@ Weryfikacja na kopii bazy użytkownika (2026‑11‑19): sieć przewodowa 47/100
 | Rozmowy | `AiConversation` / `AiMessage` (migracja `Stage6AiAnalyst`) w lokalnej bazie: treść, użyte źródła danych, tokeny, tok/s, czas, błąd/przerwanie (częściowa odpowiedź zostaje). Historia: 6 ostatnich wiadomości. |
 | UI | `/ai` – lista rozmów, odpowiedź na żywo, „Zatrzymaj”, przykładowe pytania, pod każdą odpowiedzią lista danych przekazanych modelowi, czas i tok/s oraz zastrzeżenie, że to odpowiedź modelu. Odpowiedzi renderowane bezpiecznym podzbiorem Markdown (`SafeMarkdown`: najpierw kodowanie HTML; numery CVE → lokalne linki, żadnych linków zewnętrznych). Skróty: „Wyjaśnij z Analitykiem AI” (strona CVE, `?cve=`) i „Zapytaj Analityka AI” (ocena ryzyka urządzenia, `?asset=`) – pytanie zadawane automatycznie, gdy silnik jest gotowy. Ustawienia: stan silnika, ścieżki runtime i modeli. |
 
+## 5e. Monitoring, topologia i ścieżki ataku (Etap 7)
+
+| Element | Implementacja |
+|---------|---------------|
+| Porównanie skanów | `MonitoringQueries.CompareAsync` – dwa zakończone skany (domyślnie ostatni i poprzedni **tej samej sieci**, po odcisku bramy); urządzenia nowe (pierwsza obserwacja), powracające i znikające (tylko gdy nowszy skan obejmował adres); porty, usługi, wersje, certyfikaty, adres, nazwa, typ – przez `ObservationComparer.Replay` z listami portów sprawdzonych przez profile obu skanów (Szybki po Standardowym niczego nie „zamyka”); urządzenie z kilkoma adresami w skanie – suma portów; podatności nowe/rozwiązane wg `FirstDetectedAt`/`ResolvedAt` w oknie między skanami przesuniętym o czas dopasowania (2 min); zmiany ryzyka ≥ 5 pkt i Security Posture Score. `TimelineAsync` – każdy skan porównany z poprzednim tej samej sieci. |
+| Harmonogram | `ScanSchedule` (migracja `Stage7Monitoring`): co godzinę / 6 h / dzień / tydzień, profil portów. `ScheduleService` pozwala ustawić harmonogram tylko dla zatwierdzonego zakresu, który był już skanowany ręcznie – ten skan zapisuje odcisk sieci (MAC routera). `ScanScheduler` (co 30 s) pomija skan, gdy zakres nie jest zatwierdzony, trwa już skan albo komputer nie jest podłączony do tej samej sieci (wymagany **dodatni** dowód: MAC bramy z tablicy ARP równy zapisanemu – nieznany MAC nie wystarcza); przyczyna pominięcia jest widoczna przy zakresie. |
+| Topologia | `TopologyQueries` + `TopologyMap.razor` – SVG generowany w Blazorze (bez bibliotek JS): Internet (przerywana linia – nie badano) → brama → urządzenia na elipsie (2 pierścienie > 12 urządzeń), kolor = poziom ryzyka, przerywany pierścień = punkt ekspozycji (problem ≥ 35 pkt lub CVE z KEV), oznaczenie KEV, przygaszone urządzenia nieobecne/nieznane; kliknięcie → panel szczegółów (link do urządzenia i Analityka AI). Połączenia są **wywnioskowane** (ta sama sieć lokalna, brama), nie z obserwacji ruchu – opisane tak w UI. Widok bieżącej sieci jak w Urządzeniach. |
+| Ścieżki ataku | `AttackPathEngine` (Core): dla problemów ≥ 35 pkt – start „urządzenie w sieci lokalnej” (założenie: z tej perspektywy wykonano skany) → dostęp (port otwarty w skanie, 95%) → słabość (pewność dopasowania CVE: potwierdzone 90, prawdopodobne 70, wymaga weryfikacji 45, brak danych 20; reguła konfiguracji – jej pewność) → skutek (hipoteza 40% wg roli: router – wpływ na wszystkie urządzenia sieci, serwer/NAS, IoT, inne). Wariant „Internet” tylko dla adresu publicznego (50%) lub UPnP na routerze (20%), z priorytetem × 0,8. Pewność ścieżki = iloczyn kroków dowodowych; każda ścieżka oznaczona jako hipoteza. Encje `AttackPath`/`NetworkRelationship` z planu nie są zapisywane – ścieżki i relacje liczone na bieżąco z aktualnych danych. |
+| Analityk AI | pytania o zmiany dostają pełne porównanie (wersje, podatności, ryzyko), pytania o ścieżki – 3 najważniejsze ścieżki z pewnością kroków. |
+
 ## 5c. Język interfejsu (PL / EN)
 
 - Polski jest językiem źródłowym: każdy tekst w kodzie jest po polsku i jest jednocześnie kluczem słownika
@@ -355,7 +365,7 @@ Weryfikacja na kopii bazy użytkownika (2026‑11‑19): sieć przewodowa 47/100
 | 4 | Vulnerability Intelligence: NVD/KEV/EPSS, snapshot offline, matcher wersji ze statusami | ✅ |
 | 5 | Risk Engine: reguły, scoring z wyjaśnieniem, Security Posture Score, trend, priorytety napraw, MITRE ATT&CK | ✅ |
 | 6 | AI Security Analyst: dołączona Ollama jako proces potomny, model Qwen3‑4B Q4, czat ze strumieniowaniem, kontekst z bazy, historia rozmów | ✅ |
-| 7 | Monitoring (diff skanów, harmonogram) + Topology (SVG) + Attack Paths | diff ✅, reszta ⏸ |
+| 7 | Monitoring (porównanie skanów, zmiany w czasie, harmonogram z blokadą innej sieci) + topologia (SVG) + ścieżki ataku (hipotezy z pewnością kroków) | ✅ |
 | 8 | External Attack Surface: DNS, subdomeny (CT), certyfikaty | ⏸ |
 | 9 | Raporty PDF, eksport/import JSON/ZIP | PDF ✅ |
 | 10 | Agenci (Worker Service, HTTPS, rejestracja, unieważnianie) | ⏸ |
@@ -411,3 +421,6 @@ Weryfikacja na kopii bazy użytkownika (2026‑11‑19): sieć przewodowa 47/100
 | 2026‑11‑20 | Etap 6: kontekst budowany z bazy pod konkretne pytanie zamiast „całej bazy” – na CPU czytanie promptu kosztuje ~45 tok/s, więc każde 1000 tokenów danych to ~20 s czekania; model 4B gubi się też w długim kontekście. |
 | 2026‑11‑20 | Bez tool calling: Analityk nie ma narzędzi, więc nie może uruchomić skanu ani polecenia nawet po udanym „prompt injection” z banera usługi; dodatkowo dane z sieci są czyszczone i oznaczone jako dane. |
 | 2026‑11‑20 | `num_thread` ustawiany jawnie: domyślny wybór llama.cpp (tylko rdzenie P) na laptopowym Core Ultra 5 125U dawał połowę szybkości. iGPU (Vulkan) jako opcja – szybciej czyta, wolniej pisze. |
+| 2026‑11‑20 | Etap 7: harmonogram zakotwiczony w sieci (MAC routera z pierwszego ręcznego skanu) – zgoda dotyczy sieci, nie zakresu adresów; automatyczny skan 192.168.0.0/24 nie może trafić do innej sieci o tym samym zakresie. Brak MAC bramy w ARP = brak dowodu = pominięcie. |
+| 2026‑11‑20 | Topologia jako SVG renderowany po stronie serwera zamiast biblioteki JS (wymaganie „nie uzależniaj od JavaScriptu”); połączenia jawnie opisane jako wywnioskowane. Ścieżki ataku liczone na bieżąco, nie zapisywane – zawsze odpowiadają aktualnym danym. |
+| 2026‑11‑20 | Okno podatności w porównaniu przesunięte o 2 min: dopasowanie zapisuje się po zakończeniu skanu, więc bez przesunięcia te same 37 CVE liczyły się dla dwóch kolejnych skanów (wykryte na kopii bazy użytkownika). Strona monitoringu aktualizowała adres przy pierwszym renderowaniu – pętla przekierowań; poprawione i objęte testem. |

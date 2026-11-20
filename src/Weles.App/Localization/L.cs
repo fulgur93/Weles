@@ -102,6 +102,8 @@ public static class L
         var list = new List<(Regex, string, int)>();
         foreach (var key in English.Value.Keys.Where(k => k.Contains("{0")))
         {
+            // "{0} {1}" or "{0}: {1}" would match any text – only templates with real words can identify a message.
+            if (PlaceholderRx().Replace(key, "").Count(char.IsLetter) < 3) continue;
             var pattern = "^" + PlaceholderRx().Replace(Regex.Escape(key).Replace(@"\{", "{"), "(.+?)") + "$";
             // Literal length: more specific templates win ("Skan zakończony: …" before "{0}: {1}").
             var literal = PlaceholderRx().Replace(key, "").Length;

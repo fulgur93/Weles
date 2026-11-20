@@ -1,0 +1,104 @@
+@page "/topology"
+@using Weles.Infrastructure.Queries
+@inject TopologyQueries Queries
+
+<PageTitle>@L.T("Topologia sieci · WELES")</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>@L.T("Topologia sieci")</h1>
+        <p class="page-subtitle">@L.T("Sieci, routery i urządzenia z kolorem ryzyka. Połączenia są wywnioskowane z adresów i bram (ta sama sieć lokalna), nie z obserwacji ruchu. Kliknij urządzenie, aby zobaczyć szczegóły.")</p>
+    </div>
+</div>
+
+@if (_model is null)
+{
+    <div class="card loading">@L.T("Wczytywanie…")</div>
+}
+else if (_model.Networks.Count == 0)
+{
+    <section class="card empty"><p>@L.T("Mapa pojawi się po pierwszym skanie.") <a href="discovery">@L.T("Wykrywanie sieci")</a></p></section>
+}
+else
+{
+    <section class="card">
+        <div class="toolbar">
+            <select class="input input-sm" @bind="_scope" @bind:after="LoadAsync" aria-label="@L.T("Sieć")">
+                <option value="current">@L.T("Bieżąca sieć")</option>
+                <option value="all">@L.T("Wszystkie sieci")</option>
+            </select>
+            <label class="checkbox inline"><input type="checkbox" @bind="_onlyProblems" /><span>@L.T("Wyróżnij punkty ekspozycji")</span></label>
+            <div class="topo-legend small muted">
+                <span><span class="swatch risk-critical"></span>Critical</span>
+                <span><span class="swatch risk-high"></span>High</span>
+                <span><span class="swatch risk-medium"></span>Medium</span>
+                <span><span class="swatch risk-low"></span>Low</span>
+                <span><span class="swatch risk-info"></span>Informational</span>
+                <span><span class="ring"></span>@L.T("punkt ekspozycji")</span>
+            </div>
+        </div>
+        @if (_model.HiddenOtherNetworks > 0)
+        {
+            <p class="muted small">@L.F("Bieżąca sieć: {0} · ukryto {1} {2} z innych sieci", _model.CurrentNetwork, _model.HiddenOtherNetworks, Labels.Devices(_model.HiddenOtherNetworks))</p>
+        }
+    </section>
+
+    <section class="topology-layout">
+        <div>
+            @foreach (var network in _model.Networks)
+            {
+                <div class="card topo-card">
+                    <div class="card-title"><Icon Name="topology" /> <span class="mono">@L.Message(network.Label)</span>
+                        <span class="muted small">· @L.F("{0} {1}", network.Devices.Count + (network.Gateway is null ? 0 : 1), Labels.Devices(network.Devices.Count + (network.Gateway is null ? 0 : 1)))</span></div>
+                    <TopologyMap Network="network" SelectedAssetId="_selected?.AssetId" OnlyProblems="_onlyProblems" OnSelect="n => _selected = n" />
+                </div>
+            }
+        </div>
+
+        <aside class="card topo-details">
+            @if (_selected is { } n)
+            {
+                <div class="card-title"><Icon Name="assets" /> @L.Message(n.Name)</div>
+                <dl class="facts">
+                    <dt>@L.T("Adres IP")</dt><dd class="mono">@n.Ip</dd>
+                    @if (n.Hostname is not null) { <dt>@L.T("Nazwa hosta")</dt><dd>@n.Hostname</dd> }
+                    <dt>@L.T("Typ")</dt><dd>@Labels.Of(n.Type)@(n.IsGateway ? " · " + L.T("brama sieci") : "")</dd>
+                    <dt>@L.T("Status")</dt><dd>@Labels.Of(n.Status)</dd>
+                    <dt>@L.T("Ryzyko")</dt><dd>@if (n.RiskScore is { } s) { <StatusPill Tone="@Labels.Tone(n.RiskLevel)">@s.ToString("0") · @(n.RiskLevel is { } l ? Labels.Of(l) : "")</StatusPill> } else { <span class="muted">—</span> }</dd>
+                    <dt>@L.T("Otwarte porty")</dt><dd class="mono">@(n.OpenPorts.Count == 0 ? "—" : string.Join(", ", n.OpenPorts))</dd>
+                    @if (n.Products.Count > 0) { <dt>@L.T("Oprogramowanie")</dt><dd>@string.Join(", ", n.Products)</dd> }
+                </dl>
+                @if (n.Exposure.Count > 0)
+                {
+                    <div class="subtitle">@L.T("Punkty ekspozycji")</div>
+                    <ul class="reasons-list">@foreach (var e in n.Exposure) { <li>@L.Message(e)</li> }</ul>
+                }
+                <div class="actions">
+                    <a class="btn btn-primary btn-sm" href="assets/@n.AssetId">@L.T("Szczegóły urządzenia")</a>
+                    <a class="btn btn-ghost btn-sm" href="ai?asset=@n.AssetId"><Icon Name="ai" Size="14" /> @L.T("Zapytaj Analityka AI")</a>
+                </div>
+            }
+            else
+            {
+                <p class="muted">@L.T("Kliknij urządzenie na mapie.")</p>
+                <p class="muted small">@L.T("Przerywana linia do Internetu oznacza, że dostępności z Internetu nie badano. Przerywany pierścień oznacza urządzenie z problemem co najmniej średniej wagi lub podatnością z CISA KEV.")</p>
+                <a class="btn btn-ghost btn-sm" href="attack-paths"><Icon Name="paths" Size="14" /> @L.T("Ścieżki ataku")</a>
+            }
+        </aside>
+    </section>
+}
+
+@code {
+    private TopologyModel? _model;
+    private TopologyNode? _selected;
+    private string _scope = "current";
+    private bool _onlyProblems;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _model = await Queries.GetAsync(_scope == "current");
+        _selected = null;
+    }
+}

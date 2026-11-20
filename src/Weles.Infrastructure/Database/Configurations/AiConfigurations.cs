@@ -27,3 +27,16 @@ internal sealed class AiMessageConfiguration : IEntityTypeConfiguration<AiMessag
         b.HasIndex(x => new { x.ConversationId, x.CreatedAt });
     }
 }
+
+internal sealed class ScanScheduleConfiguration : IEntityTypeConfiguration<ScanSchedule>
+{
+    public void Configure(EntityTypeBuilder<ScanSchedule> b)
+    {
+        b.Property(x => x.PortSpecification).HasMaxLength(2000);
+        b.Property(x => x.NetworkFingerprint).HasMaxLength(200);
+        b.Property(x => x.LastResult).HasMaxLength(500);
+        b.HasIndex(x => x.ScanTargetId).IsUnique();
+        b.HasIndex(x => new { x.IsEnabled, x.NextRunAt });
+        b.HasOne(x => x.ScanTarget).WithMany().HasForeignKey(x => x.ScanTargetId).OnDelete(DeleteBehavior.Cascade);
+    }
+}

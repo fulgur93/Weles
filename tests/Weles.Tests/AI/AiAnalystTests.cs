@@ -206,7 +206,8 @@ public class AiAnalystServiceTests
         await Scan(TestData.Now.AddDays(-1), withTelnet: false);
         await Scan(TestData.Now, withTelnet: true);
 
-        var context = new AiContextBuilder(testDb, new RiskQueries(testDb), new VulnerabilityQueries(testDb), new AssetQueries(testDb), settings);
+        var context = new AiContextBuilder(testDb, new RiskQueries(testDb), new VulnerabilityQueries(testDb), new AssetQueries(testDb), settings,
+            new MonitoringQueries(testDb), new TopologyQueries(testDb, new AssetQueries(testDb), new RiskQueries(testDb)));
         var analyst = new AiAnalystService(testDb, model, context, Options.Create(new AiOptions()), TimeProvider.System, NullLogger<AiAnalystService>.Instance);
         return new Env(testDb, analyst, context, model);
     }
@@ -249,7 +250,11 @@ public class AiAnalystServiceTests
 
         var changes = await env.Context.BuildAsync("Czy pojawiły się nowe porty od ostatniego skanu?");
         Assert.Contains("Zmiany między dwoma ostatnimi skanami", changes.Text);
-        Assert.Contains("nowe porty 23", changes.Text);
+        Assert.Contains("Nowy otwarty port 23", changes.Text);
+
+        var paths = await env.Context.BuildAsync("Jakie są możliwe ścieżki ataku na moją sieć?");
+        Assert.Contains("Potencjalne ścieżki ataku (HIPOTEZY", paths.Text);
+        Assert.Contains("Entry:", paths.Text);
 
         var nas = await env.Context.BuildAsync("Czy mój NAS jest bezpieczny?");
         Assert.Contains("NIE MA żadnego urządzenia typu Nas", nas.Text);
@@ -347,7 +352,8 @@ public class AiAnalystLiveTests
         var options = Options.Create(new AiOptions { Endpoint = endpoint });
         var ai = new OllamaAiService(new HttpClient { BaseAddress = new Uri(endpoint + "/"), Timeout = Timeout.InfiniteTimeSpan }, options, NullLogger<OllamaAiService>.Instance);
         var settings = new SettingsService(db, TimeProvider.System);
-        var context = new AiContextBuilder(db, new RiskQueries(db), new VulnerabilityQueries(db), new AssetQueries(db), settings);
+        var context = new AiContextBuilder(db, new RiskQueries(db), new VulnerabilityQueries(db), new AssetQueries(db), settings,
+            new MonitoringQueries(db), new TopologyQueries(db, new AssetQueries(db), new RiskQueries(db)));
         var analyst = new AiAnalystService(db, ai, context, options, TimeProvider.System, NullLogger<AiAnalystService>.Instance);
 
         var questions = (Environment.GetEnvironmentVariable("WELES_LIVE_AI_QUESTIONS") ?? "").Split('|', StringSplitOptions.RemoveEmptyEntries);

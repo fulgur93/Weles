@@ -27,7 +27,9 @@ public sealed partial class AiContextBuilder(
     RiskQueries risk,
     VulnerabilityQueries vulnerabilities,
     AssetQueries assets,
-    SettingsService settings)
+    SettingsService settings,
+    MonitoringQueries? monitoring = null,
+    TopologyQueries? topology = null)
 {
     public const int MaxContextChars = 7_000;
 
@@ -48,6 +50,7 @@ public sealed partial class AiContextBuilder(
 
         if (Mentions(q, ChangeWords)) await AppendChangesAsync(sb, sources, ct);
         if (Mentions(q, InventoryWords)) await AppendInventoryAsync(sb, sources, ct);
+        if (Mentions(q, PathWords)) await AppendPathsAsync(sb, sources, ct);
 
         var text = sb.ToString();
         if (text.Length > MaxContextChars) text = text[..MaxContextChars] + "\n[… dane skrócone do limitu kontekstu]";
@@ -56,6 +59,8 @@ public sealed partial class AiContextBuilder(
 
     private static readonly string[] ChangeWords = ["zmian", "zmieni", "nowe", "nowych", "nowy ", "pojawi", "znikn", "od ostatniego", "poprzedni", "change", "new device", "since", "appeared", "disappeared"];
     private static readonly string[] InventoryWords = ["raport", "podsumow", "audyt", "wszystkie urządzenia", "lista urządzeń", "inwentarz", "report", "summary", "audit", "all devices", "inventory"];
+
+    private static readonly string[] PathWords = ["ścieżk", "sciezk", "atak", "dotrzeć", "przejąć", "path", "attack", "reach"];
 
     private static bool Mentions(string q, string[] words) => words.Any(q.Contains);
 
@@ -283,46 +288,45 @@ public sealed partial class AiContextBuilder(
 
     private async Task AppendChangesAsync(StringBuilder sb, List<string> sources, CancellationToken ct)
     {
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
-        var scans = await db.Scans.AsNoTracking().Where(s => s.Status == ScanStatus.Completed).OrderByDescending(s => s.StartedAt)
-            .Select(s => new { s.Id, s.StartedAt, s.NetworkFingerprint }).Take(50).ToListAsync(ct);
-        var latest = scans.FirstOrDefault();
-        var previous = latest is null ? null : scans.Skip(1).FirstOrDefault(s => s.NetworkFingerprint == latest.NetworkFingerprint);
         sb.AppendLine("\n## Zmiany między dwoma ostatnimi skanami tej samej sieci");
-        if (latest is null || previous is null)
+        var c = monitoring is null ? null : await monitoring.LatestAsync(ct);
+        if (c is null)
         {
             sb.AppendLine("- za mało skanów tej sieci do porównania");
             sources.Add("zmiany – za mało skanów");
             return;
         }
 
-        var now = await db.DiscoveredHosts.AsNoTracking().Where(h => h.ScanId == latest.Id && h.AssetId != null).Include(h => h.Ports).ThenInclude(p => p.Service).ToListAsync(ct);
-        var before = await db.DiscoveredHosts.AsNoTracking().Where(h => h.ScanId == previous.Id && h.AssetId != null).Include(h => h.Ports).ThenInclude(p => p.Service).ToListAsync(ct);
-        var names = await db.Assets.AsNoTracking().Where(a => now.Select(h => h.AssetId).Concat(before.Select(h => h.AssetId)).Contains(a.Id))
-            .ToDictionaryAsync(a => a.Id, a => a.CustomName ?? a.DisplayName, ct);
-        sb.AppendLine($"- porównanie: skan #{previous.Id} ({previous.StartedAt:yyyy-MM-dd HH:mm}) → #{latest.Id} ({latest.StartedAt:yyyy-MM-dd HH:mm}) UTC");
-
-        var nowIds = now.Select(h => h.AssetId!.Value).ToHashSet();
-        var beforeIds = before.Select(h => h.AssetId!.Value).ToHashSet();
-        var firstSeen = await db.DiscoveredHosts.Where(h => h.AssetId != null && nowIds.Contains(h.AssetId.Value)).GroupBy(h => h.AssetId).Select(g => new { Id = g.Key!.Value, First = g.Min(h => h.ScanId) }).ToListAsync(ct);
-        var brandNew = firstSeen.Where(f => f.First == latest.Id).Select(f => f.Id).ToList();
-        sb.AppendLine($"- nowe urządzenia (pierwszy raz w ostatnim skanie): {(brandNew.Count == 0 ? "brak" : string.Join(", ", brandNew.Select(id => Clean(names.GetValueOrDefault(id, "?"), 60))))}");
-        var gone = beforeIds.Except(nowIds).ToList();
-        sb.AppendLine($"- urządzenia widoczne wcześniej, a nie w ostatnim skanie: {(gone.Count == 0 ? "brak" : string.Join(", ", gone.Select(id => Clean(names.GetValueOrDefault(id, "?"), 60))))}");
-
-        foreach (var id in nowIds.Intersect(beforeIds))
+        static string Devices(IEnumerable<DeviceRef> d) => string.Join(", ", d.Select(x => $"{Clean(x.Name, 50)} ({x.Ip})")) is { Length: > 0 } s ? s : "brak";
+        sb.AppendLine($"- porównanie: skan #{c.Previous.Id} ({c.Previous.At:yyyy-MM-dd HH:mm}) → #{c.Current.Id} ({c.Current.At:yyyy-MM-dd HH:mm}) UTC; profile portów {c.Previous.PortSpecification} → {c.Current.PortSpecification}");
+        sb.AppendLine($"- nowe urządzenia (pierwszy raz): {Devices(c.NewDevices)}");
+        if (c.ReturnedDevices.Count > 0) sb.AppendLine($"- pojawiły się ponownie: {Devices(c.ReturnedDevices)}");
+        sb.AppendLine($"- nie wykryto w ostatnim skanie (adres był w zakresie): {Devices(c.MissingDevices)}");
+        foreach (var d in c.Changed.Take(8))
         {
-            var portsNow = now.Where(h => h.AssetId == id).SelectMany(h => h.Ports).Where(p => p.State == PortState.Open).Select(p => p.Port).ToHashSet();
-            var portsBefore = before.Where(h => h.AssetId == id).SelectMany(h => h.Ports).Where(p => p.State == PortState.Open).Select(p => p.Port).ToHashSet();
-            var opened = portsNow.Except(portsBefore).ToList();
-            var closed = portsBefore.Except(portsNow).ToList();
-            if (opened.Count + closed.Count > 0)
-            {
-                sb.AppendLine($"- {Clean(names.GetValueOrDefault(id, "?"), 60)}: nowe porty {(opened.Count == 0 ? "brak" : string.Join(", ", opened))}; zamknięte {(closed.Count == 0 ? "brak" : string.Join(", ", closed))}");
-            }
+            sb.AppendLine($"- {Clean(d.Device.Name, 50)} ({d.Device.Ip}): {Clean(string.Join("; ", d.Changes.Select(x => x.Description)), 300)}");
         }
 
-        sources.Add($"zmiany między skanami #{previous.Id} i #{latest.Id}");
+        sb.AppendLine($"- nowe dopasowane podatności: {(c.NewVulnerabilities.Count == 0 ? "brak" : string.Join(", ", c.NewVulnerabilities.Take(6).Select(v => $"{v.CveId} na {Clean(v.Device.Name, 40)}")) + (c.NewVulnerabilities.Count > 6 ? $" (razem {c.NewVulnerabilities.Count})" : ""))}");
+        sb.AppendLine($"- rozwiązane podatności: {(c.ResolvedVulnerabilities.Count == 0 ? "brak" : c.ResolvedVulnerabilities.Count.ToString())}");
+        if (c.PostureBefore is { } pb && c.PostureAfter is { } pa) sb.AppendLine($"- Security Posture Score: {pb:0} → {pa:0}");
+        sb.AppendLine("- porty są porównywane tylko, gdy oba skany je sprawdzały");
+        sources.Add($"zmiany między skanami #{c.Previous.Id} i #{c.Current.Id}");
+    }
+
+    private async Task AppendPathsAsync(StringBuilder sb, List<string> sources, CancellationToken ct)
+    {
+        if (topology is null) return;
+        var paths = await topology.AttackPathsAsync(ct);
+        sb.AppendLine("\n## Potencjalne ścieżki ataku (HIPOTEZY, nie potwierdzone ataki)");
+        if (paths.Count == 0) sb.AppendLine("- brak: żadne urządzenie nie ma problemu co najmniej średniej wagi");
+        foreach (var p in paths.Take(3))
+        {
+            sb.AppendLine($"- {Clean(p.Title, 140)} (priorytet {p.Priority:0}, pewność ścieżki {p.Confidence}%)");
+            foreach (var step in p.Steps) sb.AppendLine($"  - {step.Kind}: {Clean(step.Title, 120)} – {(step.Confidence is { } c ? $"pewność {c}%" : "założenie")}");
+        }
+
+        sources.Add($"ścieżki ataku ({Math.Min(3, paths.Count)})");
     }
 
     private async Task AppendInventoryAsync(StringBuilder sb, List<string> sources, CancellationToken ct)

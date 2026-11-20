@@ -777,6 +777,56 @@ namespace Weles.Infrastructure.Database.Migrations
                     b.ToTable("ScanEvents");
                 });
 
+            modelBuilder.Entity("Weles.Core.Entities.ScanSchedule", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Interval")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LastResult")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastRunAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("LastScanId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("NetworkFingerprint")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("NextRunAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PortSpecification")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ScanTargetId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ScanTargetId")
+                        .IsUnique();
+
+                    b.HasIndex("IsEnabled", "NextRunAt");
+
+                    b.ToTable("ScanSchedules");
+                });
+
             modelBuilder.Entity("Weles.Core.Entities.ScanTarget", b =>
                 {
                     b.Property<int>("Id")
@@ -1148,6 +1198,17 @@ namespace Weles.Infrastructure.Database.Migrations
                         .IsRequired();
 
                     b.Navigation("Scan");
+                });
+
+            modelBuilder.Entity("Weles.Core.Entities.ScanSchedule", b =>
+                {
+                    b.HasOne("Weles.Core.Entities.ScanTarget", "ScanTarget")
+                        .WithMany()
+                        .HasForeignKey("ScanTargetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ScanTarget");
                 });
 
             modelBuilder.Entity("Weles.Core.Entities.ScanTargetEntry", b =>

@@ -1,0 +1,215 @@
+@page "/monitoring"
+@using Weles.Infrastructure.Queries
+@inject MonitoringQueries Queries
+@inject NavigationManager Navigation
+
+<PageTitle>@L.T("Monitorowanie · WELES")</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>@L.T("Monitorowanie")</h1>
+        <p class="page-subtitle">@L.T("Co zmieniło się w sieci od ostatniego audytu? Porównanie dwóch skanów tej samej sieci: urządzenia, porty, usługi, wersje, certyfikaty, podatności i ryzyko.")</p>
+    </div>
+    <a class="btn btn-ghost" href="discovery"><Icon Name="clock" Size="15" /> @L.T("Harmonogram skanów")</a>
+</div>
+
+@if (_scans is null)
+{
+    <div class="card loading">@L.T("Wczytywanie…")</div>
+}
+else if (_scans.Count < 2)
+{
+    <section class="card empty"><p>@L.T("Do porównania potrzebne są co najmniej dwa zakończone skany tej samej sieci.") <a href="discovery">@L.T("Wykrywanie sieci")</a></p></section>
+}
+else
+{
+    <section class="card">
+        <div class="compare-picker">
+            <label class="field"><span>@L.T("Wcześniejszy skan")</span>
+                <select class="input" @bind="_prev" @bind:after="SelectionChangedAsync">
+                    @foreach (var s in _scans) { <option value="@s.Id">@ScanLabel(s)</option> }
+                </select>
+            </label>
+            <span class="compare-arrow">→</span>
+            <label class="field"><span>@L.T("Późniejszy skan")</span>
+                <select class="input" @bind="_cur" @bind:after="SelectionChangedAsync">
+                    @foreach (var s in _scans) { <option value="@s.Id">@ScanLabel(s)</option> }
+                </select>
+            </label>
+        </div>
+        @if (_comparison is { SameNetwork: false })
+        {
+            <div class="alert alert-bad small">@L.T("Wybrane skany dotyczą różnych sieci (inny router) – różnice nie oznaczają zmian w jednej sieci.")</div>
+        }
+    </section>
+
+    @if (_comparison is { } c)
+    {
+        <section class="kpi-grid change-grid">
+            <Kpi Label="@L.T("Nowe urządzenia")" Value="c.NewDevices.Count" Tone="@(c.NewDevices.Count > 0 ? "warn" : "")" />
+            <Kpi Label="@L.T("Zniknęły")" Value="c.MissingDevices.Count" />
+            <Kpi Label="@L.T("Nowe otwarte porty")" Value="c.Count(AssetChangeKind.PortOpened)" Tone="@(c.Count(AssetChangeKind.PortOpened) > 0 ? "warn" : "")" />
+            <Kpi Label="@L.T("Zamknięte porty")" Value="c.Count(AssetChangeKind.PortClosed)" />
+            <Kpi Label="@L.T("Zmiany usług i wersji")" Value="c.Count(AssetChangeKind.ServiceChanged) + c.Count(AssetChangeKind.VersionChanged)" />
+            <Kpi Label="@L.T("Zmiany certyfikatów")" Value="c.Count(AssetChangeKind.CertificateChanged)" />
+            <Kpi Label="@L.T("Nowe podatności")" Value="c.NewVulnerabilities.Count" Tone="@(c.NewVulnerabilities.Count > 0 ? "bad" : "")" />
+            <Kpi Label="@L.T("Rozwiązane podatności")" Value="c.ResolvedVulnerabilities.Count" Tone="@(c.ResolvedVulnerabilities.Count > 0 ? "ok" : "")" />
+        </section>
+
+        <section class="card">
+            <div class="card-title"><Icon Name="risk" /> @L.T("Ocena stanu bezpieczeństwa")</div>
+            @if (c.PostureBefore is { } pb && c.PostureAfter is { } pa)
+            {
+                var d = pa - pb;
+                <p class="posture-change"><strong>@pb.ToString("0")</strong> → <strong>@pa.ToString("0")</strong>
+                    <span class="@(d > 0.5 ? "tone-ok" : d < -0.5 ? "tone-bad" : "muted")">@(Math.Abs(d) < 0.5 ? L.T("bez zmian") : (d > 0 ? "▲ " : "▼ ") + Math.Abs(d).ToString("0.#"))</span></p>
+            }
+            else
+            {
+                <p class="muted">@L.T("Brak oceny dla jednego ze skanów.")</p>
+            }
+            @if (c.RiskChanges.Count > 0)
+            {
+                <ul class="change-list">
+                    @foreach (var r in c.RiskChanges)
+                    {
+                        <li><a href="assets/@r.Device.AssetId">@L.Message(r.Device.Name)</a> <span class="mono muted small">@r.Device.Ip</span> · @L.T("ryzyko") @(r.Before?.ToString("0") ?? "—") → <StatusPill Tone="@Labels.Tone(r.Level)">@r.After.ToString("0")</StatusPill></li>
+                    }
+                </ul>
+            }
+        </section>
+
+        @if (c.Total == 0)
+        {
+            <section class="card empty"><p>@L.T("Między tymi skanami nie wykryto zmian.")</p></section>
+        }
+
+        @if (c.NewDevices.Count + c.ReturnedDevices.Count + c.MissingDevices.Count > 0)
+        {
+            <section class="card">
+                <div class="card-title"><Icon Name="assets" /> @L.T("Urządzenia")</div>
+                <ul class="change-list">
+                    @foreach (var d in c.NewDevices) { <li class="tone-warn">+ @L.T("nowe:") <a href="assets/@d.AssetId">@L.Message(d.Name)</a> <span class="mono small">@d.Ip</span></li> }
+                    @foreach (var d in c.ReturnedDevices) { <li>↺ @L.T("pojawiło się ponownie:") <a href="assets/@d.AssetId">@L.Message(d.Name)</a> <span class="mono small">@d.Ip</span></li> }
+                    @foreach (var d in c.MissingDevices) { <li class="muted">− @L.T("nie wykryto (adres był w zakresie):") <a href="assets/@d.AssetId">@L.Message(d.Name)</a> <span class="mono small">@d.Ip</span></li> }
+                </ul>
+            </section>
+        }
+
+        @if (c.Changed.Count > 0)
+        {
+            <section class="card">
+                <div class="card-title"><Icon Name="scans" /> @L.T("Porty, usługi, wersje i certyfikaty")
+                    <span class="muted small">· @L.T("porty porównywane tylko, gdy oba skany je sprawdzały")</span></div>
+                @foreach (var d in c.Changed)
+                {
+                    <div class="device-changes">
+                        <a href="assets/@d.Device.AssetId"><strong>@L.Message(d.Device.Name)</strong></a> <span class="mono muted small">@d.Device.Ip</span>
+                        <ul>
+                            @foreach (var ch in d.Changes) { <li class="tone-@Labels.Tone(ch.Kind)">@L.Message(ch.Description)</li> }
+                        </ul>
+                    </div>
+                }
+            </section>
+        }
+
+        @if (c.NewVulnerabilities.Count + c.ResolvedVulnerabilities.Count > 0)
+        {
+            <section class="card">
+                <div class="card-title"><Icon Name="vulnerabilities" /> @L.T("Podatności")</div>
+                <ul class="change-list">
+                    @foreach (var v in c.NewVulnerabilities.Take(30))
+                    {
+                        <li class="tone-bad">+ <a class="mono" href="vulnerabilities/@v.CveId">@v.CveId</a> · <a href="assets/@v.Device.AssetId">@L.Message(v.Device.Name)</a> · @v.Product @v.Version @if (v.CvssScore is { } s) { <span>· CVSS @s.ToString("0.0")</span> } @if (v.IsKnownExploited) { <StatusPill Tone="bad">KEV</StatusPill> } <span class="muted small">· @Labels.Of(v.MatchStatus)</span></li>
+                    }
+                    @if (c.NewVulnerabilities.Count > 30) { <li class="muted">@L.F("… i {0} kolejnych", c.NewVulnerabilities.Count - 30)</li> }
+                    @foreach (var v in c.ResolvedVulnerabilities.Take(30))
+                    {
+                        <li class="tone-ok">− <a class="mono" href="vulnerabilities/@v.CveId">@v.CveId</a> · <a href="assets/@v.Device.AssetId">@L.Message(v.Device.Name)</a> · @L.T("rozwiązana")</li>
+                    }
+                </ul>
+            </section>
+        }
+    }
+
+    <section class="card">
+        <div class="card-title"><Icon Name="clock" /> @L.T("Zmiany w czasie")
+            <span class="muted small">· @L.T("każdy skan porównany z poprzednim skanem tej samej sieci")</span></div>
+        @if (_timeline is null)
+        {
+            <p class="muted">@L.T("Wczytywanie…")</p>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="table table-hover">
+                    <thead><tr><th>@L.T("Skan")</th><th>@L.T("Sieć")</th><th class="right">@L.T("Nowe urządzenia")</th><th class="right">@L.T("Zniknęły")</th><th class="right">@L.T("Porty +/−")</th><th class="right">@L.T("Wersje")</th><th class="right">@L.T("Podatności +/−")</th><th class="right">@L.T("Ocena")</th></tr></thead>
+                    <tbody>
+                        @foreach (var t in _timeline)
+                        {
+                            <tr class="@(t.PreviousScanId is null ? "" : "clickable") @(t.Scan.Id == _cur ? "selected" : "")" @onclick="() => PickAsync(t)">
+                                <td><span class="mono">#@t.Scan.Id</span> · @Labels.Local(t.Scan.At)@if (t.PreviousScanId is null) { <span class="muted small"> · @L.T("pierwszy skan sieci")</span> }</td>
+                                <td class="small mono">@NetworkName(t.Scan.Network)</td>
+                                <td class="right">@t.NewDevices</td>
+                                <td class="right">@t.MissingDevices</td>
+                                <td class="right">+@t.PortsOpened / −@t.PortsClosed</td>
+                                <td class="right">@t.VersionChanges</td>
+                                <td class="right">+@t.NewVulnerabilities / −@t.ResolvedVulnerabilities</td>
+                                <td class="right">@(t.Posture?.ToString("0") ?? "—")@if (t.Posture is { } p && t.PostureBefore is { } b && Math.Abs(p - b) >= 0.5) { <span class="@(p > b ? "tone-ok" : "tone-bad")"> @(p > b ? "▲" : "▼")</span> }</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "prev")] public int? PrevParameter { get; set; }
+    [SupplyParameterFromQuery(Name = "cur")] public int? CurParameter { get; set; }
+
+    private IReadOnlyList<ScanRef>? _scans;
+    private IReadOnlyDictionary<string, string> _networks = new Dictionary<string, string>();
+    private IReadOnlyList<TimelineEntry>? _timeline;
+    private ScanComparison? _comparison;
+    private int _prev;
+    private int _cur;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _scans = await Queries.ScansAsync();
+        _networks = await Queries.NetworkLabelsAsync();
+        if (_scans.Count >= 2)
+        {
+            _cur = CurParameter is { } c && _scans.Any(s => s.Id == c) ? c : _scans[0].Id;
+            _prev = PrevParameter is { } p && _scans.Any(s => s.Id == p) ? p
+                : await Queries.PreviousOnSameNetworkAsync(_cur) ?? _scans.First(s => s.Id != _cur).Id;
+            await CompareAsync();
+        }
+
+        _timeline = await Queries.TimelineAsync();
+    }
+
+    private async Task CompareAsync() => _comparison = _prev == _cur ? null : await Queries.CompareAsync(_prev, _cur);
+
+    // The address is updated only after the user's choice – doing it while the page is first rendered on the server
+    // becomes an HTTP redirect to itself, endlessly.
+    private async Task SelectionChangedAsync()
+    {
+        await CompareAsync();
+        Navigation.NavigateTo($"monitoring?prev={_prev}&cur={_cur}", replace: true);
+    }
+
+    private async Task PickAsync(TimelineEntry entry)
+    {
+        if (entry.PreviousScanId is not { } previous) return;
+        _prev = previous;
+        _cur = entry.Scan.Id;
+        await SelectionChangedAsync();
+    }
+
+    private string NetworkName(string? fingerprint) => fingerprint is null ? L.T("bez rozpoznanej sieci") : _networks.GetValueOrDefault(fingerprint, fingerprint);
+
+    private string ScanLabel(ScanRef s) => $"#{s.Id} · {Labels.Local(s.At)} · {L.Message(s.TargetName)} · {NetworkName(s.Network)}";
+}

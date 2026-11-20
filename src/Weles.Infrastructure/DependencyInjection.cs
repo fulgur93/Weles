@@ -32,6 +32,8 @@ public static class DependencyInjection
         services.AddSingleton<AssetQueries>();
         services.AddSingleton<VulnerabilityQueries>();
         services.AddSingleton<RiskQueries>();
+        services.AddSingleton<MonitoringQueries>();
+        services.AddSingleton<TopologyQueries>();
         services.AddSingleton<Assets.AssetService>();
 
         services.Configure<ScanOptions>(configuration.GetSection(ScanOptions.SectionName));
@@ -43,6 +45,9 @@ public static class DependencyInjection
         services.AddSingleton<ScanEngine>();
         services.AddSingleton<ScanTargetService>();
         services.AddHostedService<ScanWorker>();
+        services.AddSingleton<ScheduleService>();
+        services.AddSingleton<ScanScheduler>();
+        services.AddHostedService(sp => sp.GetRequiredService<ScanScheduler>());
 
         services.Configure<VulnerabilityFeedOptions>(configuration.GetSection(VulnerabilityFeedOptions.SectionName));
         services.AddHttpClient<VulnerabilityFeedClient>(client =>

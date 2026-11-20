@@ -59,6 +59,13 @@ public sealed class RiskQueries(IDbContextFactory<WelesDbContext> contextFactory
         return new RiskOverview(networks, trend, assets, Prioritize(latestScores.Select(x => (x.Asset, x.Result))));
     }
 
+    /// <summary>Latest assessment of every device (asset id → result and scan).</summary>
+    public async Task<IReadOnlyDictionary<int, (AssetRiskResult Result, int ScanId)>> LatestResultsAsync(CancellationToken ct = default)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        return (await LatestAssetScoresAsync(db, ct)).ToDictionary(x => x.Asset.Id, x => (x.Result, x.ScanId));
+    }
+
     /// <summary>Top remediation items across the inventory (dashboard).</summary>
     public async Task<IReadOnlyList<RemediationItem>> PrioritiesAsync(int take, CancellationToken ct = default)
     {

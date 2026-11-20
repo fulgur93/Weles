@@ -16,7 +16,7 @@ otwiera istniejącą sesję zamiast startować drugi serwer.
 | Attack Surface | domeny, DNS, certyfikaty, usługi publiczne | Etap 8 |
 | Vulnerabilities | dopasowania CVE (NVD, KEV, EPSS), lokalna baza i jej aktualizacja | ✅ Etap 4 |
 | Ocena ryzyka | Security Posture Score, trend, priorytety napraw, ocena każdego urządzenia z uzasadnieniem | ✅ Etap 5 |
-| Network Topology / Attack Paths / Monitoring | mapa, ścieżki ekspozycji, zmiany w czasie | Etap 7 |
+| Topologia / Ścieżki ataku / Monitorowanie | mapa sieci, hipotetyczne ścieżki ekspozycji, zmiany między skanami, harmonogram | ✅ Etap 7 |
 | Analityk AI | lokalny asystent: wyjaśnia podatności, ryzyko, zmiany, priorytety napraw | ✅ Etap 6 |
 | Reports | PDF, eksport/import audytu | Etap 9 |
 | Agents | zdalne agenty | Etap 10 |
@@ -117,6 +117,22 @@ aplikacji (wtedy skan jest oznaczany jako przerwany).
 - **Priorytety napraw** – lista „co naprawić najpierw”: ocena problemu wzmocniona kontekstem urządzenia.
 - **Akceptuj ryzyko** (szczegóły urządzenia / CVE) – świadoma decyzja; problem zostaje w historii, ale nie podnosi oceny.
 - Poziomy: Critical ≥ 80, High ≥ 60, Medium ≥ 35, Low ≥ 15, Informational.
+
+## Monitorowanie, topologia i ścieżki ataku
+
+- **Monitorowanie** odpowiada na pytanie „co zmieniło się od ostatniego audytu?”: porównuje ostatni skan z poprzednim
+  skanem tej samej sieci (można wybrać dowolne dwa) – nowe i znikające urządzenia, nowe i zamknięte porty, zmiany usług,
+  wersji i certyfikatów, nowe i rozwiązane podatności, zmiany ryzyka i Security Posture Score. Porty są porównywane tylko,
+  jeśli oba skany je sprawdzały. Tabela „Zmiany w czasie” pokazuje to dla każdego skanu.
+- **Harmonogram** (Wykrywanie sieci, przy zatwierdzonym zakresie): co godzinę, co 6 godzin, codziennie lub co tydzień.
+  Najpierw trzeba raz uruchomić zakres ręcznie – ten skan ustala sieć (router). Skan automatyczny jest pomijany, gdy
+  zakres nie jest zatwierdzony albo komputer jest w innej sieci (inny router), nawet przy tym samym zakresie adresów;
+  przyczyna jest widoczna przy zakresie.
+- **Topologia** – mapa: Internet, router, urządzenia z kolorem ryzyka; przerywany pierścień = punkt ekspozycji.
+  Połączenia wynikają z adresów i bram, nie z obserwacji ruchu. Kliknięcie urządzenia pokazuje szczegóły.
+- **Ścieżki ataku** – hipotezy, jak można dotrzeć do urządzenia: start (założenie), dostęp (otwarty port), słabość
+  (podatność lub problem konfiguracji) i możliwy skutek. Każdy krok ma uzasadnienie i pewność, ścieżka – pewność łączną.
+  To nie są potwierdzone ataki; WELES niczego nie próbuje wykorzystać.
 
 ## Analityk AI
 

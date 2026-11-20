@@ -1,0 +1,11 @@
+<div class="kpi card @(Tone is { Length: > 0 } t ? "kpi-" + t : "")">
+    <div class="kpi-label">@Label</div>
+    <div class="kpi-value">@Value</div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter] public int Value { get; set; }
+    /// <summary>ok | warn | bad – colours the value.</summary>
+    [Parameter] public string? Tone { get; set; }
+}

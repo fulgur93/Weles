@@ -44,5 +44,6 @@ pwsh deploy/windows/publish.ps1 -Rid win-x64 # artifacts/weles-<ver>-win-x64.zip
 | 4 | Vulnerability Intelligence: lokalna baza NVD/KEV/EPSS działająca offline, aktualizacja na żądanie, dopasowanie wersji ze statusami i uzasadnieniem, laboratorium demo | ✅ |
 | 5 | Risk Engine: reguły konfiguracji z MITRE ATT&CK, ocena urządzeń z uzasadnieniem, Security Posture Score z trendem, priorytety napraw | ✅ |
 | 6 | AI Security Analyst: dołączona Ollama + Qwen3‑4B Q4 jako proces potomny, czat ze strumieniowaniem, kontekst wyłącznie z bazy WELES | ✅ |
-| 7 | Monitoring i topologia | ⏳ następny |
-| 8–11 | External, Raporty, Agenci, Pakowanie | planowane |
+| 7 | Monitoring (porównanie skanów, zmiany w czasie, harmonogram tylko w zatwierdzonej sieci), topologia SVG, ścieżki ataku jako hipotezy | ✅ |
+| 8 | External Attack Surface | ⏳ następny |
+| 9–11 | Raporty, Agenci, Pakowanie | planowane |

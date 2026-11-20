@@ -66,6 +66,13 @@ WELES łączy się z Internetem **tylko** po kliknięciu „Aktualizuj z Interne
 - Opisy CVE i referencje są danymi z zewnątrz: Blazor koduje je jako tekst, linki są ograniczone do `http(s)` i
   otwierane z `rel="noopener noreferrer"`.
 
+## Harmonogram skanów (Etap 7)
+
+- Tylko zatwierdzone zakresy; harmonogram można ustawić dopiero po ręcznym skanie, który zapisuje sieć (MAC routera).
+- Przed każdym automatycznym skanem: zakres nadal zatwierdzony, brak trwającego skanu i **dodatni** dowód, że komputer
+  jest w tej samej sieci (MAC bramy z tablicy ARP równy zapisanemu). Ten sam zakres adresów w innej sieci lub nieznany
+  MAC bramy = skan pominięty z zapisaną przyczyną.
+
 ## Lokalne AI (Etap 6)
 
 - Silnik (Ollama) i model są dołączone do paczki; WELES uruchamia go jako proces potomny nasłuchujący wyłącznie na

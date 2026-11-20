@@ -5,6 +5,7 @@
 @inject ScanTargetService Targets
 @inject NavigationManager Navigation
 @inject ScanCoordinator Coordinator
+@inject ScheduleService Schedules
 @implements IDisposable
 
 <PageTitle>@L.T("Wykrywanie sieci · WELES")</PageTitle>
@@ -188,6 +189,30 @@
                         <button class="btn btn-ghost btn-sm" disabled="@t.HasActiveScan" @onclick="() => Edit(t)">@L.T("Edytuj")</button>
                         <button class="btn btn-ghost btn-sm" disabled="@(t.ScanCount > 0)" title="@(t.ScanCount > 0 ? L.T("Zakres ma historię skanów") : "")" @onclick="() => DeleteAsync(t.Id)">@L.T("Usuń")</button>
                     </div>
+
+                    @if (t.IsApproved)
+                    {
+                        var schedule = _schedules.GetValueOrDefault(t.Id);
+                        <div class="schedule">
+                            <Icon Name="clock" Size="14" />
+                            <span class="small">@L.T("Harmonogram:")</span>
+                            <select class="input input-sm" value="@(schedule?.Interval?.ToString() ?? "")" @onchange="e => SetScheduleAsync(t.Id, e.Value?.ToString())" aria-label="@L.T("Harmonogram")">
+                                <option value="">@L.T("wyłączony")</option>
+                                <option value="Hourly">@L.T("co godzinę")</option>
+                                <option value="Every6Hours">@L.T("co 6 godzin")</option>
+                                <option value="Daily">@L.T("codziennie")</option>
+                                <option value="Weekly">@L.T("co tydzień")</option>
+                            </select>
+                            @if (schedule is { Interval: not null } sc)
+                            {
+                                <span class="muted small">@L.F("profil {0} · następny {1}", sc.PortSpecification, Labels.Local(sc.NextRunAt))@(sc.LastResult is { } last ? " · " + L.Message(last) : "")</span>
+                            }
+                            else
+                            {
+                                <span class="muted small">@L.T("Skany automatyczne działają tylko dla zatwierdzonego zakresu i tylko w sieci (routerze), w której zakres był skanowany.")</span>
+                            }
+                        </div>
+                    }
                 </article>
             }
         </div>
@@ -235,8 +260,20 @@
 
     public void Dispose() => Coordinator.ScanFinished -= OnScanFinished;
 
+    private IReadOnlyDictionary<int, ScheduleInfo> _schedules = new Dictionary<int, ScheduleInfo>();
+
+    private async Task SetScheduleAsync(int targetId, string? value)
+    {
+        ScheduleInterval? interval = Enum.TryParse<ScheduleInterval>(value, out var parsed) ? parsed : null;
+        var spec = _profiles.GetValueOrDefault(targetId) == "custom" ? _customPorts.GetValueOrDefault(targetId, "") : _profiles.GetValueOrDefault(targetId, Weles.Core.Networking.PortSpecification.Quick);
+        var result = await Schedules.SetAsync(targetId, interval, spec);
+        Show(result.Success ? (interval is null ? L.T("Harmonogram wyłączony.") : L.T("Harmonogram zapisany.")) : string.Join(" ", result.Errors.Select(L.Message)), !result.Success);
+        _schedules = await Schedules.ByTargetAsync();
+    }
+
     private async Task ReloadAsync()
     {
+        _schedules = await Schedules.ByTargetAsync();
         _targets = await Targets.ListAsync();
         foreach (var t in _targets)
         {

@@ -1,0 +1,114 @@
+@* One network drawn as SVG on the server: Internet (not tested) → gateway → devices. No JavaScript; clicks go to Blazor. *@
+@using Weles.Infrastructure.Queries
+
+@{
+    var devices = Network.Devices;
+    var rings = devices.Count <= 12 ? new[] { devices.Count } : new[] { (devices.Count + 1) / 2, devices.Count / 2 };
+    var height = devices.Count <= 12 ? 560 : 700;
+    var center = (X: Width / 2.0, Y: height / 2.0 + 40);
+}
+
+<svg class="topology" viewBox="0 0 @Width @height" role="img" aria-label="@L.F("Mapa sieci {0}", L.Message(Network.Label))">
+    <g class="topo-internet">
+        <ellipse cx="@Inv(center.X)" cy="34" rx="70" ry="22" />
+        @Text(center.X, 39, L.T("Internet"), "topo-label strong")
+        <line x1="@Inv(center.X)" y1="56" x2="@Inv(center.X)" y2="@Inv(center.Y - 34)" class="topo-edge unknown" />
+        @Text(center.X + 8, (56 + center.Y - 34) / 2, L.T("dostępność z Internetu nie badana"), "topo-note", "start")
+    </g>
+
+    @{
+        var index = 0;
+        for (var ring = 0; ring < rings.Length; ring++)
+        {
+            var count = rings[ring];
+            var rx = ring == 0 ? 360.0 : 250.0;
+            var ry = ring == 0 ? (devices.Count <= 12 ? 200.0 : 270.0) : 160.0;
+            for (var k = 0; k < count; k++, index++)
+            {
+                var node = devices[index];
+                // Keep the top sector free for the Internet link: angles from 35° to 325° measured clockwise from the top.
+                var angle = (35 + (count == 1 ? 145 : 290.0 * k / Math.Max(1, count - 1))) * Math.PI / 180;
+                var x = center.X + rx * Math.Sin(angle);
+                var y = center.Y - ry * Math.Cos(angle);
+                _positions[node.AssetId] = (x, y);
+            }
+        }
+    }
+
+    @foreach (var node in devices)
+    {
+        var (x, y) = _positions[node.AssetId];
+        <line x1="@Inv(center.X)" y1="@Inv(center.Y)" x2="@Inv(x)" y2="@Inv(y)" class="topo-edge risk-@RiskClass(node) @(node.Exposure.Count > 0 ? "exposed" : "")"><title>@L.T("ta sama sieć lokalna – połączenie wywnioskowane, nie zaobserwowany ruch")</title></line>
+    }
+
+    @if (Network.Gateway is { } gw)
+    {
+        @Node(gw, center.X, center.Y, 34)
+    }
+    else
+    {
+        <g class="topo-segment"><rect x="@Inv(center.X - 70)" y="@Inv(center.Y - 24)" width="140" height="48" rx="10" />@Text(center.X, center.Y + 5, Network.Cidr ?? L.T("sieć"), "topo-label")</g>
+    }
+
+    @foreach (var node in devices)
+    {
+        var (x, y) = _positions[node.AssetId];
+        @Node(node, x, y, 26)
+    }
+</svg>
+
+@code {
+    [Parameter, EditorRequired] public TopologyNetwork Network { get; set; } = default!;
+    [Parameter] public int? SelectedAssetId { get; set; }
+    [Parameter] public EventCallback<TopologyNode> OnSelect { get; set; }
+    [Parameter] public bool OnlyProblems { get; set; }
+
+    private const int Width = 1000;
+    private readonly Dictionary<int, (double X, double Y)> _positions = [];
+
+    private RenderFragment Node(TopologyNode node, double x, double y, int r) => __builder =>
+    {
+        var dim = (OnlyProblems && node.Exposure.Count == 0 && (node.RiskScore ?? 0) < 35) || node.Status is AssetStatus.Missing or AssetStatus.Unknown;
+        <g class="topo-node risk-@RiskClass(node) @(dim ? "dim" : "") @(SelectedAssetId == node.AssetId ? "selected" : "")" @onclick="() => OnSelect.InvokeAsync(node)" role="button" tabindex="0">
+            <title>@L.Message(node.Name) · @node.Ip · @Labels.Of(node.Type)@(node.RiskScore is { } s ? $" · {L.T("ryzyko")} {s:0}" : "")</title>
+            @if (node.Exposure.Count > 0) { <circle cx="@Inv(x)" cy="@Inv(y)" r="@(r + 7)" class="topo-exposure" /> }
+            <circle cx="@Inv(x)" cy="@Inv(y)" r="@r" class="topo-circle" />
+            @Text(x, y + 5, Glyph(node), "topo-glyph")
+            @Text(x, y + r + 16, Short(L.Message(node.Name), 22), "topo-label")
+            @Text(x, y + r + 30, node.Ip ?? "", "topo-ip")
+            @if (node.KnownExploited > 0) { @Text(x + r - 2, y - r + 6, "KEV", "topo-kev") }
+        </g>
+    };
+
+    private static RenderFragment Text(double x, double y, string content, string css, string anchor = "middle") =>
+        b => b.AddMarkupContent(0, $"<text x=\"{Inv(x)}\" y=\"{Inv(y)}\" class=\"{css}\" text-anchor=\"{anchor}\">{System.Net.WebUtility.HtmlEncode(content)}</text>");
+
+    private static string RiskClass(TopologyNode n) => n.RiskLevel switch
+    {
+        RiskLevel.Critical => "critical",
+        RiskLevel.High => "high",
+        RiskLevel.Medium => "medium",
+        RiskLevel.Low => "low",
+        _ => "info"
+    };
+
+    private static string Glyph(TopologyNode n) => n.Type switch
+    {
+        AssetType.Router => "R",
+        AssetType.Switch or AssetType.NetworkDevice => "SW",
+        AssetType.WindowsHost => "W",
+        AssetType.LinuxHost => "L",
+        AssetType.Server => "S",
+        AssetType.Nas => "NAS",
+        AssetType.Printer => "P",
+        AssetType.IpCamera => "CAM",
+        AssetType.IoTDevice => "IoT",
+        AssetType.MobileDevice => "M",
+        AssetType.VirtualMachine => "VM",
+        _ => "?"
+    };
+
+    private static string Short(string s, int max) => s.Length <= max ? s : s[..(max - 1)] + "…";
+
+    private static string Inv(double v) => v.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+}

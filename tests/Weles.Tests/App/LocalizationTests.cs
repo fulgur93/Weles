@@ -209,6 +209,24 @@ public partial class LocalizationTests
         generated.AddRange(Weles.Core.Risk.RiskEngine.ScoreAsset(new Weles.Core.Risk.AssetRiskInput(AssetType.MobileDevice, AssetCriticality.Medium, false, false, 0, [], [], []), now).Factors.Select(f => f.Text));
         generated.AddRange(Weles.Core.Risk.RiskEngine.Posture([("TP-LINK (192.168.0.1)", 92), ("NAS", 70), ("TV", 5)]).Factors.Select(f => f.Text));
         generated.AddRange(Weles.Core.Risk.RiskEngine.Posture([]).Factors.Select(f => f.Text));
+        // Attack paths: every step text, local and Internet variants, every device role.
+        foreach (var (type, gateway, isPublic, crit) in new[] { (AssetType.Router, true, false, AssetCriticality.Critical), (AssetType.Nas, false, true, AssetCriticality.High), (AssetType.IoTDevice, false, false, AssetCriticality.Medium), (AssetType.LinuxHost, false, false, AssetCriticality.Low) })
+        {
+            var asset = new Weles.Core.Risk.PathAsset(1, "TP-LINK (192.168.0.1)", "192.168.0.1", type, crit, gateway, isPublic, 7, "192.168.0.0/24 · TP-LINK c0:4a:00:ee:19:4a", 5,
+            [
+                new("Telnet – logowanie bez szyfrowania", 70, 23, null, 70, "Dowód ze skanu: Port 23: usługa Telnet", false),
+                new("Zaktualizuj OpenSSH 8.4p1 (port 22)", 78, 22, "CVE-2023-38408", 45, "Dopasowanie wymaga weryfikacji (np. pakiet dystrybucji z przeniesionymi poprawkami)", true),
+                new("Sprawdź firmware: TP-Link TL-WR841N", 40, null, "CVE-2020-1", 20, "Za mało danych (np. nieznana wersja firmware)", false),
+                new("Usługa UPnP dostępna w sieci", 40, 1900, null, 90, "Dowód ze skanu: Port 1900: UPnP", false, IsUpnp: true)
+            ]);
+            foreach (var path in Weles.Core.Risk.AttackPathEngine.Build([asset], 50))
+            {
+                generated.Add(path.Title);
+                generated.AddRange(path.Steps.SelectMany(st => new[] { st.Title, st.Justification }));
+            }
+        }
+
+        generated.AddRange(["Uruchomiono skan #12.", "Pominięto: zakres nie jest zatwierdzony.", "Pominięto: komputer jest teraz w innej sieci niż ta, w której zatwierdzono i skanowano zakres (inny router).", "Pominięto: Dla tego zakresu trwa już skan."]);
         generated.Add("Ocena ryzyka: Security Posture Score 54/100, urządzenia Critical: 1, High: 2 (nowe problemy konfiguracji: 3, rozwiązane: 0).");
         Assert.True(generated.Count > 15);
 

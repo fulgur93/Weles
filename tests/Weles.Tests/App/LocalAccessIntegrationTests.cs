@@ -282,3 +282,20 @@ public class ActiveScanIndicatorTests(WelesAppFactory factory) : IClassFixture<W
         targets.StopScan(scanId);
     }
 }
+
+public class Stage7PagesTests(WelesAppFactory factory) : IClassFixture<WelesAppFactory>
+{
+    /// <summary>Regression: the monitoring page redirected to itself forever while rendered on the server.</summary>
+    [Theory]
+    [InlineData("/monitoring")]
+    [InlineData("/monitoring?prev=1&cur=2")]
+    [InlineData("/topology")]
+    [InlineData("/attack-paths")]
+    public async Task Pages_render_without_redirects(string path)
+    {
+        var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, BaseAddress = new Uri("http://localhost") });
+        await client.GetAsync($"/auth?token={Uri.EscapeDataString(factory.Services.GetRequiredService<LocalAccessToken>().Value)}");
+        var response = await client.GetAsync(path);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+}
