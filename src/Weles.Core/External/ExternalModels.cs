@@ -136,7 +136,7 @@ public static class DomainNames
 
         if (AddressClassifier.Classify(parsed) != AddressScope.Public)
         {
-            error = $"Adres {parsed} nie jest publiczny – adresy z sieci lokalnej skanuje się w module Wykrywanie sieci.";
+            error = $"Adres {parsed} nie jest publiczny (sieć lokalna lub VPN) – taki adres dodaj jako zakres w module Wykrywanie sieci.";
             return false;
         }
 

@@ -2,6 +2,8 @@
 @inject Weles.Infrastructure.Queries.DashboardQueries Queries
 @inject IAiService Ai
 @inject Weles.Infrastructure.Queries.RiskQueries RiskQueries
+@inject Weles.Infrastructure.Queries.NetworkQueries Networks
+@using Weles.Infrastructure.Queries
 
 <PageTitle>@L.T("Pulpit · WELES")</PageTitle>
 
@@ -10,7 +12,12 @@
         <h1>@L.T("Pulpit")</h1>
         <p class="page-subtitle">@L.T("Stan bezpieczeństwa infrastruktury na podstawie rzeczywistych wyników skanowania.")</p>
     </div>
+    @if (_networks is not null && _summary?.HasAnyScan == true) { <NetworkPicker Context="_networks" Value="@_filter" /> }
 </div>
+@if (_networks is not null && _networks.Networks.Count > 1 && _summary?.HasAnyScan == true)
+{
+    <p class="muted small page-network">@NetworkPicker.Describe(_networks, _filter)</p>
+}
 
 @if (_summary is null)
 {
@@ -44,21 +51,21 @@ else if (!_summary.HasAnyScan)
 else
 {
     <section class="kpi-grid">
-        <a class="kpi card kpi-link" href="risk">
+        <a class="kpi card kpi-link" href="@NetLink("risk")">
             <div class="kpi-label">@L.T("Ocena stanu bezpieczeństwa")</div>
             <div class="kpi-value @(_summary.SecurityPostureScore is { } ps ? "tone-" + RiskPage.PostureTone(ps) : "")">@(_summary.SecurityPostureScore is { } s ? s.ToString("0") : "—")</div>
             <div class="kpi-hint">@(_summary.SecurityPostureScore is null ? L.T("pojawi się po pierwszym skanie") : L.T("0–100, wyżej = lepiej"))</div>
         </a>
-        <a class="kpi card kpi-link" href="assets"><div class="kpi-label">@L.T("Urządzenia")</div><div class="kpi-value">@_summary.AssetCount</div><div class="kpi-hint">@L.F("nowe od ostatniego skanu: {0}", _summary.NewAssetsSinceLastScan)</div></a>
+        <a class="kpi card kpi-link" href="@NetLink("assets")"><div class="kpi-label">@L.T("Urządzenia")</div><div class="kpi-value">@_summary.AssetCount</div><div class="kpi-hint">@L.F("nowe od ostatniego skanu: {0}", _summary.NewAssetsSinceLastScan)</div></a>
         <div class="kpi card"><div class="kpi-label">@L.T("Aktywne usługi")</div><div class="kpi-value">@_summary.ActiveServiceCount</div><div class="kpi-hint">@L.T("otwarte porty w ostatnim skanie")</div></div>
         <div class="kpi card"><div class="kpi-label">@L.T("Podatności")</div><div class="kpi-value">@_summary.VulnerabilityCount</div><div class="kpi-hint">@L.T("otwarte dopasowania (bez „brak danych”)")</div></div>
-        <a class="kpi card kpi-critical kpi-link" href="risk"><div class="kpi-label">@L.T("Krytyczne problemy")</div><div class="kpi-value">@_summary.CriticalFindingCount</div><div class="kpi-hint">@L.T("w ostatnim skanie")</div></a>
+        <a class="kpi card kpi-critical kpi-link" href="@NetLink("risk")"><div class="kpi-label">@L.T("Krytyczne problemy")</div><div class="kpi-value">@_summary.CriticalFindingCount</div><div class="kpi-hint">@L.T("w ostatnim skanie")</div></a>
     </section>
 
     @if (_priorities is { Count: > 0 })
     {
         <section class="card">
-            <div class="card-title"><Icon Name="alert" /> @L.T("Priorytety napraw") <a class="small" href="risk" style="margin-left:auto">@L.T("Wszystkie")</a></div>
+            <div class="card-title"><Icon Name="alert" /> @L.T("Priorytety napraw") <a class="small" href="@NetLink("risk")" style="margin-left:auto">@L.T("Wszystkie")</a></div>
             <ol class="priority-list compact">
                 @foreach (var (p, i) in _priorities.Select((p, i) => (p, i)))
                 {
@@ -119,12 +126,25 @@ else
 @code {
     private DashboardSummary? _summary;
     private AiEngineStatus? _ai;
-    private IReadOnlyList<Weles.Infrastructure.Queries.RemediationItem>? _priorities;
+    private IReadOnlyList<RemediationItem>? _priorities;
+    private NetworkContext? _networks;
+    private string _filter = NetworkContext.All;
 
-    protected override async Task OnInitializedAsync()
+    [SupplyParameterFromQuery(Name = "net")] public string? NetworkParameter { get; set; }
+
+    protected override async Task OnParametersSetAsync()
     {
-        _summary = await Queries.GetSummaryAsync();
-        _priorities = await RiskQueries.PrioritiesAsync(3);
-        _ai = await Ai.GetStatusAsync();
+        _networks = await Networks.ContextAsync();
+        _filter = _networks.Normalize(NetworkParameter);
+        var networks = _networks;
+        var filter = _filter;
+        _summary = await Queries.GetSummaryAsync(networks, filter);
+        _priorities = await RiskQueries.PrioritiesAsync(3, id => networks.IncludesAsset(filter, id));
+        _ai ??= await Ai.GetStatusAsync();
     }
+
+    /// <summary>Links keep the chosen network; the asset list understands only "current" and "all".</summary>
+    private string NetLink(string page) => page == "assets"
+        ? (_filter is NetworkContext.All or NetworkContext.Current ? $"assets?net={_filter}" : "assets")
+        : $"{page}?net={Uri.EscapeDataString(_filter)}";
 }

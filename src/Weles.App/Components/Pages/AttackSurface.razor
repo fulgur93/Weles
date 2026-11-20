@@ -250,7 +250,7 @@ else
                 {
                     <div class="device-changes">
                         @if (h.AssetId is { } assetId) { <a href="assets/@assetId"><strong class="mono">@(h.Hostname ?? h.Ip)</strong></a> } else { <strong class="mono">@(h.Hostname ?? h.Ip)</strong> }
-                        <span class="mono muted small">@h.Ip</span>
+                        @if (h.Hostname is not null) { <span class="mono muted small host-ip">@h.Ip</span> }
                         @if (h.Services.Count == 0) { <div class="muted small">@L.T("brak otwartych portów w sprawdzonym profilu")</div> }
                         <ul class="small">
                             @foreach (var p in h.Services)

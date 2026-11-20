@@ -101,6 +101,11 @@ public static partial class ExternalRules
             findings.Add(new("DMARC-NONE", RiskLevel.Low, "DMARC tylko monitoruje (p=none)", $"DMARC: {dmarc[0]}",
                 "Po sprawdzeniu raportów zmień politykę na p=quarantine lub p=reject – p=none nie blokuje podszytych wiadomości."));
         }
+        else if (DmarcPercent().Match(dmarc[0]) is { Success: true } pct && int.TryParse(pct.Groups[1].Value, out var percent) && percent < 100)
+        {
+            findings.Add(new("DMARC-PARTIAL", RiskLevel.Low, "DMARC obejmuje tylko część wiadomości", $"pct={percent} – polityka dotyczy {percent}% wiadomości, które nie przeszły kontroli. DMARC: {dmarc[0]}",
+                "Po sprawdzeniu raportów zwiększ pct do 100 (lub usuń pct) – pozostałe podszyte wiadomości są dziś traktowane jak przy p=none."));
+        }
 
         if (!s.OfType("CAA").Any())
         {
@@ -161,4 +166,7 @@ public static partial class ExternalRules
 
     [GeneratedRegex(@"(?:^|;)\s*p\s*=\s*([a-z]+)", RegexOptions.IgnoreCase)]
     private static partial Regex DmarcPolicy();
+
+    [GeneratedRegex(@"(?:^|;)\s*pct\s*=\s*(\d{1,3})", RegexOptions.IgnoreCase)]
+    private static partial Regex DmarcPercent();
 }

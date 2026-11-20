@@ -7,7 +7,15 @@ using Weles.Infrastructure.Database;
 
 namespace Weles.Infrastructure.Queries;
 
-public sealed record ScanRef(int Id, DateTime At, string TargetName, string PortSpecification, string? Network);
+/// <param name="Network">Gateway fingerprint; null when the scan saw no local gateway (public hosts, loopback, VPN).</param>
+/// <param name="IsExternal">Scan of a public-host scope from the Attack Surface module.</param>
+public sealed record ScanRef(int Id, DateTime At, string TargetName, string PortSpecification, string? Network, int ScopeId = 0, bool IsExternal = false)
+{
+    /// <summary>Two scans describe the same network when their gateways match; without a gateway only scans of one scope compare.</summary>
+    public bool SameNetworkAs(ScanRef other) => Network is null || other.Network is null
+        ? Network is null && other.Network is null && ScopeId == other.ScopeId
+        : Network == other.Network;
+}
 
 public sealed record DeviceRef(int AssetId, string Name, string? Ip);
 
@@ -72,20 +80,38 @@ public sealed class MonitoringQueries(IDbContextFactory<WelesDbContext> contextF
     public async Task<int?> PreviousOnSameNetworkAsync(int scanId, CancellationToken ct = default)
     {
         await using var db = await contextFactory.CreateDbContextAsync(ct);
-        var scan = await db.Scans.AsNoTracking().Where(s => s.Id == scanId).Select(s => new { s.StartedAt, s.NetworkFingerprint }).SingleOrDefaultAsync(ct);
+        var scan = await db.Scans.AsNoTracking().Where(s => s.Id == scanId).Select(s => new { s.StartedAt, s.NetworkFingerprint, s.ScanTargetId }).SingleOrDefaultAsync(ct);
         if (scan is null) return null;
-        return await db.Scans.AsNoTracking()
-            .Where(s => s.Status == ScanStatus.Completed && s.StartedAt < scan.StartedAt && s.NetworkFingerprint == scan.NetworkFingerprint)
-            .OrderByDescending(s => s.StartedAt).Select(s => (int?)s.Id).FirstOrDefaultAsync(ct);
+        var earlier = db.Scans.AsNoTracking().Where(s => s.Status == ScanStatus.Completed && s.StartedAt < scan.StartedAt);
+        // Without a gateway (public hosts, loopback, VPN) "the same network" can only mean the same scope.
+        earlier = scan.NetworkFingerprint is null
+            ? earlier.Where(s => s.NetworkFingerprint == null && s.ScanTargetId == scan.ScanTargetId)
+            : earlier.Where(s => s.NetworkFingerprint == scan.NetworkFingerprint);
+        return await earlier.OrderByDescending(s => s.StartedAt).Select(s => (int?)s.Id).FirstOrDefaultAsync(ct);
     }
 
     /// <summary>"What changed since the last audit?" – the latest completed scan against the previous one of its network.</summary>
     public async Task<ScanComparison?> LatestAsync(CancellationToken ct = default)
     {
         await using var db = await contextFactory.CreateDbContextAsync(ct);
-        var latest = await db.Scans.AsNoTracking().Where(s => s.Status == ScanStatus.Completed).OrderByDescending(s => s.StartedAt).Select(s => (int?)s.Id).FirstOrDefaultAsync(ct);
-        if (latest is null || await PreviousOnSameNetworkAsync(latest.Value, ct) is not { } previous) return null;
-        return await CompareAsync(previous, latest.Value, ct);
+        return await DefaultPairAsync(ct) is { } pair ? await CompareAsync(pair.Previous, pair.Current, ct) : null;
+    }
+
+    /// <summary>
+    /// The comparison shown by default: the newest local-network scan that has an earlier scan of the same network.
+    /// External (Internet) scans are compared only when no local pair exists.
+    /// </summary>
+    public async Task<(int Previous, int Current)?> DefaultPairAsync(CancellationToken ct = default)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        var candidates = await Completed(db).OrderBy(s => s.ScanTarget!.IsExternal).ThenByDescending(s => s.StartedAt)
+            .Select(s => s.Id).Take(50).ToListAsync(ct);
+        foreach (var id in candidates)
+        {
+            if (await PreviousOnSameNetworkAsync(id, ct) is { } previous) return (previous, id);
+        }
+
+        return null;
     }
 
     public async Task<ScanComparison?> CompareAsync(int previousScanId, int currentScanId, CancellationToken ct = default)
@@ -150,7 +176,7 @@ public sealed class MonitoringQueries(IDbContextFactory<WelesDbContext> contextF
             .Select(x => new RiskChange(Ref(x.Now.AssetId!.Value), x.Before?.Score, x.Now.Score, x.Now.Level))
             .OrderByDescending(r => Math.Abs(r.After - (r.Before ?? 0))).ToList();
 
-        return new ScanComparison(prev, cur, prev.Network == cur.Network, newDevices, returned, missing,
+        return new ScanComparison(prev, cur, prev.SameNetworkAs(cur), newDevices, returned, missing,
             changed.OrderByDescending(c => c.Changes.Count).ToList(), newVulns, resolvedVulns, riskChanges,
             scores.FirstOrDefault(r => r.ScanId == prev.Id && r.AssetId == null)?.Score,
             scores.FirstOrDefault(r => r.ScanId == cur.Id && r.AssetId == null)?.Score);
@@ -200,5 +226,5 @@ public sealed class MonitoringQueries(IDbContextFactory<WelesDbContext> contextF
 
     /// <summary>Projection last – EF cannot filter or sort on a record built by a constructor.</summary>
     private static IQueryable<ScanRef> Project(IQueryable<Scan> scans) =>
-        scans.Select(s => new ScanRef(s.Id, s.StartedAt!.Value, s.ScanTarget!.Name, s.PortSpecification, s.NetworkFingerprint));
+        scans.Select(s => new ScanRef(s.Id, s.StartedAt!.Value, s.ScanTarget!.Name, s.PortSpecification, s.NetworkFingerprint, s.ScanTargetId, s.ScanTarget.IsExternal));
 }

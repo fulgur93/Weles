@@ -38,7 +38,8 @@ public sealed record PathAsset(
     int ScanId,
     string Network,
     int DevicesOnNetwork,
-    IReadOnlyList<PathIssue> Issues);
+    IReadOnlyList<PathIssue> Issues,
+    bool ScannedOverInternet = false);
 
 /// <param name="Certainty">0–100 – match certainty for CVEs, rule confidence for configuration findings.</param>
 /// <param name="CertaintyText">Why that certainty (e.g. "wymaga weryfikacji – pakiet dystrybucji").</param>
@@ -62,7 +63,8 @@ public static class AttackPathEngine
         {
             foreach (var issue in asset.Issues.Where(i => i.Score >= MinimumIssueScore))
             {
-                paths.Add(LocalPath(asset, issue));
+                // A public host scanned over the Internet (Attack Surface) is not in any local network.
+                if (!asset.ScannedOverInternet) paths.Add(LocalPath(asset, issue));
                 if (InternetPath(asset, issue) is { } internet) paths.Add(internet);
             }
         }
@@ -86,7 +88,16 @@ public static class AttackPathEngine
     private static AttackPath? InternetPath(PathAsset asset, PathIssue issue)
     {
         PathStep? exposure = null;
-        if (asset.HasPublicAddress)
+        var observed = asset.ScannedOverInternet;
+        if (observed)
+        {
+            exposure = issue.Port is { } port
+                ? new PathStep(PathStepKind.Access, $"Port {port} na {Label(asset)} jest otwarty",
+                    $"Połączenie przez Internet nawiązane w skanie #{asset.ScanId} – usługa jest osiągalna z Internetu. Osiągalność nie oznacza możliwości przejęcia.", 95, asset.AssetId, port)
+                : new PathStep(PathStepKind.Access, $"{Label(asset)} jest osiągalne z Internetu",
+                    $"Host odpowiedział przez Internet w skanie #{asset.ScanId}.", 90, asset.AssetId);
+        }
+        else if (asset.HasPublicAddress)
         {
             exposure = new PathStep(PathStepKind.Access, $"{asset.Name} ma adres publiczny {asset.Ip}",
                 "Adres publiczny może być osiągalny z Internetu, ale WELES nie sprawdzał tego z zewnątrz (zapora operatora lub routera może blokować ruch).", 50, asset.AssetId);
@@ -100,13 +111,15 @@ public static class AttackPathEngine
         if (exposure is null) return null;
         var steps = new List<PathStep>
         {
-            new(PathStepKind.Entry, "Internet", "Założenie: atakujący w Internecie. Dostępność z Internetu nie była badana – ten krok jest najmniej pewny.", null),
+            new(PathStepKind.Entry, "Internet", observed
+                ? "Założenie: atakujący w Internecie – tak jak WELES podczas skanu aktywnego tego hosta."
+                : "Założenie: atakujący w Internecie. Dostępność z Internetu nie była badana – ten krok jest najmniej pewny.", null),
             exposure,
             Weakness(asset, issue),
             Impact(asset, issue)
         };
-        // Lower priority than the local variant: the reachability step itself is unverified.
-        return Path($"internet:{asset.AssetId}:{issue.Port}:{issue.CveId ?? issue.Title}", $"Internet → {Label(asset)} → {issue.Title}", asset, issue, steps, 0.8);
+        // Unverified reachability lowers the priority; reachability observed over the Internet does not.
+        return Path($"internet:{asset.AssetId}:{issue.Port}:{issue.CveId ?? issue.Title}", $"Internet → {Label(asset)} → {issue.Title}", asset, issue, steps, observed ? 1.0 : 0.8);
     }
 
     private static PathStep Access(PathAsset asset, PathIssue issue) => issue.Port is { } port

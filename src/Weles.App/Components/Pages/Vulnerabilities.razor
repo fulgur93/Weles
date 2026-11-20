@@ -5,6 +5,7 @@
 @inject VulnerabilityQueries Queries
 @inject VulnerabilityDatabaseService Database
 @inject NavigationManager Navigation
+@inject NetworkQueries Networks
 
 <PageTitle>@L.T("Podatności · WELES")</PageTitle>
 
@@ -66,6 +67,7 @@
                 <Icon Name="discovery" Size="15" />
                 <input class="input" placeholder="@L.T("Szukaj: CVE, urządzenie, IP, produkt, wersja, port…")" @bind="_search" @bind:event="oninput" @bind:after="Refresh" />
             </div>
+            @if (_networks is not null) { <NetworkPicker Context="_networks" Value="@_filter" ValueChanged="NetworkChangedAsync" /> }
             <label class="checkbox inline"><input type="checkbox" @bind="_kevOnly" @bind:after="Refresh" /><span>@L.F("Tylko CISA KEV ({0})", _page.KnownExploited)</span></label>
             <label class="checkbox inline"><input type="checkbox" @bind="_includeResolved" @bind:after="Refresh" /><span>@L.T("Pokaż rozwiązane")</span></label>
         </div>
@@ -113,7 +115,8 @@
                         {
                             <tr class="clickable" @onclick="@(() => Navigation.NavigateTo($"vulnerabilities/{f.CveId}"))" title="@L.Message(f.MatchReason)">
                                 <td class="mono"><strong>@f.CveId</strong>@if (f.Title is not null) { <div class="muted small">@f.Title</div> }</td>
-                                <td><a href="assets/@f.AssetId" @onclick:stopPropagation="true">@L.Message(f.AssetName)</a><div class="muted small mono">@f.AssetIp</div></td>
+                                <td><a href="assets/@f.AssetId" @onclick:stopPropagation="true">@L.Message(f.AssetName)</a><div class="muted small mono">@f.AssetIp</div>
+                                    @if (_networks is not null && _filter is NetworkContext.All or NetworkContext.Current && _networks.Networks.Count > 1) { <div class="muted small">@L.Message(_networks.LabelOf(_networks.AssetNetworkKey(f.AssetId)))</div> }</td>
                                 <td>@f.Product @f.DetectedVersion @if (f.Port is { } p) { <span class="muted small">· @L.F("port {0}", p)</span> }</td>
                                 <td>@if (f.CvssScore is { } c) { <StatusPill Tone="@Labels.Tone(f.Severity)">@c.ToString("0.0")</StatusPill> } else { <span class="muted">—</span> }</td>
                                 <td class="mono small" title="@(f.EpssPercentile is { } pc ? L.F("percentyl {0}", (pc * 100).ToString("0.#")) : null)">@Labels.Epss(f.EpssScore)</td>
@@ -136,6 +139,10 @@
 @code {
     [SupplyParameterFromQuery(Name = "match")] public string? MatchParameter { get; set; }
     [SupplyParameterFromQuery(Name = "kev")] public bool Kev { get; set; }
+    [SupplyParameterFromQuery(Name = "net")] public string? NetworkParameter { get; set; }
+
+    private NetworkContext? _networks;
+    private string _filter = NetworkContext.All;
 
     private VulnerabilityDatabaseStatus? _status;
     private VulnerabilityFindingPage? _page;
@@ -152,13 +159,28 @@
         _kevOnly = Kev;
         Database.Changed += OnDatabaseChanged;
         _status = await Database.GetStatusAsync();
+        _networks = await Networks.ContextAsync();
+        _filter = _networks.Normalize(NetworkParameter);
+        await Refresh();
+    }
+
+    private async Task NetworkChangedAsync(string value)
+    {
+        _filter = _networks!.Normalize(value);
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("net", _filter), replace: true);
         await Refresh();
     }
 
     private async Task Refresh()
     {
         _limit = 100;
-        _page = await Queries.FindingsAsync(new VulnerabilityFindingQuery { Search = _search, MatchStatus = _match, KnownExploitedOnly = _kevOnly, IncludeResolved = _includeResolved });
+        var networks = _networks;
+        var filter = _filter;
+        _page = await Queries.FindingsAsync(new VulnerabilityFindingQuery
+        {
+            Search = _search, MatchStatus = _match, KnownExploitedOnly = _kevOnly, IncludeResolved = _includeResolved,
+            IncludeAsset = networks is null || filter == NetworkContext.All ? null : id => networks.IncludesAsset(filter, id)
+        });
         if (_page.Total == 0) _evidence ??= await Queries.EvidenceAsync();
     }
 

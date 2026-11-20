@@ -219,7 +219,7 @@ public partial class LocalizationTests
                 new("Sprawdź firmware: TP-Link TL-WR841N", 40, null, "CVE-2020-1", 20, "Za mało danych (np. nieznana wersja firmware)", false),
                 new("Usługa UPnP dostępna w sieci", 40, 1900, null, 90, "Dowód ze skanu: Port 1900: UPnP", false, IsUpnp: true)
             ]);
-            foreach (var path in Weles.Core.Risk.AttackPathEngine.Build([asset], 50))
+            foreach (var path in Weles.Core.Risk.AttackPathEngine.Build([asset, asset with { AssetId = 2, ScannedOverInternet = true }], 50))
             {
                 generated.Add(path.Title);
                 generated.AddRange(path.Steps.SelectMany(st => new[] { st.Title, st.Justification }));
@@ -233,6 +233,7 @@ public partial class LocalizationTests
             new Weles.Core.External.ExternalSnapshot("firma.pl", DateTime.UtcNow, [], [Rec("MX", "10 mail.firma.pl"), Rec("NS", "ns1.firma.pl"), Rec("TXT", "v=spf1 " + string.Join(' ', Enumerable.Range(1, 11).Select(i => $"include:s{i}.pl")) + " +all")],
                 [new("old.firma.pl", [], "gone.herokuapp.com", false, true, false, ["CT"]), new("intranet.firma.pl", ["10.1.2.3"], null, true, false, false, ["CT"])], [], false, null, ["93.184.216.99"], 0, []),
             new Weles.Core.External.ExternalSnapshot("firma.pl", DateTime.UtcNow, [], [Rec("TXT", "v=spf1 mx ?all"), Rec("TXT", "v=DMARC1; p=none", "_dmarc.firma.pl")], [], [], false, null, [], 0, []),
+            new Weles.Core.External.ExternalSnapshot("firma.pl", DateTime.UtcNow, [], [Rec("TXT", "v=DMARC1; p=quarantine; pct=5", "_dmarc.firma.pl")], [], [], false, null, [], 0, []),
             new Weles.Core.External.ExternalSnapshot("firma.pl", DateTime.UtcNow, [], [Rec("TXT", "v=spf1 mx"), Rec("TXT", "v=spf1 a"), Rec("TXT", "v=DMARC1; p=none", "_dmarc.firma.pl"), Rec("TXT", "v=DMARC1; p=reject", "_dmarc.firma.pl")], [], [], false, null, [], 0, []),
             new Weles.Core.External.ExternalSnapshot("firma.pl", DateTime.UtcNow, [], [Rec("TXT", "v=spf1 mx")], [], [], false, null, [], 0, []),
             new Weles.Core.External.ExternalSnapshot("firma.pl", DateTime.UtcNow, [], [], [], [], false, null, [], 0, [])

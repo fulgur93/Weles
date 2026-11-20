@@ -27,18 +27,23 @@ public sealed record TopologyNode(
 /// One network with its devices. Links are inferred, not observed traffic: every device of a segment reaches the others
 /// and the gateway directly (same LAN); the gateway connects the segment to other networks and the Internet.
 /// </summary>
-public sealed record TopologyNetwork(string Key, string Label, string? Cidr, TopologyNode? Gateway, IReadOnlyList<TopologyNode> Devices);
+/// <param name="IsPublic">Public (Internet) hosts outside any local network – drawn without a gateway and without "same LAN" links.</param>
+public sealed record TopologyNetwork(string Key, string Label, string? Cidr, TopologyNode? Gateway, IReadOnlyList<TopologyNode> Devices, bool IsPublic = false);
 
 public sealed record TopologyModel(IReadOnlyList<TopologyNetwork> Networks, int HiddenOtherNetworks, string? CurrentNetwork);
 
 public sealed class TopologyQueries(IDbContextFactory<WelesDbContext> contextFactory, AssetQueries assets, RiskQueries risk)
 {
-    public async Task<TopologyModel> GetAsync(bool currentNetworkOnly, CancellationToken ct = default)
+    /// <param name="includeAsset">Shows only devices of one network (null – as chosen by <paramref name="currentNetworkOnly"/>).</param>
+    public async Task<TopologyModel> GetAsync(bool currentNetworkOnly, Func<int, bool>? includeAsset = null, CancellationToken ct = default)
     {
         var current = await assets.CurrentNetworkAsync(ct);
         var all = await assets.LoadAllAsync(ct);
-        var hidden = currentNetworkOnly ? all.Count(a => a.SegmentId is { } s && current.OtherNetworkSegmentIds.Contains(s)) : 0;
-        var items = currentNetworkOnly ? all.Where(a => a.SegmentId is not { } s || !current.OtherNetworkSegmentIds.Contains(s)).ToList() : all.ToList();
+        // Hosts with a public address and no local segment (Attack Surface scans) are not part of any local network.
+        static bool IsPublicHost(AssetListItem a) => a.SegmentId is null && IPAddress.TryParse(a.IpAddress, out var ip) && AddressClassifier.IsPublic(ip);
+        bool Hidden(AssetListItem a) => (a.SegmentId is { } s && current.OtherNetworkSegmentIds.Contains(s)) || IsPublicHost(a);
+        var hidden = currentNetworkOnly ? all.Count(Hidden) : 0;
+        var items = (currentNetworkOnly ? all.Where(a => !Hidden(a)) : all).Where(a => includeAsset?.Invoke(a.Id) != false).ToList();
 
         var results = await risk.LatestResultsAsync(ct);
         var gateways = await GatewayAssetsAsync(ct);
@@ -50,21 +55,28 @@ public sealed class TopologyQueries(IDbContextFactory<WelesDbContext> contextFac
                 a.OpenPorts, a.Products, exposure, r?.Issues.Sum(i => i.KnownExploited) ?? 0);
         }
 
-        var networks = items.GroupBy(a => a.SegmentId)
+        var networks = items.GroupBy(a => IsPublicHost(a) ? "public" : a.SegmentId?.ToString() ?? "none")
             .Select(g =>
             {
                 var nodes = g.Select(Node).ToList();
+                if (g.Key == "public")
+                {
+                    return new TopologyNetwork("public", "Internet – zasoby publiczne (poza siecią lokalną)", null, null,
+                        nodes.OrderByDescending(n => n.RiskScore ?? 0).ThenBy(n => n.Name, StringComparer.Ordinal).ToList(), IsPublic: true);
+                }
+
                 var gateway = nodes.Where(n => n.IsGateway).OrderBy(n => n.Ip, StringComparer.Ordinal).FirstOrDefault();
-                var label = g.First().NetworkLabel ?? (g.Key is null ? "bez rozpoznanej sieci (np. 127.0.0.1, VPN)" : "sieć");
-                return new TopologyNetwork(g.Key?.ToString() ?? "none", label, g.First().SegmentCidr, gateway,
+                var label = g.First().NetworkLabel ?? (g.Key == "none" ? "bez rozpoznanej sieci (np. 127.0.0.1, VPN)" : "sieć");
+                return new TopologyNetwork(g.Key, label, g.First().SegmentCidr, gateway,
                     nodes.Where(n => n != gateway).OrderByDescending(n => n.RiskScore ?? 0).ThenBy(n => n.Name, StringComparer.Ordinal).ToList());
             })
-            .OrderBy(n => n.Key == "none").ThenByDescending(n => n.Devices.Count).ToList();
+            .OrderBy(n => n.Key is "none" or "public").ThenBy(n => n.IsPublic).ThenByDescending(n => n.Devices.Count).ToList();
         return new TopologyModel(networks, hidden, currentNetworkOnly ? current.Description : null);
     }
 
     /// <summary>Potential exposure paths over the latest assessment of every device.</summary>
-    public async Task<IReadOnlyList<AttackPath>> AttackPathsAsync(CancellationToken ct = default)
+    /// <param name="includeAsset">Limits the paths to devices of one network (null – all networks).</param>
+    public async Task<IReadOnlyList<AttackPath>> AttackPathsAsync(Func<int, bool>? includeAsset = null, int take = 12, CancellationToken ct = default)
     {
         var results = await risk.LatestResultsAsync(ct);
         if (results.Count == 0) return [];
@@ -81,7 +93,7 @@ public sealed class TopologyQueries(IDbContextFactory<WelesDbContext> contextFac
         var input = new List<PathAsset>();
         foreach (var (assetId, (result, scanId)) in results)
         {
-            if (!all.TryGetValue(assetId, out var a)) continue;
+            if (!all.TryGetValue(assetId, out var a) || includeAsset?.Invoke(assetId) == false) continue;
             var issues = new List<PathIssue>();
             foreach (var i in result.Issues)
             {
@@ -105,11 +117,12 @@ public sealed class TopologyQueries(IDbContextFactory<WelesDbContext> contextFac
             }
 
             var isPublic = IPAddress.TryParse(a.IpAddress, out var ip) && AddressClassifier.IsPublic(ip);
+            var overInternet = isPublic && a.SegmentId is null;
             input.Add(new PathAsset(assetId, a.DisplayName, a.IpAddress, a.Type, a.Criticality, gateways.Contains(assetId), isPublic, scanId,
-                a.NetworkLabel ?? "bez rozpoznanej sieci", perNetwork.GetValueOrDefault(a.SegmentId ?? -1), issues));
+                overInternet ? "Internet" : a.NetworkLabel ?? "bez rozpoznanej sieci", perNetwork.GetValueOrDefault(a.SegmentId ?? -1), issues, overInternet));
         }
 
-        return AttackPathEngine.Build(input);
+        return AttackPathEngine.Build(input, take);
     }
 
     /// <summary>Assets whose latest observation was the default gateway of its segment.</summary>

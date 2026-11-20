@@ -71,6 +71,14 @@ public sealed class LocalNetworkDiscovery(OuiDatabase oui)
                     note = "Interfejs ma adres publiczny – skanowanie wymaga osobnego zezwolenia na adresy publiczne.";
                 }
 
+                // A VPN subnet is shared with other people's computers (other users of the same VPN): never suggest
+                // scanning it as a whole – only single addresses the user is allowed to test.
+                if (IsVpn(nic))
+                {
+                    suggested = "";
+                    note = "Interfejs VPN – w tej sieci są też komputery innych osób. Nie skanuj całej sieci; dodaj zakres z pojedynczym adresem maszyny, którą wolno Ci testować.";
+                }
+
                 result.Add(new LocalInterfaceInfo(nic.Name, nic.Description, InterfaceType(nic), mac,
                     oui.Lookup(mac), unicast.Address.ToString(), prefix, network, gateway?.ToString(), hosts, suggested, note));
             }
@@ -79,9 +87,37 @@ public sealed class LocalNetworkDiscovery(OuiDatabase oui)
         return result;
     }
 
+    /// <summary>
+    /// VPN tunnels: .NET reports Linux tun/wg devices as "Unknown", so the kernel is asked as well (ARPHRD_NONE = 65534,
+    /// ARPHRD_PPP = 512, or a tun_flags file for tun/tap), with common names as a fallback.
+    /// </summary>
+    internal static bool IsVpn(NetworkInterface nic)
+    {
+        if (nic.NetworkInterfaceType is NetworkInterfaceType.Tunnel or NetworkInterfaceType.Ppp) return true;
+        if (OperatingSystem.IsLinux())
+        {
+            try
+            {
+                var path = $"/sys/class/net/{nic.Name}";
+                if (File.Exists($"{path}/tun_flags")) return true;
+                if (File.Exists($"{path}/type") && File.ReadAllText($"{path}/type").Trim() is "65534" or "512" or "776") return true;
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+
+        return IsVpnName(nic.Name) || IsVpnName(nic.Description);
+    }
+
+    internal static bool IsVpnName(string? name) =>
+        name is not null && (System.Text.RegularExpressions.Regex.IsMatch(name, @"^(tun|tap|wg|ppp|utun|ipsec|nordlynx|tailscale|zt)\d*", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+            || name.Contains("VPN", StringComparison.OrdinalIgnoreCase) || name.Contains("WireGuard", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("TAP-Windows", StringComparison.OrdinalIgnoreCase) || name.Contains("OpenVPN", StringComparison.OrdinalIgnoreCase));
+
     /// <summary>.NET reports Wi‑Fi adapters as Ethernet on Linux; the kernel exposes the truth in sysfs.</summary>
     private static string InterfaceType(NetworkInterface nic) =>
-        OperatingSystem.IsLinux() && Directory.Exists($"/sys/class/net/{nic.Name}/wireless") ? "Wi‑Fi"
+        IsVpn(nic) ? "VPN"
+        : OperatingSystem.IsLinux() && Directory.Exists($"/sys/class/net/{nic.Name}/wireless") ? "Wi‑Fi"
         : nic.NetworkInterfaceType switch
         {
             NetworkInterfaceType.Wireless80211 => "Wi‑Fi",

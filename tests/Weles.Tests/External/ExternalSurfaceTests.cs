@@ -104,6 +104,10 @@ public class ExternalRulesTests
         Assert.Equal(RiskLevel.Medium, missing.Single(f => f.Code == "SPF-MISSING").Level);
         Assert.Equal(RiskLevel.Medium, missing.Single(f => f.Code == "DMARC-MISSING").Level);
         Assert.Contains("DMARC-NONE", Codes(Snapshot([R("TXT", "v=DMARC1; p=none; rua=mailto:d@firma.pl", "_dmarc.firma.pl")])));
+        // Real case: p=quarantine with pct=5 enforces the policy on 5% of failing mail only.
+        var partial = ExternalRules.Evaluate(Snapshot([R("TXT", "v=DMARC1; p=quarantine; pct=5; rua=mailto:d@firma.pl", "_dmarc.firma.pl")])).Single(f => f.Code == "DMARC-PARTIAL");
+        Assert.StartsWith("pct=5 – polityka dotyczy 5%", partial.Evidence);
+        Assert.DoesNotContain("DMARC-PARTIAL", Codes(Snapshot([R("TXT", "v=DMARC1; p=reject; pct=100", "_dmarc.firma.pl")])));
 
         var good = Codes(Snapshot([R("MX", "10 mail.firma.pl"), R("TXT", "v=spf1 mx -all"), R("TXT", "v=DMARC1; p=reject", "_dmarc.firma.pl"),
             R("CAA", "0 issue \"letsencrypt.org\""), R("NS", "ns1.dns.pl"), R("NS", "ns2.dns.pl")]));
@@ -137,6 +141,58 @@ public class ExternalRulesTests
     {
         var s = new ExternalSnapshot("8.8.8.8", DateTime.UtcNow, [], [R("PTR", "dns.google", "8.8.8.8")], [new("8.8.8.8", ["8.8.8.8"], null, true, false, false, ["użytkownik"])], [], false, null, [], 0, []);
         Assert.Empty(ExternalRules.Evaluate(s));
+    }
+}
+
+public class CertificateTransparencyClientTests
+{
+    private sealed class Handler(Queue<HttpResponseMessage> responses) : HttpMessageHandler
+    {
+        public List<Uri> Requests { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Requests.Add(request.RequestUri!);
+            return Task.FromResult(responses.Dequeue());
+        }
+    }
+
+    private sealed class Factory(HttpMessageHandler handler) : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new(handler, disposeHandler: false);
+    }
+
+    [Fact]
+    public async Task Retries_when_crt_sh_is_overloaded_and_keeps_only_names_of_the_domain()
+    {
+        CertificateTransparencyClient.RetryDelaySeconds = 0;
+        const string json = """
+            [{"id":11,"issuer_name":"C=US, O=Let's Encrypt, CN=R11","common_name":"WWW.firma.pl","name_value":"www.firma.pl\n*.api.firma.pl\nfirma.pl.evil.com\n<script>.firma.pl","not_before":"2026-10-01T00:00:00","not_after":"2026-12-30T00:00:00"},
+             {"id":12,"issuer_name":"C=US, O=X","common_name":"inna.pl","name_value":"inna.pl","not_before":"2026-01-01T00:00:00","not_after":"2026-04-01T00:00:00"}]
+            """;
+        var handler = new Handler(new Queue<HttpResponseMessage>([
+            new(HttpStatusCode.BadGateway), new(HttpStatusCode.ServiceUnavailable), new(HttpStatusCode.OK) { Content = new StringContent(json) }]));
+        var client = new CertificateTransparencyClient(new Factory(handler), Options.Create(new ExternalOptions { CertificateTransparencyUrl = "https://ct.invalid/" }),
+            NullLogger<CertificateTransparencyClient>.Instance);
+
+        var result = await client.SearchAsync("firma.pl", CancellationToken.None);
+        Assert.Null(result.Error);
+        Assert.Equal(3, handler.Requests.Count);
+        Assert.Equal("https://ct.invalid/?q=%25.firma.pl&output=json", handler.Requests[0].ToString());
+        var certificate = Assert.Single(result.Certificates);   // inna.pl has no name in the domain
+        Assert.Equal(["www.firma.pl", "api.firma.pl"], certificate.Names);
+        Assert.Equal(new DateTime(2026, 12, 30, 0, 0, 0, DateTimeKind.Utc), certificate.NotAfter);
+    }
+
+    [Fact]
+    public async Task Gives_up_after_three_overloaded_answers()
+    {
+        CertificateTransparencyClient.RetryDelaySeconds = 0;
+        var handler = new Handler(new Queue<HttpResponseMessage>([new(HttpStatusCode.BadGateway), new(HttpStatusCode.BadGateway), new(HttpStatusCode.BadGateway)]));
+        var client = new CertificateTransparencyClient(new Factory(handler), Options.Create(new ExternalOptions()), NullLogger<CertificateTransparencyClient>.Instance);
+        var result = await client.SearchAsync("firma.pl", CancellationToken.None);
+        Assert.Equal("crt.sh odpowiedział kodem 502 – spróbuj ponownie później.", result.Error);
+        Assert.Empty(result.Certificates);
     }
 }
 
@@ -273,6 +329,7 @@ public class ExternalSurfaceServiceTests
             var scope = await ctx.ScanTargets.Include(t => t.Entries).SingleAsync(t => t.Id == prepared.Id);
             Assert.False(scope.IsApproved);
             Assert.True(scope.AllowPublicAddresses);
+            Assert.True(scope.IsExternal);
             Assert.Equal([d, "www." + d], scope.Entries.Select(e => e.Value).Order().ToArray());
         }
 
@@ -305,4 +362,21 @@ public class ExternalSurfaceServiceTests
         Assert.Equal(ExternalAnalysisStatus.Failed, view!.Analysis.Status);
         Assert.Equal("Brak odpowiedzi serwerów DNS.", view.Analysis.Error);
     }
+}
+
+public class VpnInterfaceTests
+{
+    [Theory]
+    [InlineData("tun0", true)]
+    [InlineData("wg0", true)]
+    [InlineData("tap1", true)]
+    [InlineData("ppp0", true)]
+    [InlineData("TAP-Windows Adapter V9", true)]
+    [InlineData("WireGuard Tunnel", true)]
+    [InlineData("eno0", false)]
+    [InlineData("wlp68s0", false)]
+    [InlineData("docker0", false)]
+    [InlineData("Intel(R) Ethernet Connection", false)]
+    public void Recognises_vpn_interface_names(string name, bool vpn) =>
+        Assert.Equal(vpn, Weles.Infrastructure.Discovery.LocalNetworkDiscovery.IsVpnName(name));
 }

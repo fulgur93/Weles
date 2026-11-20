@@ -34,6 +34,7 @@ public static class DependencyInjection
         services.AddSingleton<RiskQueries>();
         services.AddSingleton<MonitoringQueries>();
         services.AddSingleton<TopologyQueries>();
+        services.AddSingleton<NetworkQueries>();
         services.AddSingleton<Assets.AssetService>();
 
         services.Configure<ScanOptions>(configuration.GetSection(ScanOptions.SectionName));

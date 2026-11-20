@@ -1,0 +1,48 @@
+@* One network at a time: the current one, all, a specific router/VPN network or public hosts. The choice lives in the URL (?net=). *@
+@using Weles.Infrastructure.Queries
+@inject NavigationManager Navigation
+
+@if (Context.Networks.Count > 1)
+{
+    <label class="network-picker">
+        <span class="muted small">@L.T("Sieć")</span>
+        <select class="input input-sm" value="@Value" @onchange="ChangedAsync" aria-label="@L.T("Sieć")">
+            @if (Context.OffersCurrent) { <option value="@NetworkContext.Current">@L.T("Bieżąca sieć")</option> }
+            <option value="@NetworkContext.All">@L.T("Wszystkie sieci")</option>
+            @if (Context.OffersPublicGroup) { <option value="@NetworkContext.Public">@L.T("Internet – wszystkie zasoby publiczne")</option> }
+            @foreach (var n in Context.Networks)
+            {
+                <option value="@n.Key">@L.Message(n.Label)@(n.IsCurrent ? " · " + L.T("bieżąca") : "")</option>
+            }
+        </select>
+    </label>
+}
+
+@code {
+    [Parameter, EditorRequired] public NetworkContext Context { get; set; } = default!;
+    [Parameter] public string Value { get; set; } = NetworkContext.All;
+
+    /// <summary>Called instead of changing the URL (e.g. on pages that keep other state in the URL themselves).</summary>
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    private async Task ChangedAsync(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString() ?? NetworkContext.All;
+        if (ValueChanged.HasDelegate)
+        {
+            await ValueChanged.InvokeAsync(value);
+            return;
+        }
+
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("net", value), replace: true);
+    }
+
+    /// <summary>Text for the line under a page header, e.g. "Bieżąca sieć: 192.168.0.0/24 · TP-LINK …".</summary>
+    public static string Describe(NetworkContext context, string filter) => filter switch
+    {
+        NetworkContext.All => L.T("Wszystkie sieci"),
+        NetworkContext.Current => L.F("Bieżąca sieć: {0}", context.CurrentDescription),
+        NetworkContext.Public => L.T("Internet – wszystkie zasoby publiczne"),
+        _ => L.Message(context.LabelOf(filter))
+    };
+}

@@ -70,7 +70,7 @@ public sealed partial class AiContextBuilder(
 
     private async Task AppendOverviewAsync(StringBuilder sb, List<string> sources, CancellationToken ct)
     {
-        var overview = await risk.OverviewAsync(ct);
+        var overview = await risk.OverviewAsync(ct: ct);
         await using var db = await contextFactory.CreateDbContextAsync(ct);
         var assetCount = await db.Assets.CountAsync(ct);
         var lastScan = await db.Scans.AsNoTracking().Where(s => s.Status == ScanStatus.Completed).OrderByDescending(s => s.StartedAt)
@@ -362,7 +362,7 @@ public sealed partial class AiContextBuilder(
     private async Task AppendPathsAsync(StringBuilder sb, List<string> sources, CancellationToken ct)
     {
         if (topology is null) return;
-        var paths = await topology.AttackPathsAsync(ct);
+        var paths = await topology.AttackPathsAsync(ct: ct);
         sb.AppendLine("\n## Potencjalne ścieżki ataku (HIPOTEZY, nie potwierdzone ataki)");
         if (paths.Count == 0) sb.AppendLine("- brak: żadne urządzenie nie ma problemu co najmniej średniej wagi");
         foreach (var p in paths.Take(3))

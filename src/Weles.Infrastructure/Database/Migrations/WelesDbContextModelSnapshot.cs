@@ -934,6 +934,9 @@ namespace Weles.Infrastructure.Database.Migrations
                     b.Property<bool>("IsDemo")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("IsExternal")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)

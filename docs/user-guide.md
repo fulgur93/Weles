@@ -134,6 +134,16 @@ aplikacji (wtedy skan jest oznaczany jako przerwany).
   (podatność lub problem konfiguracji) i możliwy skutek. Każdy krok ma uzasadnienie i pewność, ścieżka – pewność łączną.
   To nie są potwierdzone ataki; WELES niczego nie próbuje wykorzystać.
 
+## Podział na sieci
+
+Pulpit, Ocena ryzyka, Ścieżki ataku, Podatności, Topologia i Monitorowanie mają przełącznik **Sieć**: bieżąca sieć
+(domyślnie), wszystkie sieci, konkretna sieć (router rozpoznany po adresie MAC, VPN) albo zasoby publiczne – każda
+domena z modułu Powierzchnia ataku osobno. Wybór jest zapisany w adresie strony (`?net=`), więc linki go zachowują.
+Ocena stanu bezpieczeństwa jest liczona osobno dla każdej sieci.
+
+Maszyny dostępne przez VPN (np. laboratoria TryHackMe) dodaje się w Wykrywaniu sieci jako zakres z **pojedynczym
+adresem** – WELES nie proponuje zakresu całej sieci VPN, bo są w niej komputery innych osób.
+
 ## Powierzchnia ataku (domeny i adresy publiczne)
 
 - Dodaj **własną** domenę lub publiczny adres IP i potwierdź, że należy do Ciebie (albo masz pisemną zgodę właściciela).

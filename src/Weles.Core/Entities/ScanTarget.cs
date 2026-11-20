@@ -18,6 +18,12 @@ public class ScanTarget
     /// <summary>Public (non-RFC1918) addresses require an explicit, separate permission.</summary>
     public bool AllowPublicAddresses { get; set; }
 
+    /// <summary>
+    /// Scope of public (Internet) hosts prepared in the Attack Surface module. Its scans are reported there and never
+    /// mixed into the local network's posture, monitoring defaults or topology.
+    /// </summary>
+    public bool IsExternal { get; set; }
+
     public bool IsDemo { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }

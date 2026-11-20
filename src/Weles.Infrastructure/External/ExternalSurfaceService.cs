@@ -365,6 +365,7 @@ public sealed class ExternalSurfaceService(
         if (!result.Success) return result;
 
         target.ScanTargetId = result.Id;
+        await db.ScanTargets.Where(t => t.Id == result.Id).ExecuteUpdateAsync(u => u.SetProperty(t => t.IsExternal, true), token);
         await db.SaveChangesAsync(token);
         logger.LogInformation("Active scope {ScopeId} prepared for external target {TargetId} with {Count} hosts (awaiting approval)", result.Id, targetId, hosts.Count);
         return result;

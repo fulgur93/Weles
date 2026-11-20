@@ -2,6 +2,7 @@
 @using Weles.Infrastructure.Queries
 @inject MonitoringQueries Queries
 @inject NavigationManager Navigation
+@inject NetworkQueries Networks
 
 <PageTitle>@L.T("Monitorowanie · WELES")</PageTitle>
 
@@ -10,8 +11,15 @@
         <h1>@L.T("Monitorowanie")</h1>
         <p class="page-subtitle">@L.T("Co zmieniło się w sieci od ostatniego audytu? Porównanie dwóch skanów tej samej sieci: urządzenia, porty, usługi, wersje, certyfikaty, podatności i ryzyko.")</p>
     </div>
-    <a class="btn btn-ghost" href="discovery"><Icon Name="clock" Size="15" /> @L.T("Harmonogram skanów")</a>
+    <div class="actions">
+        @if (_networks is not null) { <NetworkPicker Context="_networks" Value="@_filter" ValueChanged="NetworkChangedAsync" /> }
+        <a class="btn btn-ghost" href="discovery"><Icon Name="clock" Size="15" /> @L.T("Harmonogram skanów")</a>
+    </div>
 </div>
+@if (_networks is not null && _networks.Networks.Count > 1)
+{
+    <p class="muted small page-network">@NetworkPicker.Describe(_networks, _filter)</p>
+}
 
 @if (_scans is null)
 {
@@ -149,7 +157,7 @@ else
                         {
                             <tr class="@(t.PreviousScanId is null ? "" : "clickable") @(t.Scan.Id == _cur ? "selected" : "")" @onclick="() => PickAsync(t)">
                                 <td><span class="mono">#@t.Scan.Id</span> · @Labels.Local(t.Scan.At)@if (t.PreviousScanId is null) { <span class="muted small"> · @L.T("pierwszy skan sieci")</span> }</td>
-                                <td class="small mono">@NetworkName(t.Scan.Network)</td>
+                                <td class="small mono">@NetworkName(t.Scan)</td>
                                 <td class="right">@t.NewDevices</td>
                                 <td class="right">@t.MissingDevices</td>
                                 <td class="right">+@t.PortsOpened / −@t.PortsClosed</td>
@@ -168,9 +176,14 @@ else
 @code {
     [SupplyParameterFromQuery(Name = "prev")] public int? PrevParameter { get; set; }
     [SupplyParameterFromQuery(Name = "cur")] public int? CurParameter { get; set; }
+    [SupplyParameterFromQuery(Name = "net")] public string? NetworkParameter { get; set; }
+
+    private NetworkContext? _networks;
+    private string _filter = NetworkContext.All;
+    private IReadOnlyList<ScanRef> _allScans = [];
 
     private IReadOnlyList<ScanRef>? _scans;
-    private IReadOnlyDictionary<string, string> _networks = new Dictionary<string, string>();
+    private IReadOnlyDictionary<string, string> _labels = new Dictionary<string, string>();
     private IReadOnlyList<TimelineEntry>? _timeline;
     private ScanComparison? _comparison;
     private int _prev;
@@ -178,17 +191,47 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        _scans = await Queries.ScansAsync();
-        _networks = await Queries.NetworkLabelsAsync();
+        _allScans = await Queries.ScansAsync();
+        _labels = await Queries.NetworkLabelsAsync();
+        _networks = await Networks.ContextAsync();
+        _filter = _networks.Normalize(NetworkParameter);
+        await LoadNetworkAsync(CurParameter, PrevParameter);
+    }
+
+    /// <summary>Scans, the default comparison and the timeline of the chosen network.</summary>
+    private async Task LoadNetworkAsync(int? cur, int? prev)
+    {
+        var networks = _networks!;
+        _scans = _allScans.Where(s => networks.IncludesScan(_filter, s.Id)).ToList();
+        _comparison = null;
         if (_scans.Count >= 2)
         {
-            _cur = CurParameter is { } c && _scans.Any(s => s.Id == c) ? c : _scans[0].Id;
-            _prev = PrevParameter is { } p && _scans.Any(s => s.Id == p) ? p
+            var pair = _filter == NetworkContext.All ? await Queries.DefaultPairAsync() : await FirstPairAsync();
+            _cur = cur is { } c && _scans.Any(s => s.Id == c) ? c : pair?.Current ?? _scans[0].Id;
+            _prev = prev is { } p && _scans.Any(s => s.Id == p) ? p
                 : await Queries.PreviousOnSameNetworkAsync(_cur) ?? _scans.First(s => s.Id != _cur).Id;
             await CompareAsync();
         }
 
-        _timeline = await Queries.TimelineAsync();
+        _timeline = (await Queries.TimelineAsync(60)).Where(t => networks.IncludesScan(_filter, t.Scan.Id)).Take(15).ToList();
+    }
+
+    /// <summary>The newest scan of the chosen network that has an earlier scan of the same network.</summary>
+    private async Task<(int Previous, int Current)?> FirstPairAsync()
+    {
+        foreach (var s in (_scans ?? []).Take(50))
+        {
+            if (await Queries.PreviousOnSameNetworkAsync(s.Id) is { } previous && _scans!.Any(x => x.Id == previous)) return (previous, s.Id);
+        }
+
+        return null;
+    }
+
+    private async Task NetworkChangedAsync(string value)
+    {
+        _filter = _networks!.Normalize(value);
+        await LoadNetworkAsync(null, null);
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameters(new Dictionary<string, object?> { ["net"] = _filter, ["prev"] = null, ["cur"] = null }), replace: true);
     }
 
     private async Task CompareAsync() => _comparison = _prev == _cur ? null : await Queries.CompareAsync(_prev, _cur);
@@ -198,7 +241,7 @@ else
     private async Task SelectionChangedAsync()
     {
         await CompareAsync();
-        Navigation.NavigateTo($"monitoring?prev={_prev}&cur={_cur}", replace: true);
+        Navigation.NavigateTo($"monitoring?prev={_prev}&cur={_cur}&net={Uri.EscapeDataString(_filter)}", replace: true);
     }
 
     private async Task PickAsync(TimelineEntry entry)
@@ -209,7 +252,8 @@ else
         await SelectionChangedAsync();
     }
 
-    private string NetworkName(string? fingerprint) => fingerprint is null ? L.T("bez rozpoznanej sieci") : _networks.GetValueOrDefault(fingerprint, fingerprint);
+    private string NetworkName(ScanRef s) => s.IsExternal ? L.T("Internet – zasoby publiczne")
+        : s.Network is null ? L.T("bez rozpoznanej sieci") : _labels.GetValueOrDefault(s.Network, s.Network);
 
-    private string ScanLabel(ScanRef s) => $"#{s.Id} · {Labels.Local(s.At)} · {L.Message(s.TargetName)} · {NetworkName(s.Network)}";
+    private string ScanLabel(ScanRef s) => $"#{s.Id} · {Labels.Local(s.At)} · {L.Message(s.TargetName)} · {NetworkName(s)}";
 }

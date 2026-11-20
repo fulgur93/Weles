@@ -2,6 +2,7 @@
 @using Weles.Core.Risk
 @using Weles.Infrastructure.Queries
 @inject RiskQueries Queries
+@inject NetworkQueries Networks
 
 <PageTitle>@L.T("Ocena ryzyka · WELES")</PageTitle>
 
@@ -10,7 +11,12 @@
         <h1>@L.T("Ocena ryzyka")</h1>
         <p class="page-subtitle">@L.T("Własna ocena WELES: CVSS, EPSS i CISA KEV dopasowanych podatności, problemy konfiguracji, krytyczność i rola urządzenia, ekspozycja, liczba usług, wiek oprogramowania i zmiany. Każdy wynik ma pełne uzasadnienie.")</p>
     </div>
+    @if (_networks is not null) { <NetworkPicker Context="_networks" Value="@_filter" /> }
 </div>
+@if (_networks is not null && _networks.Networks.Count > 1)
+{
+    <p class="muted small page-network">@NetworkPicker.Describe(_networks, _filter)</p>
+}
 
 @if (_overview is null)
 {
@@ -18,7 +24,8 @@
 }
 else if (_overview.Networks.Count == 0)
 {
-    <section class="card empty"><p>@L.T("Ocena ryzyka pojawi się po pierwszym zakończonym skanie.") <a href="discovery">@L.T("Wykrywanie sieci")</a></p></section>
+    <section class="card empty"><p>@(_filter == NetworkContext.All ? L.T("Ocena ryzyka pojawi się po pierwszym zakończonym skanie.") : L.T("Brak ocenionych skanów w wybranej sieci."))
+        <a href="discovery">@L.T("Wykrywanie sieci")</a></p></section>
 }
 else
 {
@@ -75,7 +82,7 @@ else
                             <span class="priority-rank">@(index + 1)</span>
                             <StatusPill Tone="@Labels.Tone(item.Level)">@item.Priority.ToString("0")</StatusPill>
                             <span class="priority-title">@L.Message(item.Issue.Title)</span>
-                            <span class="muted small">@L.Message(item.AssetName) · <span class="mono">@item.AssetIp</span></span>
+                            <span class="muted small">@L.Message(item.AssetName) · <span class="mono">@item.AssetIp</span>@if (ShowNetworkColumn) { <span> · @L.Message(_networks!.LabelOf(_networks.AssetNetworkKey(item.AssetId)))</span> }</span>
                             @if (item.Issue.KnownExploited > 0) { <StatusPill Tone="bad">@L.T("KEV")</StatusPill> }
                         </button>
                         @if (open)
@@ -116,7 +123,8 @@ else
                     @foreach (var a in _overview.Assets)
                     {
                         <tr class="clickable" @onclick="@(() => Navigation.NavigateTo($"assets/{a.AssetId}"))">
-                            <td><strong>@L.Message(a.Name)</strong><div class="muted small mono">@a.Ip</div></td>
+                            <td><strong>@L.Message(a.Name)</strong><div class="muted small mono">@a.Ip</div>
+                                @if (ShowNetworkColumn) { <div class="muted small">@L.Message(_networks!.LabelOf(_networks.AssetNetworkKey(a.AssetId)))</div> }</td>
                             <td>@Labels.Of(a.Type)</td>
                             <td>@Labels.Of(a.Criticality)</td>
                             <td class="right"><StatusPill Tone="@Labels.Tone(a.Level)">@a.Score.ToString("0") · @Labels.Of(a.Level)</StatusPill></td>
@@ -133,11 +141,23 @@ else
 
 @code {
     [Inject] private NavigationManager Navigation { get; set; } = default!;
+    [SupplyParameterFromQuery(Name = "net")] public string? NetworkParameter { get; set; }
+
     private RiskOverview? _overview;
+    private NetworkContext? _networks;
+    private string _filter = NetworkContext.All;
     private readonly HashSet<int> _expanded = [0];
     private int _limit = 20;
 
-    protected override async Task OnInitializedAsync() => _overview = await Queries.OverviewAsync();
+    /// <summary>The network is shown next to each device only when several networks are on the page.</summary>
+    private bool ShowNetworkColumn => _networks is not null && _filter is NetworkContext.All or NetworkContext.Current && _networks.Networks.Count(n => _networks.Includes(_filter, n.Key)) > 1;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _networks = await Networks.ContextAsync();
+        _filter = _networks.Normalize(NetworkParameter);
+        _overview = await Queries.OverviewAsync(_networks, _filter);
+    }
 
     private void Toggle(int index)
     {

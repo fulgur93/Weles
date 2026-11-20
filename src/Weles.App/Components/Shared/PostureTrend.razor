@@ -2,7 +2,7 @@
 @using Weles.Infrastructure.Queries
 
 @{
-    var series = Points.GroupBy(p => p.Fingerprint ?? "").Select((g, i) => (Name: g.First().Network ?? L.T("sieć bez rozpoznanej bramy"), Color: Palette[i % Palette.Length], Points: g.OrderBy(p => p.At).ToList())).ToList();
+    var series = Points.GroupBy(p => p.Key ?? p.Fingerprint ?? "").Select((g, i) => (Name: g.First().Network ?? L.T("sieć bez rozpoznanej bramy"), Color: Palette[i % Palette.Length], Points: g.OrderBy(p => p.At).ToList())).ToList();
     var min = Points.Min(p => p.At);
     var max = Points.Max(p => p.At);
     var span = Math.Max(1, (max - min).TotalSeconds);

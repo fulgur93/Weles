@@ -8,7 +8,8 @@ using Weles.Infrastructure.Risk;
 
 namespace Weles.Infrastructure.Queries;
 
-public sealed record PosturePoint(int ScanId, DateTime At, double Score, string? Network, string? Fingerprint);
+/// <param name="Key">Network key (<see cref="NetworkContext"/>) when the overview was built with one.</param>
+public sealed record PosturePoint(int ScanId, DateTime At, double Score, string? Network, string? Fingerprint, string? Key = null);
 
 public sealed record NetworkPosture(PosturePoint Latest, double? Previous, PostureBreakdown Breakdown);
 
@@ -30,33 +31,45 @@ public sealed record AssetRiskDetail(AssetRiskResult Result, int ScanId, DateTim
 
 public sealed class RiskQueries(IDbContextFactory<WelesDbContext> contextFactory)
 {
+    private sealed record PostureRow(int ScanId, DateTime At, double Score, string BreakdownJson, string? NetworkFingerprint, string? Key);
+
     private static readonly HashSet<string> ContextKinds = ["role", "exposure", "services", "age", "changes"];
 
-    public async Task<RiskOverview> OverviewAsync(CancellationToken ct = default)
+    /// <param name="networks">
+    /// With a network context every network gets its own posture – including public hosts (Attack Surface) – and
+    /// <paramref name="filter"/> limits the overview to one network. Without it, scans of public hosts are left out.
+    /// </param>
+    public async Task<RiskOverview> OverviewAsync(NetworkContext? networks = null, string filter = NetworkContext.All, CancellationToken ct = default)
     {
         await using var db = await contextFactory.CreateDbContextAsync(ct);
-        var postures = await db.RiskScores.AsNoTracking().Where(r => r.AssetId == null && r.Scan!.Status == ScanStatus.Completed)
+        var query = db.RiskScores.AsNoTracking().Where(r => r.AssetId == null && r.Scan!.Status == ScanStatus.Completed);
+        if (networks is null) query = query.Where(r => !r.Scan!.ScanTarget!.IsExternal);
+        var postures = (await query
             .Select(r => new { r.ScanId, At = r.Scan!.StartedAt ?? r.Scan.CreatedAt, r.Score, r.BreakdownJson, r.Scan.NetworkFingerprint })
-            .ToListAsync(ct);
-        var trend = postures.OrderBy(p => p.At)
-            .Select(p => new PosturePoint(p.ScanId, p.At, p.Score, Breakdown(p.BreakdownJson)?.Network, p.NetworkFingerprint)).ToList();
+            .ToListAsync(ct))
+            .Select(p => new PostureRow(p.ScanId, p.At, p.Score, p.BreakdownJson, p.NetworkFingerprint, networks?.ScanNetworkKey(p.ScanId) ?? p.NetworkFingerprint))
+            .Where(p => networks is null || networks.Includes(filter, p.Key ?? NetworkContext.Unidentified))
+            .ToList();
+        PosturePoint Point(PostureRow p) => new(p.ScanId, p.At, p.Score,
+            networks is not null ? networks.LabelOf(p.Key ?? NetworkContext.Unidentified) : Breakdown(p.BreakdownJson)?.Network, p.NetworkFingerprint, p.Key);
+        var trend = postures.OrderBy(p => p.At).Select(p => Point(p)).ToList();
 
-        var networks = postures.GroupBy(p => p.NetworkFingerprint)
+        var postureByNetwork = postures.GroupBy(p => p.Key)
             .Select(g =>
             {
                 var ordered = g.OrderByDescending(p => p.At).ToList();
                 var latest = ordered[0];
-                return new NetworkPosture(new PosturePoint(latest.ScanId, latest.At, latest.Score, Breakdown(latest.BreakdownJson)?.Network, latest.NetworkFingerprint),
-                    ordered.Count > 1 ? ordered[1].Score : null, Breakdown(latest.BreakdownJson) ?? new PostureBreakdown([], new Dictionary<RiskLevel, int>(), null));
+                return new NetworkPosture(Point(latest), ordered.Count > 1 ? ordered[1].Score : null,
+                    Breakdown(latest.BreakdownJson) ?? new PostureBreakdown([], new Dictionary<RiskLevel, int>(), null));
             })
             .OrderByDescending(n => n.Latest.At).ToList();
 
-        var latestScores = await LatestAssetScoresAsync(db, ct);
+        var latestScores = (await LatestAssetScoresAsync(db, ct)).Where(x => networks is null || networks.IncludesAsset(filter, x.Asset.Id)).ToList();
         var assets = latestScores.Select(x => new AssetRiskRow(x.Asset.Id, x.Asset.CustomName ?? x.Asset.DisplayName, x.Asset.PrimaryIpAddress, x.Asset.EffectiveType, x.Asset.Criticality,
                 x.Result.Score, x.Result.Level, x.Result.Issues.Count, x.Result.Issues.Sum(i => i.KnownExploited), x.Result.Issues.FirstOrDefault()?.Title, x.ScanId, x.At))
             .OrderByDescending(a => a.Score).ThenBy(a => a.Name, StringComparer.Ordinal).ToList();
 
-        return new RiskOverview(networks, trend, assets, Prioritize(latestScores.Select(x => (x.Asset, x.Result))));
+        return new RiskOverview(postureByNetwork, trend, assets, Prioritize(latestScores.Select(x => (x.Asset, x.Result))));
     }
 
     /// <summary>Latest assessment of every device (asset id → result and scan).</summary>
@@ -67,10 +80,10 @@ public sealed class RiskQueries(IDbContextFactory<WelesDbContext> contextFactory
     }
 
     /// <summary>Top remediation items across the inventory (dashboard).</summary>
-    public async Task<IReadOnlyList<RemediationItem>> PrioritiesAsync(int take, CancellationToken ct = default)
+    public async Task<IReadOnlyList<RemediationItem>> PrioritiesAsync(int take, Func<int, bool>? includeAsset = null, CancellationToken ct = default)
     {
         await using var db = await contextFactory.CreateDbContextAsync(ct);
-        return Prioritize((await LatestAssetScoresAsync(db, ct)).Select(x => (x.Asset, x.Result))).Take(take).ToList();
+        return Prioritize((await LatestAssetScoresAsync(db, ct)).Where(x => includeAsset?.Invoke(x.Asset.Id) != false).Select(x => (x.Asset, x.Result))).Take(take).ToList();
     }
 
     public async Task<AssetRiskDetail?> AssetAsync(int assetId, CancellationToken ct = default)

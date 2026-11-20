@@ -523,7 +523,7 @@ tr.selected td { background: var(--accent-soft); }
 .topo-details { position: sticky; top: 76px; }
 svg.topology { width: 100%; height: auto; display: block; }
 .topo-internet ellipse { fill: var(--surface-2); stroke: var(--border-strong); stroke-dasharray: 4 3; }
-.topo-segment rect { fill: var(--surface-2); stroke: var(--border-strong); }
+.topo-segment rect, .topo-segment ellipse { fill: var(--surface-2); stroke: var(--border-strong); }
 .topo-edge { stroke: var(--border-strong); stroke-width: 1.5; }
 .topo-edge.unknown { stroke-dasharray: 6 5; }
 .topo-edge.exposed { stroke-width: 2.5; }
@@ -693,3 +693,11 @@ tr.dim td { opacity: .5; }
     .surface-head .actions { flex-wrap: wrap; }
     .mode-badge { margin-left: 0; }
 }
+.host-ip { margin-left: 8px; }
+
+/* Network picker (one network at a time on analysis pages) */
+.network-picker { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.network-picker select { max-width: 340px; }
+.page-network { margin: -6px 0 14px; }
+.section-title { display: flex; align-items: center; gap: 8px; font-size: 15px; margin: 18px 0 10px; color: var(--text-muted); }
+@media (max-width: 640px) { .network-picker { width: 100%; } .network-picker select { max-width: none; flex: 1; } }

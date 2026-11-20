@@ -9,6 +9,8 @@
 }
 
 <svg class="topology" viewBox="0 0 @Width @height" role="img" aria-label="@L.F("Mapa sieci {0}", L.Message(Network.Label))">
+    @if (!Network.IsPublic)
+    {
     <g class="topo-internet">
         <ellipse cx="@Inv(center.X)" cy="34" rx="70" ry="22" />
         @Text(center.X, 39, L.T("Internet"), "topo-label strong")
@@ -16,6 +18,7 @@
         @* Just under the Internet node – the first device ring starts lower, so the note never overlaps a device label. *@
         @Text(center.X + 8, 76, L.T("dostępność z Internetu nie badana"), "topo-note", "start")
     </g>
+    }
 
     @{
         var index = 0;
@@ -39,12 +42,16 @@
     @foreach (var node in devices)
     {
         var (x, y) = _positions[node.AssetId];
-        <line x1="@Inv(center.X)" y1="@Inv(center.Y)" x2="@Inv(x)" y2="@Inv(y)" class="topo-edge risk-@RiskClass(node) @(node.Exposure.Count > 0 ? "exposed" : "")"><title>@L.T("ta sama sieć lokalna – połączenie wywnioskowane, nie zaobserwowany ruch")</title></line>
+        <line x1="@Inv(center.X)" y1="@Inv(center.Y)" x2="@Inv(x)" y2="@Inv(y)" class="topo-edge risk-@RiskClass(node) @(node.Exposure.Count > 0 ? "exposed" : "")"><title>@(Network.IsPublic ? L.T("adres publiczny – osiągany przez Internet w skanie aktywnym") : L.T("ta sama sieć lokalna – połączenie wywnioskowane, nie zaobserwowany ruch"))</title></line>
     }
 
     @if (Network.Gateway is { } gw)
     {
         @Node(gw, center.X, center.Y, 34)
+    }
+    else if (Network.IsPublic)
+    {
+        <g class="topo-segment"><ellipse cx="@Inv(center.X)" cy="@Inv(center.Y)" rx="70" ry="24" />@Text(center.X, center.Y + 5, L.T("Internet"), "topo-label strong")</g>
     }
     else
     {

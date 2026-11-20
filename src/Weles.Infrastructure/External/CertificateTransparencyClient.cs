@@ -25,6 +25,9 @@ public sealed class CertificateTransparencyClient(IHttpClientFactory httpFactory
     public const string HttpClientName = "certificate-transparency";
     private const int MaxEntries = 20_000;
 
+    /// <summary>Pause before a retry (multiplied by the attempt number); tests set it to 0.</summary>
+    internal static double RetryDelaySeconds { get; set; } = 3;
+
     public async Task<CtResult> SearchAsync(string domain, CancellationToken ct)
     {
         var o = options.Value;
@@ -34,7 +37,16 @@ public sealed class CertificateTransparencyClient(IHttpClientFactory httpFactory
         var http = httpFactory.CreateClient(HttpClientName);
         try
         {
-            using var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+            // crt.sh is often overloaded (502/503/504/429) – two more attempts after a pause before giving up.
+            var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+            for (var attempt = 1; attempt <= 2 && (int)response.StatusCode is 429 or 502 or 503 or 504; attempt++)
+            {
+                response.Dispose();
+                await Task.Delay(TimeSpan.FromSeconds(RetryDelaySeconds * attempt), timeout.Token);
+                response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+            }
+
+            using var _ = response;
             if (!response.IsSuccessStatusCode)
             {
                 return new CtResult([], $"crt.sh odpowiedział kodem {(int)response.StatusCode} – spróbuj ponownie później.");

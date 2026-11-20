@@ -39,7 +39,10 @@
                             <td class="mono">@(nic.Gateway ?? "—")</td>
                             <td><span class="mono">@(nic.MacAddress ?? "—")</span><div class="muted small">@nic.Vendor</div></td>
                             <td class="right">
-                                <button class="btn btn-ghost btn-sm" @onclick="() => ScopeFromInterface(nic)">@L.F("Utwórz zakres {0}", nic.SuggestedScope)</button>
+                                @if (nic.SuggestedScope.Length > 0)
+                                {
+                                    <button class="btn btn-ghost btn-sm" @onclick="() => ScopeFromInterface(nic)">@L.F("Utwórz zakres {0}", nic.SuggestedScope)</button>
+                                }
                                 @if (nic.Note is not null) { <div class="muted small">@L.Message(nic.Note)</div> }
                             </td>
                         </tr>

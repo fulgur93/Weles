@@ -2,6 +2,7 @@
 @using Weles.Core.Risk
 @using Weles.Infrastructure.Queries
 @inject TopologyQueries Queries
+@inject NetworkQueries Networks
 
 <PageTitle>@L.T("Ścieżki ataku · WELES")</PageTitle>
 
@@ -10,8 +11,15 @@
         <h1>@L.T("Ścieżki ataku")</h1>
         <p class="page-subtitle">@L.T("Możliwe drogi dotarcia do urządzeń na podstawie wykrytych usług, problemów i roli urządzeń. To hipotezy, nie potwierdzone ataki – sama możliwość połączenia nie oznacza możliwości przejęcia, a WELES niczego nie próbuje wykorzystać.")</p>
     </div>
-    <a class="btn btn-ghost" href="topology"><Icon Name="topology" Size="15" /> @L.T("Topologia sieci")</a>
+    <div class="actions">
+        @if (_networks is not null) { <NetworkPicker Context="_networks" Value="@_filter" /> }
+        <a class="btn btn-ghost" href="topology"><Icon Name="topology" Size="15" /> @L.T("Topologia sieci")</a>
+    </div>
 </div>
+@if (_networks is not null && _networks.Networks.Count > 1)
+{
+    <p class="muted small page-network">@NetworkPicker.Describe(_networks, _filter)</p>
+}
 
 @if (_paths is null)
 {
@@ -24,8 +32,14 @@ else if (_paths.Count == 0)
 else
 {
     <div class="alert alert-info small">@L.T("Pewność ścieżki = iloczyn pewności kroków opartych na dowodach (osiągalność usługi, słabość). Punkt startowy to założenie, a skutek – hipoteza wynikająca z roli urządzenia.")</div>
-    @foreach (var (path, i) in _paths.Select((p, i) => (p, i)))
+    @foreach (var group in _paths.Select((p, i) => (Path: p, Index: i)).GroupBy(x => _networks!.AssetNetworkKey(x.Path.TargetAssetId)))
     {
+        @if (_paths.Select(p => _networks!.AssetNetworkKey(p.TargetAssetId)).Distinct().Count() > 1)
+        {
+            <h2 class="section-title"><Icon Name="topology" Size="16" /> @L.Message(_networks!.LabelOf(group.Key))</h2>
+        }
+        @foreach (var (path, i) in group)
+        {
         <section class="card attack-path">
             <div class="card-title">
                 <span class="priority-rank">@(i + 1)</span>
@@ -52,13 +66,25 @@ else
                 <a class="btn btn-ghost btn-sm" href="ai?asset=@path.TargetAssetId"><Icon Name="ai" Size="14" /> @L.T("Zapytaj Analityka AI")</a>
             </div>
         </section>
+        }
     }
 }
 
 @code {
-    private IReadOnlyList<AttackPath>? _paths;
+    [SupplyParameterFromQuery(Name = "net")] public string? NetworkParameter { get; set; }
 
-    protected override async Task OnInitializedAsync() => _paths = await Queries.AttackPathsAsync();
+    private IReadOnlyList<AttackPath>? _paths;
+    private NetworkContext? _networks;
+    private string _filter = NetworkContext.All;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _networks = await Networks.ContextAsync();
+        _filter = _networks.Normalize(NetworkParameter);
+        var networks = _networks;
+        var filter = _filter;
+        _paths = await Queries.AttackPathsAsync(id => networks.IncludesAsset(filter, id), filter == NetworkContext.All ? 20 : 12);
+    }
 
     private string KindLabel(PathStepKind kind) => kind switch
     {

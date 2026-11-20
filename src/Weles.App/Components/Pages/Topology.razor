@@ -1,6 +1,7 @@
 @page "/topology"
 @using Weles.Infrastructure.Queries
 @inject TopologyQueries Queries
+@inject NetworkQueries Networks
 
 <PageTitle>@L.T("Topologia sieci · WELES")</PageTitle>
 
@@ -23,10 +24,7 @@ else
 {
     <section class="card">
         <div class="toolbar">
-            <select class="input input-sm" @bind="_scope" @bind:after="LoadAsync" aria-label="@L.T("Sieć")">
-                <option value="current">@L.T("Bieżąca sieć")</option>
-                <option value="all">@L.T("Wszystkie sieci")</option>
-            </select>
+            @if (_networks is not null) { <NetworkPicker Context="_networks" Value="@_filter" /> }
             <label class="checkbox inline"><input type="checkbox" @bind="_onlyProblems" /><span>@L.T("Wyróżnij punkty ekspozycji")</span></label>
             <div class="topo-legend small muted">
                 <span><span class="swatch risk-critical"></span>Critical</span>
@@ -37,7 +35,7 @@ else
                 <span><span class="ring"></span>@L.T("punkt ekspozycji")</span>
             </div>
         </div>
-        @if (_model.HiddenOtherNetworks > 0)
+        @if (_filter == NetworkContext.Current && _model.HiddenOtherNetworks > 0)
         {
             <p class="muted small">@L.F("Bieżąca sieć: {0} · ukryto {1} {2} z innych sieci", _model.CurrentNetwork, _model.HiddenOtherNetworks, Labels.Devices(_model.HiddenOtherNetworks))</p>
         }
@@ -91,14 +89,20 @@ else
 @code {
     private TopologyModel? _model;
     private TopologyNode? _selected;
-    private string _scope = "current";
+    [SupplyParameterFromQuery(Name = "net")] public string? NetworkParameter { get; set; }
+
+    private NetworkContext? _networks;
+    private string _filter = NetworkContext.All;
     private bool _onlyProblems;
 
-    protected override Task OnInitializedAsync() => LoadAsync();
-
-    private async Task LoadAsync()
+    protected override async Task OnParametersSetAsync()
     {
-        _model = await Queries.GetAsync(_scope == "current");
+        _networks = await Networks.ContextAsync();
+        _filter = _networks.Normalize(NetworkParameter);
+        var networks = _networks;
+        var filter = _filter;
+        _model = await Queries.GetAsync(filter == NetworkContext.Current,
+            filter is NetworkContext.All or NetworkContext.Current ? null : id => networks.IncludesAsset(filter, id));
         _selected = null;
     }
 }
