@@ -67,6 +67,16 @@ public sealed class ScanEngine(
         {
             progress.Phase = ScanPhase.ResolvingScope;
             progress.Activity = "Rozwiązywanie zakresu";
+            // Addresses that came from a domain entry keep that name: it is sent as TLS SNI / HTTP Host (a public server
+            // often hosts several sites on one address) and names the device.
+            var scopeNames = new ConcurrentDictionary<IPAddress, string>();
+            async Task<IReadOnlyList<IPAddress>> ResolveDomainAsync(string domain, CancellationToken token)
+            {
+                var resolved = await Dns.GetHostAddressesAsync(domain, token);
+                foreach (var a in resolved) scopeNames.TryAdd(a.IsIPv4MappedToIPv6 ? a.MapToIPv4() : a, domain);
+                return resolved;
+            }
+
             var scope = await ScopeResolver.ResolveAsync(
                 target.Entries.Select(e => new ScopeEntry(e.Value, e.IsExclusion)),
                 target.AllowPublicAddresses, options.MaxHostsPerScan, ResolveDomainAsync, cancellationToken);
@@ -177,7 +187,7 @@ public sealed class ScanEngine(
             await Parallel.ForEachAsync(alive.OrderBy(a => Ipv4Sort(a.Key)), new ParallelOptions { MaxDegreeOfParallelism = options.ParallelHostScans, CancellationToken = cancellationToken },
                 async (entry, ct) =>
                 {
-                    var result = await ScanHostAsync(entry.Key, entry.Value, ports, arp, gateways, localMachine, localMacs, scopeMdns.GetValueOrDefault(entry.Key), prober, gate, options, progress, ct);
+                    var result = await ScanHostAsync(entry.Key, entry.Value, ports, arp, gateways, localMachine, localMacs, scopeMdns.GetValueOrDefault(entry.Key), scopeNames.GetValueOrDefault(entry.Key), prober, gate, options, progress, ct);
                     await writer.SaveHostAsync(scanId, result);
                     progress.HostCompleted();
                 });
@@ -201,7 +211,7 @@ public sealed class ScanEngine(
 
     private async Task<HostScanResult> ScanHostAsync(
         IPAddress address, LivenessResult liveness, IReadOnlyList<int> ports, IReadOnlyDictionary<IPAddress, string> arp,
-        IReadOnlySet<IPAddress> gateways, IReadOnlyDictionary<IPAddress, string?> localMachine, IReadOnlySet<string> localMacs, MdnsHost? mdns, ServiceProber prober, ConnectionGate gate, ScanOptions options, ScanProgress progress, CancellationToken ct)
+        IReadOnlySet<IPAddress> gateways, IReadOnlyDictionary<IPAddress, string?> localMachine, IReadOnlySet<string> localMacs, MdnsHost? mdns, string? scopeName, ServiceProber prober, ConnectionGate gate, ScanOptions options, ScanProgress progress, CancellationToken ct)
     {
         progress.Activity = $"Skanowanie portów {address}";
         // Per-host limits on top of the global gate, so no single device sees a connection flood.
@@ -228,7 +238,7 @@ public sealed class ScanEngine(
             progress.PortChecked(result.State == PortState.Open);
         });
 
-        var hostname = await NetworkProbe.ReverseDnsAsync(address, options.DnsTimeoutMs, ct) ?? mdns?.Hostname;
+        var hostname = scopeName ?? await NetworkProbe.ReverseDnsAsync(address, options.DnsTimeoutMs, ct) ?? mdns?.Hostname;
 
         progress.Activity = $"Rozpoznawanie usług {address}";
         var services = new ConcurrentBag<PortScanResult>();
@@ -315,9 +325,6 @@ public sealed class ScanEngine(
             return new Dictionary<IPAddress, MdnsHost>();
         }
     }
-
-    private static async Task<IReadOnlyList<IPAddress>> ResolveDomainAsync(string domain, CancellationToken ct) =>
-        await Dns.GetHostAddressesAsync(domain, ct);
 
     private async Task FinishAsync(WelesDbContext db, Scan scan, ScanStatus status, string message)
     {

@@ -7,7 +7,7 @@
 <div class="segmented @Class" role="radiogroup" aria-label="@L.T("Język")">
     @foreach (var (lang, name, _) in LanguageState.Languages)
     {
-        <a class="@(Language.Code == lang ? "active" : "")" role="radio" aria-checked="@(Language.Code == lang)" lang="@lang" hreflang="@lang"
+        <a class="@(Language.Code == lang ? "active" : "")" role="radio" aria-checked="@(Language.Code == lang ? "true" : "false")" lang="@lang" hreflang="@lang"
            title="@name" target="_top" href="@($"language/{lang}?returnUrl={Uri.EscapeDataString(ReturnUrl)}")">@(Compact ? lang.ToUpperInvariant() : name)</a>
     }
 </div>

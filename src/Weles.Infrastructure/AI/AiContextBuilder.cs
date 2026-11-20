@@ -29,7 +29,8 @@ public sealed partial class AiContextBuilder(
     AssetQueries assets,
     SettingsService settings,
     MonitoringQueries? monitoring = null,
-    TopologyQueries? topology = null)
+    TopologyQueries? topology = null,
+    External.ExternalSurfaceService? external = null)
 {
     public const int MaxContextChars = 7_000;
 
@@ -51,6 +52,7 @@ public sealed partial class AiContextBuilder(
         if (Mentions(q, ChangeWords)) await AppendChangesAsync(sb, sources, ct);
         if (Mentions(q, InventoryWords)) await AppendInventoryAsync(sb, sources, ct);
         if (Mentions(q, PathWords)) await AppendPathsAsync(sb, sources, ct);
+        if (Mentions(q, ExternalWords)) await AppendExternalAsync(sb, sources, ct);
 
         var text = sb.ToString();
         if (text.Length > MaxContextChars) text = text[..MaxContextChars] + "\n[… dane skrócone do limitu kontekstu]";
@@ -59,6 +61,8 @@ public sealed partial class AiContextBuilder(
 
     private static readonly string[] ChangeWords = ["zmian", "zmieni", "nowe", "nowych", "nowy ", "pojawi", "znikn", "od ostatniego", "poprzedni", "change", "new device", "since", "appeared", "disappeared"];
     private static readonly string[] InventoryWords = ["raport", "podsumow", "audyt", "wszystkie urządzenia", "lista urządzeń", "inwentarz", "report", "summary", "audit", "all devices", "inventory"];
+
+    private static readonly string[] ExternalWords = ["domen", "dns", "spf", "dmarc", "subdomen", "zewnętrz", "zewnetrz", "powierzchni", "crt", "domain", "external", "surface"];
 
     private static readonly string[] PathWords = ["ścieżk", "sciezk", "atak", "dotrzeć", "przejąć", "path", "attack", "reach"];
 
@@ -312,6 +316,47 @@ public sealed partial class AiContextBuilder(
         if (c.PostureBefore is { } pb && c.PostureAfter is { } pa) sb.AppendLine($"- Security Posture Score: {pb:0} → {pa:0}");
         sb.AppendLine("- porty są porównywane tylko, gdy oba skany je sprawdzały");
         sources.Add($"zmiany między skanami #{c.Previous.Id} i #{c.Current.Id}");
+    }
+
+    private async Task AppendExternalAsync(StringBuilder sb, List<string> sources, CancellationToken ct)
+    {
+        if (external is null) return;
+        sb.AppendLine("\n## Zewnętrzna powierzchnia ataku (domeny i adresy publiczne użytkownika)");
+        var targets = await external.ListAsync(ct);
+        if (targets.Count == 0)
+        {
+            sb.AppendLine("- brak dodanych domen i adresów publicznych");
+            sources.Add("powierzchnia ataku – brak celów");
+            return;
+        }
+
+        foreach (var t in targets.Take(3))
+        {
+            var view = await external.AnalysisAsync(t.Id, null, ct);
+            if (view?.Snapshot is not { } s)
+            {
+                sb.AppendLine($"- {t.Name}: brak zakończonej analizy pasywnej");
+                continue;
+            }
+
+            sb.AppendLine($"- {t.Name}: analiza pasywna {s.CollectedAt:yyyy-MM-dd HH:mm} UTC, rozwiązywanych nazw {s.Hosts.Count(h => h.Resolves)}, logi CT {(s.CtQueried ? "sprawdzone" : "nie sprawdzane")}");
+            foreach (var f in view.Findings.Where(f => f.Level > RiskLevel.Informational).Take(8))
+            {
+                sb.AppendLine($"  - [{f.Level}] {Clean(f.Title, 100)}: {Clean(f.Evidence, 160)}");
+            }
+
+            if (await external.ActiveResultAsync(t.Id, ct) is { } active)
+            {
+                var open = active.Hosts.SelectMany(h => h.Services.Select(p => $"{h.Hostname ?? h.Ip}:{p.Port}{(p.IsAdministrative ? " (administracyjny)" : "")}")).Take(12).ToList();
+                sb.AppendLine($"  - skan aktywny #{active.ScanId}: otwarte porty publiczne: {(open.Count == 0 ? "brak" : string.Join(", ", open))}");
+            }
+            else
+            {
+                sb.AppendLine("  - skanu aktywnego nie wykonano – dostępność usług z Internetu NIEZNANA");
+            }
+        }
+
+        sources.Add($"powierzchnia ataku ({Math.Min(3, targets.Count)})");
     }
 
     private async Task AppendPathsAsync(StringBuilder sb, List<string> sources, CancellationToken ct)

@@ -62,6 +62,18 @@ public static class DependencyInjection
         services.AddSingleton<VulnerabilityDatabaseService>();
         services.AddHostedService<VulnerabilityStartupService>();
 
+        services.Configure<External.ExternalOptions>(configuration.GetSection(External.ExternalOptions.SectionName));
+        services.AddSingleton<External.DnsLookup>();
+        services.AddHttpClient(External.CertificateTransparencyClient.HttpClientName, client =>
+        {
+            // Generic client name only; the request carries just the domain name the user asked to analyse.
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("WELES-ct-lookup/1.0");
+            client.Timeout = Timeout.InfiniteTimeSpan; // per-request timeout in the client
+        });
+        services.AddSingleton<External.ICertificateTransparencySource, External.CertificateTransparencyClient>();
+        services.AddSingleton<External.ExternalSurfaceService>();
+        services.AddHostedService<External.ExternalStartupService>();
+
         services.Configure<AiOptions>(configuration.GetSection(AiOptions.SectionName));
         services.AddHttpClient<IAiService, OllamaAiService>((sp, client) =>
         {

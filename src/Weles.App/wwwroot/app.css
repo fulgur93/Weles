@@ -666,3 +666,30 @@ section.card.ai-question + section.card { margin-top: 16px; }
 }
 
 .network-note { margin: 4px 0 10px; }
+
+/* Attack surface (Stage 8) */
+.target-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.target-tab { display: flex; flex-direction: column; gap: 2px; padding: 8px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); text-decoration: none; min-width: 0; max-width: 100%; }
+.target-tab .mono { overflow-wrap: anywhere; }
+.target-tab:hover { background: var(--surface-hover); }
+.target-tab.active { border-color: var(--accent); background: var(--accent-soft); }
+.mode-card { border-left: 3px solid var(--border-strong); }
+.mode-card.passive { border-left-color: var(--risk-low); }
+.mode-card.active { border-left-color: var(--risk-medium); }
+.mode-badge { margin-left: auto; font-size: 12px; font-weight: 500; padding: 2px 10px; border-radius: 999px; border: 1px solid currentColor; }
+.mode-badge.passive { color: var(--risk-low); }
+.mode-badge.active { color: var(--risk-medium); }
+.finding-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 10px; }
+.finding-list li { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
+.finding-list .evidence { color: var(--text-muted); margin: 4px 0; overflow-wrap: anywhere; }
+.pill-type { font-family: var(--font-mono); font-size: 12px; padding: 1px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); }
+td.wrap { overflow-wrap: anywhere; white-space: normal; max-width: 520px; }
+tr.dim td { opacity: .5; }
+.active-steps { margin: 4px 0 8px; padding-left: 20px; display: grid; gap: 4px; }
+.settings-inline { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); display: grid; gap: 8px; }
+.mode-card .card-title { flex-wrap: wrap; row-gap: 6px; }
+@media (max-width: 640px) {
+    .surface-head { flex-direction: column; align-items: stretch; }
+    .surface-head .actions { flex-wrap: wrap; }
+    .mode-badge { margin-left: 0; }
+}

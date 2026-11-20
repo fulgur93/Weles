@@ -4,19 +4,32 @@ using System.Text;
 
 namespace Weles.Core.Rules;
 
-public sealed record DnsRecord(string Name, ushort Type, uint Ttl, string? Target = null, ushort? Port = null, IPAddress? Address = null, IReadOnlyList<string>? Texts = null);
+/// <param name="Preference">MX preference or CAA flags.</param>
+public sealed record DnsRecord(string Name, ushort Type, uint Ttl, string? Target = null, ushort? Port = null, IPAddress? Address = null, IReadOnlyList<string>? Texts = null, ushort? Preference = null);
 
-/// <summary>Minimal DNS message reader/writer (PTR, SRV, TXT, A, AAAA) used for mDNS / DNS-SD. Input is untrusted.</summary>
+/// <summary>Minimal DNS message reader/writer (A, AAAA, NS, CNAME, SOA, PTR, MX, TXT, SRV, CAA) used for mDNS / DNS-SD and
+/// external DNS analysis. Input is untrusted.</summary>
 public static class DnsMessage
 {
-    public const ushort TypeA = 1, TypePtr = 12, TypeTxt = 16, TypeAaaa = 28, TypeSrv = 33;
+    public const ushort TypeA = 1, TypeNs = 2, TypeCname = 5, TypeSoa = 6, TypePtr = 12, TypeMx = 15, TypeTxt = 16, TypeAaaa = 28, TypeSrv = 33, TypeCaa = 257;
 
-    public static byte[] BuildQuery(ushort id, IEnumerable<(string Name, ushort Type)> questions)
+    /// <summary>Response codes.</summary>
+    public const int RcodeNoError = 0, RcodeServerFailure = 2, RcodeNameError = 3;
+
+    public static string TypeName(ushort type) => type switch
+    {
+        TypeA => "A", TypeNs => "NS", TypeCname => "CNAME", TypeSoa => "SOA", TypePtr => "PTR", TypeMx => "MX",
+        TypeTxt => "TXT", TypeAaaa => "AAAA", TypeSrv => "SRV", TypeCaa => "CAA", _ => type.ToString()
+    };
+
+    /// <param name="recursionDesired">Set for queries to a recursive resolver (unicast DNS); mDNS leaves it clear.</param>
+    public static byte[] BuildQuery(ushort id, IEnumerable<(string Name, ushort Type)> questions, bool recursionDesired = false)
     {
         var q = questions.ToList();
         var buffer = new List<byte>(512);
         var header = new byte[12];
         BinaryPrimitives.WriteUInt16BigEndian(header, id);
+        if (recursionDesired) header[2] = 0x01;
         BinaryPrimitives.WriteUInt16BigEndian(header.AsSpan(4), (ushort)q.Count);
         buffer.AddRange(header);
         foreach (var (name, type) in q)
@@ -36,14 +49,22 @@ public static class DnsMessage
     }
 
     /// <summary>Parses a response; returns all answer, authority and additional records.</summary>
-    public static bool TryParse(byte[] msg, out ushort id, out List<DnsRecord> records)
+    public static bool TryParse(byte[] msg, out ushort id, out List<DnsRecord> records) => TryParse(msg, out id, out _, out _, out records);
+
+    /// <param name="rcode">Response code (0 – no error, 3 – the name does not exist).</param>
+    /// <param name="truncated">TC flag – the answer did not fit in UDP and must be repeated over TCP.</param>
+    public static bool TryParse(byte[] msg, out ushort id, out int rcode, out bool truncated, out List<DnsRecord> records)
     {
         records = [];
         id = 0;
+        rcode = 0;
+        truncated = false;
         if (msg.Length < 12) return false;
         id = BinaryPrimitives.ReadUInt16BigEndian(msg);
         var flags = BinaryPrimitives.ReadUInt16BigEndian(msg.AsSpan(2));
         if ((flags & 0x8000) == 0) return false;
+        rcode = flags & 0x000F;
+        truncated = (flags & 0x0200) != 0;
 
         var qd = BinaryPrimitives.ReadUInt16BigEndian(msg.AsSpan(4));
         var total = BinaryPrimitives.ReadUInt16BigEndian(msg.AsSpan(6)) + BinaryPrimitives.ReadUInt16BigEndian(msg.AsSpan(8)) + BinaryPrimitives.ReadUInt16BigEndian(msg.AsSpan(10));
@@ -77,6 +98,13 @@ public static class DnsMessage
                     TypeA when length == 4 => new DnsRecord(name, type, ttl, Address: new IPAddress(msg.AsSpan(offset, 4))),
                     TypeAaaa when length == 16 => new DnsRecord(name, type, ttl, Address: new IPAddress(msg.AsSpan(offset, 16))),
                     TypeTxt => new DnsRecord(name, type, ttl, Texts: ReadTexts(msg, offset, end)),
+                    TypeNs or TypeCname => new DnsRecord(name, type, ttl, Target: ReadName(msg, ref rdataOffset)),
+                    TypeSoa => new DnsRecord(name, type, ttl, Target: ReadName(msg, ref rdataOffset)),
+                    TypeMx when length >= 3 => new DnsRecord(name, type, ttl, Preference: BinaryPrimitives.ReadUInt16BigEndian(msg.AsSpan(offset)),
+                        Target: ReadName(msg, ref Advance(ref rdataOffset, 2))),
+                    TypeCaa when length >= 2 && offset + 2 + msg[offset + 1] <= end => new DnsRecord(name, type, ttl, Preference: msg[offset],
+                        Texts: [BannerParser.Sanitize(Encoding.ASCII.GetString(msg, offset + 2, msg[offset + 1])),
+                            BannerParser.Sanitize(Encoding.UTF8.GetString(msg, offset + 2 + msg[offset + 1], end - offset - 2 - msg[offset + 1]))]),
                     _ => null
                 };
                 if (record is not null) records.Add(record);

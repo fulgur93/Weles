@@ -13,7 +13,8 @@
         <ellipse cx="@Inv(center.X)" cy="34" rx="70" ry="22" />
         @Text(center.X, 39, L.T("Internet"), "topo-label strong")
         <line x1="@Inv(center.X)" y1="56" x2="@Inv(center.X)" y2="@Inv(center.Y - 34)" class="topo-edge unknown" />
-        @Text(center.X + 8, (56 + center.Y - 34) / 2, L.T("dostępność z Internetu nie badana"), "topo-note", "start")
+        @* Just under the Internet node – the first device ring starts lower, so the note never overlaps a device label. *@
+        @Text(center.X + 8, 76, L.T("dostępność z Internetu nie badana"), "topo-note", "start")
     </g>
 
     @{

@@ -1,0 +1,448 @@
+@page "/attack-surface"
+@using Weles.Core.External
+@using Weles.Infrastructure.External
+@inject ExternalSurfaceService Service
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>@L.T("Powierzchnia ataku · WELES")</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>@L.T("Powierzchnia ataku")</h1>
+        <p class="page-subtitle">@L.T("Domeny i publiczne adresy, do których masz uprawnienia. Analiza pasywna korzysta tylko z publicznych źródeł (DNS, Certificate Transparency) i nie łączy się z Twoimi serwerami. Skanowanie aktywne wymaga osobnego, zatwierdzonego zakresu.")</p>
+    </div>
+    <button class="btn btn-primary" @onclick="OpenEditor"><Icon Name="surface" Size="16" /> @L.T("Dodaj domenę lub adres")</button>
+</div>
+
+@if (_editor is not null)
+{
+    <section class="card editor">
+        <div class="card-title"><Icon Name="surface" /> @L.T("Nowa domena lub adres publiczny")</div>
+        <div class="form-grid">
+            <label class="field"><span>@L.T("Domena lub publiczny adres IP")</span><input class="input mono" @bind="_editor.Name" maxlength="253" placeholder="firma.pl" /></label>
+            <label class="field"><span>@L.T("Opis (opcjonalnie)")</span><input class="input" @bind="_editor.Description" maxlength="1000" /></label>
+            <label class="field">
+                <span>@L.T("Znane subdomeny (opcjonalnie)")</span>
+                <textarea class="input mono" rows="3" @bind="_editor.KnownHosts" placeholder="www.firma.pl&#10;poczta.firma.pl"></textarea>
+                <small class="muted">@L.T("Jedna nazwa w wierszu. WELES nie zgaduje nazw – sprawdza tylko te z rekordów DNS, logów CT i tej listy.")</small>
+            </label>
+        </div>
+        <label class="checkbox"><input type="checkbox" @bind="_editor.UseCt" />
+            <span>@L.T("Szukaj subdomen w logach Certificate Transparency (crt.sh)") – <span class="muted">@L.T("do crt.sh zostanie wysłana tylko nazwa domeny; logi CT są publiczne")</span></span></label>
+        <label class="checkbox"><input type="checkbox" @bind="_editor.Confirmed" />
+            <span><strong>@L.T("Potwierdzam, że domena lub adres należy do mnie albo mam pisemną zgodę właściciela na jego analizę.")</strong></span></label>
+        @if (_errors.Count > 0)
+        {
+            <div class="alert alert-bad"><ul>@foreach (var e in _errors) { <li>@L.Message(e)</li> }</ul></div>
+        }
+        <div class="actions">
+            <button class="btn btn-primary" disabled="@(!_editor.Confirmed || _busy)" @onclick="AddAsync">@L.T("Dodaj")</button>
+            <button class="btn btn-ghost" @onclick="() => _editor = null">@L.T("Anuluj")</button>
+        </div>
+    </section>
+}
+
+@if (_targets is null)
+{
+    <div class="card loading">@L.T("Wczytywanie…")</div>
+}
+else if (_targets.Count == 0)
+{
+    <section class="card empty">
+        <p>@L.T("Dodaj własną domenę lub publiczny adres IP, aby sprawdzić rekordy DNS, subdomeny, certyfikaty i publicznie dostępne usługi.")</p>
+        <p class="muted small">@L.T("Nie analizuj cudzych domen – WELES pyta o potwierdzenie uprawnień przy dodawaniu i ponownie przed skanem aktywnym.")</p>
+    </section>
+}
+else
+{
+    <div class="target-tabs">
+        @foreach (var t in _targets)
+        {
+            <a class="target-tab @(t.Id == _selected?.Id ? "active" : "")" href="attack-surface?id=@t.Id">
+                <span class="mono">@t.Name</span>
+                @if (t.LastStatus == ExternalAnalysisStatus.Completed)
+                {
+                    <span class="muted small">@L.F("{0} hostów · {1} uwag", t.LastHostCount, t.LastFindingCount)</span>
+                }
+            </a>
+        }
+    </div>
+
+    @if (_message is not null)
+    {
+        <div class="alert @(_messageIsError ? "alert-bad" : "alert-ok")">@L.Message(_message)</div>
+    }
+
+    @if (_selected is { } target)
+    {
+        <section class="card">
+            <div class="scope-head surface-head">
+                <div>
+                    <h3 class="mono">@target.Name</h3>
+                    <p class="muted small">@(target.Kind == ExternalTargetKind.Domain ? L.T("domena") : L.T("adres publiczny")) · @L.F("uprawnienia potwierdzone {0}", Labels.Local(target.AuthorizedAt))@if (target.Description is not null) { <span> · @target.Description</span> }</p>
+                </div>
+                <div class="actions">
+                    <button class="btn btn-primary" disabled="@(_running || _busy)" @onclick="RunAsync">
+                        <Icon Name="@(_running ? "refresh" : "play")" Size="15" /> @(_running ? L.T("Analiza trwa…") : L.T("Uruchom analizę pasywną"))
+                    </button>
+                    <button class="btn btn-ghost" @onclick="ToggleSettings"><Icon Name="settings" Size="15" /> @L.T("Ustawienia")</button>
+                    <button class="btn btn-ghost" disabled="@(_running || _busy)" @onclick="DeleteAsync">@L.T("Usuń")</button>
+                </div>
+            </div>
+            @if (_settings is not null)
+            {
+                <div class="settings-inline">
+                    @if (target.Kind == ExternalTargetKind.Domain)
+                    {
+                        <label class="checkbox"><input type="checkbox" @bind="_settings.UseCt" /><span>@L.T("Szukaj subdomen w logach Certificate Transparency (crt.sh)") – <span class="muted">@L.T("do crt.sh zostanie wysłana tylko nazwa domeny; logi CT są publiczne")</span></span></label>
+                        <label class="field"><span>@L.T("Znane subdomeny (opcjonalnie)")</span><textarea class="input mono" rows="3" @bind="_settings.KnownHosts"></textarea></label>
+                    }
+                    <div class="actions"><button class="btn btn-primary btn-sm" @onclick="SaveSettingsAsync">@L.T("Zapisz")</button></div>
+                </div>
+            }
+        </section>
+
+        <section class="card mode-card passive">
+            <div class="card-title"><Icon Name="info" /> @L.T("Analiza pasywna")
+                <span class="mode-badge passive">@L.T("bez połączeń z Twoimi serwerami")</span></div>
+            <p class="muted small">@L.T("Zapytania DNS do serwerów DNS systemu i – jeśli włączone – jedno wyszukiwanie w publicznych logach Certificate Transparency.")</p>
+
+            @if (_history.FirstOrDefault() is { Status: ExternalAnalysisStatus.Failed } failed && failed.Id != _view?.Analysis.Id)
+            {
+                <div class="alert alert-bad">@L.F("Ostatnia analiza ({0}) nie powiodła się: {1}", Labels.Local(failed.StartedAt), L.Message(failed.Error ?? ""))
+                    @if (_view?.Snapshot is not null) { <div class="small">@L.T("Poniżej wynik ostatniej udanej analizy.")</div> }</div>
+            }
+            @if (_view is null)
+            {
+                <p class="muted">@(_running ? L.T("Analiza trwa – wynik pojawi się tutaj (możesz przejść do innej strony).") : L.T("Ten cel nie był jeszcze analizowany."))</p>
+            }
+            else if (_view.Analysis.Status == ExternalAnalysisStatus.Failed)
+            {
+                <div class="alert alert-bad">@L.Message(_view.Analysis.Error ?? "")</div>
+            }
+            @if (_view?.Snapshot is { } s)
+            {
+                <p class="small muted">@L.F("Analiza z {0} · serwery DNS: {1}", Labels.Local(s.CollectedAt), string.Join(", ", s.Resolvers))
+                    @if (s.CtQueried) { <span> · @(s.CtError is null ? L.F("CT: {0} certyfikatów", s.Certificates.Count) : L.T("CT: błąd"))</span> }</p>
+                @if (s.CtError is not null) { <div class="alert alert-warn small">@L.Message(s.CtError)</div> }
+                @foreach (var note in s.Notes) { <div class="small muted">ⓘ @L.Message(note)</div> }
+
+                <div class="subtitle">@L.T("Uwagi")</div>
+                @if (_view.Findings.Count == 0)
+                {
+                    <p class="muted">@L.T("Brak uwag do konfiguracji DNS.")</p>
+                }
+                else
+                {
+                    <ul class="finding-list">
+                        @foreach (var f in _view.Findings)
+                        {
+                            <li>
+                                <StatusPill Tone="@Labels.Tone(f.Level)">@Labels.Of(f.Level)</StatusPill>
+                                <strong>@L.Message(f.Title)</strong>
+                                <div class="small mono evidence">@L.Message(f.Evidence)</div>
+                                <div class="small">@L.Message(f.Recommendation)</div>
+                            </li>
+                        }
+                    </ul>
+                }
+
+                @if (s.Records.Count > 0)
+                {
+                    <div class="subtitle">@L.T("Rekordy DNS")</div>
+                    <div class="table-wrap">
+                        <table class="table">
+                            <thead><tr><th>@L.T("Typ")</th><th>@L.T("Nazwa")</th><th>@L.T("Wartość")</th><th class="right">TTL</th></tr></thead>
+                            <tbody>
+                                @foreach (var r in s.Records.OrderBy(r => RecordOrder(r.Type)).ThenBy(r => r.Name).ThenBy(r => r.Value))
+                                {
+                                    <tr><td><span class="pill-type">@r.Type</span></td><td class="mono small">@r.Name</td><td class="mono small wrap">@r.Value</td><td class="right small">@r.Ttl</td></tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+
+                <div class="subtitle">@L.F("Hosty ({0})", s.Hosts.Count)
+                    <label class="checkbox inline small"><input type="checkbox" @bind="_onlyResolving" /><span>@L.T("tylko rozwiązywane")</span></label></div>
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead><tr><th></th><th>@L.T("Nazwa")</th><th>@L.T("Adresy")</th><th>@L.T("Źródło")</th><th>@L.T("Uwagi")</th></tr></thead>
+                        <tbody>
+                            @foreach (var h in s.Hosts.Where(h => !_onlyResolving || h.Resolves || h.DanglingCname))
+                            {
+                                var selectable = Selectable(h);
+                                <tr class="@(h.Resolves ? "" : "dim")">
+                                    <td>@if (selectable) { <input type="checkbox" checked="@_chosen.Contains(h.Name)" @onchange="e => Toggle(h.Name, e.Value is true)" aria-label="@L.T("Wybierz do skanu aktywnego")" /> }</td>
+                                    <td class="mono small">@h.Name@if (h.Cname is not null) { <div class="muted">→ @h.Cname</div> }</td>
+                                    <td class="mono small">@(h.Addresses.Count == 0 ? (h.DanglingCname ? "NXDOMAIN" : "—") : string.Join(", ", h.Addresses.Take(4)))@(h.Addresses.Count > 4 ? "…" : "")</td>
+                                    <td class="small">@string.Join(", ", h.Sources.Select(L.Message))</td>
+                                    <td class="small">
+                                        @if (h.DanglingCname) { <StatusPill Tone="bad">@L.T("CNAME bez celu")</StatusPill> }
+                                        @if (h.MatchesWildcard) { <span class="muted">@L.T("odpowiedź wieloznaczna")</span> }
+                                        @if (h.Resolves && !selectable && !h.MatchesWildcard) { <span class="muted">@L.T("adres wewnętrzny")</span> }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                @if (s.Certificates.Count > 0)
+                {
+                    <div class="subtitle">@L.F("Certyfikaty z logów CT (najnowsze {0})", Math.Min(30, s.Certificates.Count))</div>
+                    <div class="table-wrap">
+                        <table class="table">
+                            <thead><tr><th>@L.T("Nazwa")</th><th>@L.T("Wystawca")</th><th>@L.T("Ważny od")</th><th>@L.T("Ważny do")</th></tr></thead>
+                            <tbody>
+                                @foreach (var c in s.Certificates.Take(30))
+                                {
+                                    <tr class="@(c.NotAfter < DateTime.UtcNow ? "dim" : "")">
+                                        <td class="mono small">@c.CommonName@if (c.Names.Count > 1) { <span class="muted"> · @L.F("+{0} nazw", c.Names.Count - 1)</span> }</td>
+                                        <td class="small">@Issuer(c.Issuer)</td>
+                                        <td class="small">@c.NotBefore.ToString("yyyy-MM-dd")</td>
+                                        <td class="small">@c.NotAfter.ToString("yyyy-MM-dd")@if (c.NotAfter < DateTime.UtcNow) { <span class="muted"> · @L.T("wygasł")</span> }</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            }
+
+            @if (_history.Count > 1)
+            {
+                <details class="small"><summary>@L.F("Historia analiz ({0})", _history.Count)</summary>
+                    <ul>@foreach (var a in _history) { <li><a href="attack-surface?id=@target.Id&analysis=@a.Id">#@a.Id · @Labels.Local(a.StartedAt)</a> · @(a.Status == ExternalAnalysisStatus.Completed ? L.F("{0} hostów · {1} uwag", a.HostCount, a.FindingCount) : L.Message(a.Error ?? L.T("w toku")))</li> }</ul>
+                </details>
+            }
+        </section>
+
+        <section class="card mode-card active">
+            <div class="card-title"><Icon Name="scans" /> @L.T("Skanowanie aktywne")
+                <span class="mode-badge active">@L.T("łączy się z wybranymi hostami")</span></div>
+            <ol class="small active-steps">
+                <li>@L.T("Zaznacz hosty w tabeli analizy pasywnej (tylko nazwy wskazujące na adres publiczny).")</li>
+                <li>@L.T("Przygotuj zakres – WELES utworzy niezatwierdzony zakres z tymi nazwami i zgodą na adresy publiczne.")</li>
+                <li>@L.T("Zatwierdź zakres w Wykrywaniu sieci, potwierdzając uprawnienia, i uruchom skan (zalecany profil Szybki).")</li>
+            </ol>
+            <p class="small muted">@L.T("Skan aktywny nawiązuje połączenia TCP z publicznymi adresami (porty, banery, TLS, nagłówki HTTP) – bez prób logowania i wykorzystania podatności. Upewnij się, że dostawca hostingu na to pozwala.")</p>
+            <div class="actions">
+                <button class="btn btn-primary" disabled="@(_chosen.Count == 0 || _busy)" @onclick="PrepareScopeAsync">@L.F("Przygotuj zakres skanowania ({0})", _chosen.Count)</button>
+                @if (target.ScanTargetId is not null)
+                {
+                    <a class="btn btn-ghost" href="discovery">@L.T("Wykrywanie sieci")</a>
+                    @if (target.ScopeApproved == true) { <StatusPill Tone="ok">@L.T("zakres zatwierdzony")</StatusPill> }
+                    else { <StatusPill Tone="warn">@L.T("zakres czeka na zatwierdzenie")</StatusPill> }
+                }
+            </div>
+
+            @if (_active is { } active)
+            {
+                <div class="subtitle">@L.F("Wynik skanu #{0} · {1} · profil {2}", active.ScanId, Labels.Local(active.At), active.PortSpecification)
+                    <a class="small" href="scans/@active.ScanId">@L.T("szczegóły skanu")</a></div>
+                @if (active.Hosts.Count == 0)
+                {
+                    <p class="muted">@L.T("Żaden host nie odpowiedział.")</p>
+                }
+                @foreach (var h in active.Hosts)
+                {
+                    <div class="device-changes">
+                        @if (h.AssetId is { } assetId) { <a href="assets/@assetId"><strong class="mono">@(h.Hostname ?? h.Ip)</strong></a> } else { <strong class="mono">@(h.Hostname ?? h.Ip)</strong> }
+                        <span class="mono muted small">@h.Ip</span>
+                        @if (h.Services.Count == 0) { <div class="muted small">@L.T("brak otwartych portów w sprawdzonym profilu")</div> }
+                        <ul class="small">
+                            @foreach (var p in h.Services)
+                            {
+                                <li class="@(p.IsAdministrative ? "tone-bad" : "")">
+                                    <span class="mono">@p.Port</span> · @(p.Service ?? "?") @p.Product @p.Version
+                                    @if (p.IsAdministrative) { <StatusPill Tone="bad">@L.T("usługa administracyjna dostępna z Internetu")</StatusPill> }
+                                    @if (p.CertificateSubject is not null)
+                                    {
+                                        <span class="muted"> · TLS: @p.CertificateSubject · @L.F("ważny do {0}", p.CertificateNotAfter?.ToString("yyyy-MM-dd") ?? "?")</span>
+                                        @if (p.CertificateNotAfter < DateTime.UtcNow) { <StatusPill Tone="bad">@L.T("wygasł")</StatusPill> }
+                                        @if (p.CertificateSelfSigned) { <StatusPill Tone="warn">@L.T("samopodpisany")</StatusPill> }
+                                        @if (p.CertificateHostnameMatches == false) { <StatusPill Tone="warn">@L.T("nazwa niezgodna")</StatusPill> }
+                                    }
+                                </li>
+                            }
+                        </ul>
+                        @if (h.Findings.Count > 0)
+                        {
+                            <ul class="small">@foreach (var f in h.Findings.Take(8)) { <li><StatusPill Tone="@Labels.Tone(f.Level)">@f.Score.ToString("0")</StatusPill> @L.Message(f.Title)@if (f.Evidence is not null) { <span class="muted"> · @L.Message(f.Evidence)</span> }</li> }</ul>
+                        }
+                    </div>
+                }
+            }
+            else if (target.ScanTargetId is not null)
+            {
+                <p class="muted small">@L.T("Brak zakończonego skanu tego zakresu.")</p>
+            }
+        </section>
+    }
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "id")] public int? IdParameter { get; set; }
+    [SupplyParameterFromQuery(Name = "analysis")] public int? AnalysisParameter { get; set; }
+
+    private sealed class Editor
+    {
+        public string Name { get; set; } = "";
+        public string? Description { get; set; }
+        public string? KnownHosts { get; set; }
+        public bool UseCt { get; set; } = true;
+        public bool Confirmed { get; set; }
+    }
+
+    private sealed class SettingsForm
+    {
+        public bool UseCt { get; set; }
+        public string? KnownHosts { get; set; }
+    }
+
+    private IReadOnlyList<ExternalTargetSummary>? _targets;
+    private ExternalTargetSummary? _selected;
+    private ExternalAnalysisView? _view;
+    private IReadOnlyList<ExternalAnalysisRef> _history = [];
+    private ExternalActiveResult? _active;
+    private Editor? _editor;
+    private SettingsForm? _settings;
+    private List<string> _errors = [];
+    private readonly HashSet<string> _chosen = new(StringComparer.OrdinalIgnoreCase);
+    private string? _message;
+    private bool _messageIsError;
+    private bool _busy;
+    private bool _running;
+    private bool _onlyResolving = true;
+    private Timer? _timer;
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _targets = await Service.ListAsync();
+        var previous = _selected?.Id;
+        _selected = _targets.FirstOrDefault(t => t.Id == IdParameter) ?? _targets.FirstOrDefault();
+        if (_selected is null) return;
+        if (previous != _selected.Id)
+        {
+            _chosen.Clear();
+            _settings = null;
+        }
+
+        _running = Service.IsRunning(_selected.Id);
+        _view = await Service.AnalysisAsync(_selected.Id, AnalysisParameter);
+        _history = await Service.AnalysesAsync(_selected.Id);
+        _active = await Service.ActiveResultAsync(_selected.Id);
+        if (_running) StartPolling();
+    }
+
+    private void StartPolling()
+    {
+        _timer ??= new Timer(_ => InvokeAsync(async () =>
+        {
+            if (_selected is null || Service.IsRunning(_selected.Id)) return;
+            _timer?.Dispose();
+            _timer = null;
+            await LoadAsync();
+            StateHasChanged();
+        }), null, 1000, 1000);
+    }
+
+    private void OpenEditor()
+    {
+        _editor = new Editor();
+        _errors = [];
+    }
+
+    private async Task AddAsync()
+    {
+        if (_editor is null) return;
+        _busy = true;
+        var result = await Service.AddAsync(new ExternalTargetInput(_editor.Name, _editor.Description, _editor.Confirmed, _editor.UseCt, _editor.KnownHosts));
+        _busy = false;
+        if (!result.Success)
+        {
+            _errors = result.Errors.ToList();
+            return;
+        }
+
+        _editor = null;
+        Navigation.NavigateTo($"attack-surface?id={result.Id}");
+    }
+
+    private async Task RunAsync()
+    {
+        if (_selected is null) return;
+        _busy = true;
+        var result = await Service.StartPassiveAsync(_selected.Id);
+        _busy = false;
+        Show(result, null);
+        if (result.Success)
+        {
+            _running = true;
+            StartPolling();
+        }
+    }
+
+    private void ToggleSettings() => _settings = _settings is null && _selected is { } t ? new SettingsForm { UseCt = t.UseCertificateTransparency, KnownHosts = t.KnownHosts } : null;
+
+    private async Task SaveSettingsAsync()
+    {
+        if (_selected is null || _settings is null) return;
+        var result = await Service.UpdateSettingsAsync(_selected.Id, _settings.UseCt, _settings.KnownHosts);
+        Show(result, "Zapisano. Zmiany obowiązują od następnej analizy.");
+        if (result.Success)
+        {
+            _settings = null;
+            await LoadAsync();
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_selected is null) return;
+        var result = await Service.DeleteAsync(_selected.Id);
+        Show(result, "Usunięto. Zakres skanowania i historia skanów zostały zachowane.");
+        if (result.Success) Navigation.NavigateTo("attack-surface");
+    }
+
+    private async Task PrepareScopeAsync()
+    {
+        if (_selected is null) return;
+        _busy = true;
+        var result = await Service.PrepareActiveScopeAsync(_selected.Id, _chosen.ToList());
+        _busy = false;
+        Show(result, "Zakres skanowania przygotowany. Zatwierdź go w Wykrywaniu sieci, aby uruchomić skan aktywny.");
+        if (result.Success) await LoadAsync();
+    }
+
+    private void Show(Weles.Infrastructure.Scanning.OperationResult result, string? success)
+    {
+        _messageIsError = !result.Success;
+        _message = result.Success ? success : string.Join(" ", result.Errors);
+    }
+
+    private void Toggle(string name, bool on)
+    {
+        if (on) _chosen.Add(name); else _chosen.Remove(name);
+    }
+
+    private static bool Selectable(ExternalHostView h) =>
+        h.Resolves && !h.MatchesWildcard && h.Addresses.Any(a => System.Net.IPAddress.TryParse(a, out var ip) && Weles.Core.Networking.AddressClassifier.IsPublic(ip));
+
+    private static int RecordOrder(string type) => Array.IndexOf(["A", "AAAA", "CNAME", "MX", "NS", "TXT", "CAA", "SOA", "PTR"], type) is var i and >= 0 ? i : 99;
+
+    /// <summary>"C=US, O=Let's Encrypt, CN=R11" → "Let's Encrypt (R11)".</summary>
+    private static string Issuer(string dn)
+    {
+        string? Part(string key) => dn.Split(',').Select(p => p.Trim()).FirstOrDefault(p => p.StartsWith(key + "=", StringComparison.Ordinal))?[(key.Length + 1)..].Trim('"');
+        var o = Part("O");
+        var cn = Part("CN");
+        return o is null ? cn ?? dn : cn is null ? o : $"{o} ({cn})";
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

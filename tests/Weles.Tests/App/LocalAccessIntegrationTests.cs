@@ -291,6 +291,8 @@ public class Stage7PagesTests(WelesAppFactory factory) : IClassFixture<WelesAppF
     [InlineData("/monitoring?prev=1&cur=2")]
     [InlineData("/topology")]
     [InlineData("/attack-paths")]
+    [InlineData("/attack-surface")]
+    [InlineData("/attack-surface?id=999")]
     public async Task Pages_render_without_redirects(string path)
     {
         var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, BaseAddress = new Uri("http://localhost") });

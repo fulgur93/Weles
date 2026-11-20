@@ -13,7 +13,7 @@ otwiera istniejącą sesję zamiast startować drugi serwer.
 | Dashboard | Security Posture Score, urządzenia, usługi, podatności, ostatni skan, status AI | Etap 1 (dane po pierwszym skanie) |
 | Assets | inwentarz urządzeń, status obecności, historia zmian, nazwy i krytyczność | ✅ Etap 3 |
 | Network Discovery / Scans | zakresy, wykrywanie urządzeń, porty, usługi, historia skanów | ✅ Etap 2 |
-| Attack Surface | domeny, DNS, certyfikaty, usługi publiczne | Etap 8 |
+| Powierzchnia ataku | domeny, DNS, SPF/DMARC, subdomeny z CT, certyfikaty, usługi publiczne | ✅ Etap 8 |
 | Vulnerabilities | dopasowania CVE (NVD, KEV, EPSS), lokalna baza i jej aktualizacja | ✅ Etap 4 |
 | Ocena ryzyka | Security Posture Score, trend, priorytety napraw, ocena każdego urządzenia z uzasadnieniem | ✅ Etap 5 |
 | Topologia / Ścieżki ataku / Monitorowanie | mapa sieci, hipotetyczne ścieżki ekspozycji, zmiany między skanami, harmonogram | ✅ Etap 7 |
@@ -133,6 +133,19 @@ aplikacji (wtedy skan jest oznaczany jako przerwany).
 - **Ścieżki ataku** – hipotezy, jak można dotrzeć do urządzenia: start (założenie), dostęp (otwarty port), słabość
   (podatność lub problem konfiguracji) i możliwy skutek. Każdy krok ma uzasadnienie i pewność, ścieżka – pewność łączną.
   To nie są potwierdzone ataki; WELES niczego nie próbuje wykorzystać.
+
+## Powierzchnia ataku (domeny i adresy publiczne)
+
+- Dodaj **własną** domenę lub publiczny adres IP i potwierdź, że należy do Ciebie (albo masz pisemną zgodę właściciela).
+- **Analiza pasywna** nie łączy się z Twoimi serwerami: pyta serwery DNS systemu o rekordy A, AAAA, MX, NS, TXT, CAA, SOA
+  i DMARC, a – jeśli zaznaczysz – szuka subdomen w publicznych logach Certificate Transparency (crt.sh dostaje tylko
+  nazwę domeny). WELES nie zgaduje nazw; możesz dopisać znane subdomeny. Wynik: uwagi z cytowanym rekordem (np. SPF „+all”,
+  brak DMARC, CNAME wskazujący na nieistniejącą nazwę, adres wewnętrzny w publicznym DNS), tabela rekordów, hostów
+  i certyfikatów z CT.
+- **Skanowanie aktywne** jest osobnym krokiem: zaznacz hosty → „Przygotuj zakres skanowania” → zatwierdź zakres
+  w Wykrywaniu sieci (ponowne potwierdzenie uprawnień) → uruchom skan (zalecany profil Szybki). Wyniki – otwarte porty
+  publiczne, usługi administracyjne dostępne z Internetu, certyfikaty TLS i uwagi – pojawią się na stronie Powierzchni ataku.
+  Upewnij się, że dostawca hostingu pozwala na skanowanie.
 
 ## Analityk AI
 

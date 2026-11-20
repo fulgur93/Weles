@@ -25,6 +25,8 @@ public class WelesDbContext(DbContextOptions<WelesDbContext> options) : DbContex
     public DbSet<AiConversation> AiConversations => Set<AiConversation>();
     public DbSet<AiMessage> AiMessages => Set<AiMessage>();
     public DbSet<ScanSchedule> ScanSchedules => Set<ScanSchedule>();
+    public DbSet<ExternalTarget> ExternalTargets => Set<ExternalTarget>();
+    public DbSet<ExternalAnalysis> ExternalAnalyses => Set<ExternalAnalysis>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

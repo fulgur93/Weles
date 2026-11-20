@@ -30,7 +30,7 @@ public static class ModuleCatalog
         new("Skany", "scans", "scans", "Rozpoznanie", 2, true,
             "Uruchamianie, podgląd na żywo, zatrzymywanie i historia skanowań.",
             ["Skanowanie portów z limitem równoległości i szybkości", "Rozpoznawanie usług i wersji z poziomem pewności", "Analiza TLS, certyfikatów i nagłówków HTTP", "Możliwość zatrzymania skanu w dowolnym momencie"]),
-        new("Powierzchnia ataku", "attack-surface", "surface", "Rozpoznanie", 8, false,
+        new("Powierzchnia ataku", "attack-surface", "surface", "Rozpoznanie", 8, true,
             "Zewnętrzna powierzchnia ataku: domeny, DNS, certyfikaty i publiczne usługi – tylko zasoby, do których masz uprawnienia.",
             ["Rekordy A, AAAA, MX, NS, TXT", "Subdomeny z autoryzowanych źródeł (Certificate Transparency)", "Rozdzielenie analizy pasywnej od aktywnego skanowania"]),
 

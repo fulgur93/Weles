@@ -518,6 +518,88 @@ namespace Weles.Infrastructure.Database.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Weles.Core.Entities.ExternalAnalysis", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ExternalTargetId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("FindingCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("HostCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SnapshotJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExternalTargetId", "StartedAt");
+
+                    b.ToTable("ExternalAnalyses");
+                });
+
+            modelBuilder.Entity("Weles.Core.Entities.ExternalTarget", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("AuthorizedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("KnownHosts")
+                        .HasMaxLength(20000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(253)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("ScanTargetId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("UseCertificateTransparency")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.HasIndex("ScanTargetId");
+
+                    b.ToTable("ExternalTargets");
+                });
+
             modelBuilder.Entity("Weles.Core.Entities.NetworkSegment", b =>
                 {
                     b.Property<int>("Id")
@@ -1141,6 +1223,27 @@ namespace Weles.Infrastructure.Database.Migrations
                     b.Navigation("Port");
                 });
 
+            modelBuilder.Entity("Weles.Core.Entities.ExternalAnalysis", b =>
+                {
+                    b.HasOne("Weles.Core.Entities.ExternalTarget", "ExternalTarget")
+                        .WithMany("Analyses")
+                        .HasForeignKey("ExternalTargetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ExternalTarget");
+                });
+
+            modelBuilder.Entity("Weles.Core.Entities.ExternalTarget", b =>
+                {
+                    b.HasOne("Weles.Core.Entities.ScanTarget", "ScanTarget")
+                        .WithMany()
+                        .HasForeignKey("ScanTargetId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("ScanTarget");
+                });
+
             modelBuilder.Entity("Weles.Core.Entities.RiskFinding", b =>
                 {
                     b.HasOne("Weles.Core.Entities.Asset", "Asset")
@@ -1258,6 +1361,11 @@ namespace Weles.Infrastructure.Database.Migrations
             modelBuilder.Entity("Weles.Core.Entities.DiscoveredService", b =>
                 {
                     b.Navigation("Certificates");
+                });
+
+            modelBuilder.Entity("Weles.Core.Entities.ExternalTarget", b =>
+                {
+                    b.Navigation("Analyses");
                 });
 
             modelBuilder.Entity("Weles.Core.Entities.NetworkSegment", b =>

@@ -226,6 +226,28 @@ public partial class LocalizationTests
             }
         }
 
+        // External attack surface: every rule and the service/validation messages.
+        static Weles.Core.External.DnsRecordView Rec(string type, string value, string name = "firma.pl") => new(name, type, value, 300);
+        var snapshots = new[]
+        {
+            new Weles.Core.External.ExternalSnapshot("firma.pl", DateTime.UtcNow, [], [Rec("MX", "10 mail.firma.pl"), Rec("NS", "ns1.firma.pl"), Rec("TXT", "v=spf1 " + string.Join(' ', Enumerable.Range(1, 11).Select(i => $"include:s{i}.pl")) + " +all")],
+                [new("old.firma.pl", [], "gone.herokuapp.com", false, true, false, ["CT"]), new("intranet.firma.pl", ["10.1.2.3"], null, true, false, false, ["CT"])], [], false, null, ["93.184.216.99"], 0, []),
+            new Weles.Core.External.ExternalSnapshot("firma.pl", DateTime.UtcNow, [], [Rec("TXT", "v=spf1 mx ?all"), Rec("TXT", "v=DMARC1; p=none", "_dmarc.firma.pl")], [], [], false, null, [], 0, []),
+            new Weles.Core.External.ExternalSnapshot("firma.pl", DateTime.UtcNow, [], [Rec("TXT", "v=spf1 mx"), Rec("TXT", "v=spf1 a"), Rec("TXT", "v=DMARC1; p=none", "_dmarc.firma.pl"), Rec("TXT", "v=DMARC1; p=reject", "_dmarc.firma.pl")], [], [], false, null, [], 0, []),
+            new Weles.Core.External.ExternalSnapshot("firma.pl", DateTime.UtcNow, [], [Rec("TXT", "v=spf1 mx")], [], [], false, null, [], 0, []),
+            new Weles.Core.External.ExternalSnapshot("firma.pl", DateTime.UtcNow, [], [], [], [], false, null, [], 0, [])
+        };
+        foreach (var f in snapshots.SelectMany(Weles.Core.External.ExternalRules.Evaluate)) generated.AddRange([f.Title, f.Evidence, f.Recommendation]);
+        foreach (var bad in new[] { "", "https://firma.pl/", "192.168.1.1", "nas.local", "a b" })
+        {
+            Weles.Core.External.DomainNames.TryNormalize(bad, out _, out var error);
+            generated.Add(error!);
+        }
+        Weles.Core.External.DomainNames.TryParsePublicAddress("10.0.0.1", out _, out var addressError);
+        generated.AddRange([addressError!, "Domena firma.pl nie istnieje w DNS (NXDOMAIN).", "Sprawdzono 300 z 1200 nazw (limit analizy); pominięto najstarsze nazwy z CT.",
+            "Te nazwy nie wskazują na adres publiczny w ostatniej analizie: a.firma.pl", "x.inna.pl nie jest nazwą w domenie firma.pl.", "Błąd analizy: timeout",
+            "crt.sh odpowiedział kodem 503 – spróbuj ponownie później.", "Zewnętrzny: firma.pl", "użytkownik", "certyfikat TLS"]);
+
         generated.AddRange(["Uruchomiono skan #12.", "Pominięto: zakres nie jest zatwierdzony.", "Pominięto: komputer jest teraz w innej sieci niż ta, w której zatwierdzono i skanowano zakres (inny router).", "Pominięto: Dla tego zakresu trwa już skan."]);
         generated.Add("Ocena ryzyka: Security Posture Score 54/100, urządzenia Critical: 1, High: 2 (nowe problemy konfiguracji: 3, rozwiązane: 0).");
         Assert.True(generated.Count > 15);

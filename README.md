@@ -45,5 +45,6 @@ pwsh deploy/windows/publish.ps1 -Rid win-x64 # artifacts/weles-<ver>-win-x64.zip
 | 5 | Risk Engine: reguły konfiguracji z MITRE ATT&CK, ocena urządzeń z uzasadnieniem, Security Posture Score z trendem, priorytety napraw | ✅ |
 | 6 | AI Security Analyst: dołączona Ollama + Qwen3‑4B Q4 jako proces potomny, czat ze strumieniowaniem, kontekst wyłącznie z bazy WELES | ✅ |
 | 7 | Monitoring (porównanie skanów, zmiany w czasie, harmonogram tylko w zatwierdzonej sieci), topologia SVG, ścieżki ataku jako hipotezy | ✅ |
-| 8 | External Attack Surface | ⏳ następny |
-| 9–11 | Raporty, Agenci, Pakowanie | planowane |
+| 8 | External Attack Surface: DNS, SPF/DMARC, subdomeny z CT, certyfikaty, usługi publiczne (pasywnie lub przez zatwierdzony zakres) | ✅ |
+| 9 | Raporty | ⏳ następny |
+| 10–11 | Agenci, Pakowanie | planowane |

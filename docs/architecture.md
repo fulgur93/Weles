@@ -172,7 +172,7 @@ Kluczowa decyzja: **rozdzielenie tożsamości od obserwacji**.
 | `SoftwareVersion` | 4 | znormalizowany katalog `(Vendor, Product, Version, Cpe)` współdzielony przez usługi; do tego czasu pola leżą w `DiscoveredService` |
 | `NetworkRelationship` | 7 | `SourceAssetId`, `TargetAssetId`, `Kind` (same‑segment, gateway, reachable‑service), `Evidence`, `Confidence`, `ScanId` |
 | `AttackPath` + `AttackPathStep` | 7 | uporządkowane kroki z `Justification` i `Confidence`, `IsHypothetical = true` zawsze, dopóki nie ma dowodu |
-| `Domain` | 8 | nazwa, rodzaj (apex/sub), źródło (DNS, CT), rekordy DNS jako JSON, FK `ScanTarget` |
+| `ExternalTarget` + `ExternalAnalysis` | 8 | domena lub adres publiczny z datą potwierdzenia uprawnień, opcja CT, znane nazwy, FK `ScanTarget` (zakres skanu aktywnego); analiza pasywna jako migawka JSON (rekordy, hosty ze źródłem, certyfikaty CT) – reguły oceniają ją przy odczycie |
 | `AuditReport` | 9 | `ScanId`, `Format`, `FilePath`, `Sha256`, `CreatedAt`, `AiSummary` |
 | `AIConversation`, `AIMessage` | 6 | rozmowy + wiadomości (`Role`, `Content`, `ContextSnapshotJson`, `Model`, `TokensIn/Out`) |
 | `Agent`, `AgentScan` | 10 | `Name`, `TokenHash` (nigdy jawny token), `Status`, `LastSeenAt`, `RevokedAt`, dozwolone zakresy |
@@ -331,6 +331,16 @@ Weryfikacja na kopii bazy użytkownika (2026‑11‑19): sieć przewodowa 47/100
 | Ścieżki ataku | `AttackPathEngine` (Core): dla problemów ≥ 35 pkt – start „urządzenie w sieci lokalnej” (założenie: z tej perspektywy wykonano skany) → dostęp (port otwarty w skanie, 95%) → słabość (pewność dopasowania CVE: potwierdzone 90, prawdopodobne 70, wymaga weryfikacji 45, brak danych 20; reguła konfiguracji – jej pewność) → skutek (hipoteza 40% wg roli: router – wpływ na wszystkie urządzenia sieci, serwer/NAS, IoT, inne). Wariant „Internet” tylko dla adresu publicznego (50%) lub UPnP na routerze (20%), z priorytetem × 0,8. Pewność ścieżki = iloczyn kroków dowodowych; każda ścieżka oznaczona jako hipoteza. Encje `AttackPath`/`NetworkRelationship` z planu nie są zapisywane – ścieżki i relacje liczone na bieżąco z aktualnych danych. |
 | Analityk AI | pytania o zmiany dostają pełne porównanie (wersje, podatności, ryzyko), pytania o ścieżki – 3 najważniejsze ścieżki z pewnością kroków. |
 
+## 5f. Zewnętrzna powierzchnia ataku (Etap 8)
+
+| Element | Implementacja |
+|---------|---------------|
+| Cele | `ExternalSurfaceService.AddAsync` – domena (IDN → punycode, odrzucane URL, adresy, sufiksy wewnętrzne .local/.lan/…) lub publiczny adres IP; wymagane potwierdzenie własności lub pisemnej zgody (zapisywana data). |
+| Analiza pasywna | W tle (`StartPassiveAsync`, stan w bazie, przerwane analizy oznaczane przy starcie). `DnsLookup` – zapytania UDP (TCP przy obciętej odpowiedzi) do serwerów DNS systemu: A, AAAA, MX, NS, TXT, CAA, SOA, `_dmarc` TXT; dla adresu – PTR. Rekord wieloznaczny wykrywany losową nazwą. Subdomeny **tylko z autoryzowanych źródeł**: rekordy domeny (MX/NS), Certificate Transparency (crt.sh, opcja włączana per cel – wysyłana jest tylko nazwa domeny; odpowiedź ograniczona do 32 MB, nazwy walidowane i obcinane do domeny), lista użytkownika, SAN z certyfikatów skanów aktywnych. Bez zgadywania nazw (brute force) i bez transferu strefy (AXFR). Limit 300 nazw na analizę, 8 równoległych zapytań. Wykrywanie CNAME wskazującego na NXDOMAIN. Parser DNS rozszerzony o NS/CNAME/SOA/MX/CAA, rcode i TC. |
+| Reguły | `ExternalRules` (Core): SPF (brak, kilka, +all, ?all, brak all, >10 zapytań), DMARC (brak, kilka, p=none), brak CAA, jeden NS, adres wewnętrzny w publicznym DNS, CNAME bez celu (możliwe przejęcie subdomeny), nazwy sugerujące usługi administracyjne/testowe, rekord wieloznaczny. Każda uwaga cytuje rekord. Uwagi nie wpływają na Security Posture Score sieci lokalnej. |
+| Skanowanie aktywne | Rozdzielone od pasywnego: użytkownik zaznacza nazwy wskazujące na adres publiczny → `PrepareActiveScopeAsync` tworzy (lub podmienia, co cofa zatwierdzenie) **niezatwierdzony** zakres „Zewnętrzny: …” z `AllowPublicAddresses`; skan uruchamia się dopiero po zatwierdzeniu w Wykrywaniu sieci istniejącym silnikiem (TCP connect, banery, TLS, HTTP – bez logowania i exploitów). Silnik przekazuje nazwę domeny z zakresu jako SNI/Host. Wynik: porty publiczne (porty administracyjne wyróżnione), certyfikaty (wygasły, samopodpisany, niezgodna nazwa), uwagi Risk Engine. |
+| Analityk AI | pytania o domenę/DNS/SPF/DMARC/subdomeny dostają uwagi analizy pasywnej i wynik skanu aktywnego (albo informację, że dostępność z Internetu jest nieznana). |
+
 ## 5c. Język interfejsu (PL / EN)
 
 - Polski jest językiem źródłowym: każdy tekst w kodzie jest po polsku i jest jednocześnie kluczem słownika
@@ -366,7 +376,7 @@ Weryfikacja na kopii bazy użytkownika (2026‑11‑19): sieć przewodowa 47/100
 | 5 | Risk Engine: reguły, scoring z wyjaśnieniem, Security Posture Score, trend, priorytety napraw, MITRE ATT&CK | ✅ |
 | 6 | AI Security Analyst: dołączona Ollama jako proces potomny, model Qwen3‑4B Q4, czat ze strumieniowaniem, kontekst z bazy, historia rozmów | ✅ |
 | 7 | Monitoring (porównanie skanów, zmiany w czasie, harmonogram z blokadą innej sieci) + topologia (SVG) + ścieżki ataku (hipotezy z pewnością kroków) | ✅ |
-| 8 | External Attack Surface: DNS, subdomeny (CT), certyfikaty | ⏸ |
+| 8 | External Attack Surface: DNS, SPF/DMARC/CAA, subdomeny z CT, certyfikaty, usługi publiczne; pasywna analiza oddzielona od aktywnego skanu | ✅ |
 | 9 | Raporty PDF, eksport/import JSON/ZIP | PDF ✅ |
 | 10 | Agenci (Worker Service, HTTPS, rejestracja, unieważnianie) | ⏸ |
 | 11 | Pakowanie: ZIP/TAR.GZ → instalatory (Inno Setup / AppImage+DEB), Ollama + model | ZIP/TAR.GZ ✅ |
@@ -424,3 +434,5 @@ Weryfikacja na kopii bazy użytkownika (2026‑11‑19): sieć przewodowa 47/100
 | 2026‑11‑20 | Etap 7: harmonogram zakotwiczony w sieci (MAC routera z pierwszego ręcznego skanu) – zgoda dotyczy sieci, nie zakresu adresów; automatyczny skan 192.168.0.0/24 nie może trafić do innej sieci o tym samym zakresie. Brak MAC bramy w ARP = brak dowodu = pominięcie. |
 | 2026‑11‑20 | Topologia jako SVG renderowany po stronie serwera zamiast biblioteki JS (wymaganie „nie uzależniaj od JavaScriptu”); połączenia jawnie opisane jako wywnioskowane. Ścieżki ataku liczone na bieżąco, nie zapisywane – zawsze odpowiadają aktualnym danym. |
 | 2026‑11‑20 | Okno podatności w porównaniu przesunięte o 2 min: dopasowanie zapisuje się po zakończeniu skanu, więc bez przesunięcia te same 37 CVE liczyły się dla dwóch kolejnych skanów (wykryte na kopii bazy użytkownika). Strona monitoringu aktualizowała adres przy pierwszym renderowaniu – pętla przekierowań; poprawione i objęte testem. |
+| 2026‑11‑20 | Etap 8: subdomeny wyłącznie z autoryzowanych źródeł (DNS domeny, CT, lista użytkownika, certyfikaty) – bez słownikowego zgadywania nazw, które byłoby formą brute force wobec cudzej infrastruktury DNS. CT jako opcja z jawną informacją, że nazwa domeny trafia do crt.sh. |
+| 2026‑11‑20 | Skan aktywny zasobów publicznych nie ma własnego silnika ani przycisku „skanuj” – moduł tylko przygotowuje niezatwierdzony zakres; zatwierdzenie i uruchomienie przechodzą tą samą ścieżką co w sieci lokalnej (zgoda, limit szybkości, zatrzymanie). |

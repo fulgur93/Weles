@@ -66,6 +66,16 @@ WELES łączy się z Internetem **tylko** po kliknięciu „Aktualizuj z Interne
 - Opisy CVE i referencje są danymi z zewnątrz: Blazor koduje je jako tekst, linki są ograniczone do `http(s)` i
   otwierane z `rel="noopener noreferrer"`.
 
+## Zewnętrzna powierzchnia ataku (Etap 8)
+
+- Cel (domena/adres publiczny) dodaje się tylko z potwierdzeniem własności lub pisemnej zgody; adresy prywatne i domeny
+  wewnętrzne są odrzucane.
+- Analiza pasywna: wyłącznie zapytania DNS do resolverów systemu i opcjonalne wyszukiwanie w CT (do crt.sh trafia tylko
+  nazwa domeny, ogólny User-Agent bez danych użytkownika). Bez zgadywania subdomen i bez AXFR. Odpowiedzi DNS i CT są
+  traktowane jako niezaufane (walidacja nazw, limit rozmiaru, limit liczby nazw).
+- Skan aktywny tylko przez zwykły zakres: tworzony jako niezatwierdzony, z jawną zgodą na adresy publiczne; każda zmiana
+  hostów cofa zatwierdzenie. Usunięcie celu nie usuwa zakresu ani historii skanów.
+
 ## Harmonogram skanów (Etap 7)
 
 - Tylko zatwierdzone zakresy; harmonogram można ustawić dopiero po ręcznym skanie, który zapisuje sieć (MAC routera).
