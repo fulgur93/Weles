@@ -129,7 +129,7 @@
                             <td class="right">@dev.Services.Count</td>
                             <td class="right">@dev.Vulnerabilities.Count(v => v.Status == FindingStatus.Open)</td>
                             <td class="right">@dev.Findings.Count(f => f.Status == FindingStatus.Open)</td>
-                            <td class="right">@if (dev.RiskLevel is { } level) { <StatusPill Tone="@Labels.Tone(level)">@dev.RiskScore!.Value.ToString("0") · @Labels.Of(level)</StatusPill> } else { <span class="muted">—</span> }</td>
+                            <td class="right">@if (dev.RiskLevel is { } level) { <StatusPill Tone="@Labels.Tone(level)">@(dev.RiskScore ?? 0).ToString("0") · @Labels.Of(level)</StatusPill> } else { <span class="muted">—</span> }</td>
                         </tr>
                         @if (_open.Contains(index))
                         {

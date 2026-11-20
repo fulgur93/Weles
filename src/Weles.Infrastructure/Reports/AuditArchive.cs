@@ -179,11 +179,12 @@ public static class AuditArchive
             throw new AuditImportException($"Wersja formatu {d.SchemaVersion} nie jest obsługiwana (obsługiwana: {AuditDocument.CurrentSchemaVersion}) – zaktualizuj WELES.");
         }
 
-        Require(d.Audit is not null && d.Devices is not null && d.Recommendations is not null, "audit, devices, recommendations");
+        Require(d.Audit is not null && d.Devices is not null && d.Recommendations is not null && d.GeneratedBy is not null, "audit, devices, recommendations, generatedBy");
         var a = d.Audit!;
         Require(a.ScopeName is not null && a.Scope is not null && a.Network is not null && a.PortSpecification is not null, "audit");
         Text(a.ScopeName); Text(a.Network); Text(a.PortSpecification); Text(d.GeneratedBy);
-        Count(a.Scope!.Count); foreach (var s in a.Scope) Text(s);
+        Count(a.Scope!.Count); foreach (var s in a.Scope) { Require(s is not null, "audit.scope"); Text(s); }
+        Defined(a.Trigger);
 
         if (d.Devices!.Count > MaxDevices) throw new AuditImportException("Plik audytu zawiera zbyt wiele urządzeń.");
         foreach (var device in d.Devices)
@@ -192,24 +193,27 @@ public static class AuditArchive
                     && device.Findings is not null && device.RiskFactors is not null, "devices");
             Text(device!.Name); Text(device.Ip); Text(device.Hostname); Text(device.Mac); Text(device.Vendor); Text(device.Os); Text(device.Model);
             Score(device.RiskScore);
+            // A level always comes with its score – the report shows them together.
+            Require(device.RiskLevel is null || device.RiskScore is not null, "devices.riskScore");
+            Defined(device.Type); Defined(device.Criticality); Defined(device.RiskLevel);
             Count(device.Services!.Count); Count(device.Vulnerabilities!.Count); Count(device.Findings!.Count); Count(device.RiskFactors!.Count);
             foreach (var s in device.Services)
             {
                 Require(s is not null && s.Port is >= 1 and <= 65535, "services");
-                Text(s!.Name); Text(s.Product); Text(s.Version);
+                Text(s!.Name); Text(s.Product); Text(s.Version); Defined(s.Protocol);
                 if (s.Certificate is { } c) { Text(c.Subject); Text(c.Issuer); Text(c.TlsProtocol); }
             }
 
             foreach (var v in device.Vulnerabilities)
             {
                 Require(v is not null && v.CveId is not null, "vulnerabilities");
-                Text(v!.CveId); Text(v.Title); Text(v.MatchReason); Text(v.Product); Text(v.Version);
+                Text(v!.CveId); Text(v.Title); Defined(v.Severity); Defined(v.MatchStatus); Defined(v.Status); Text(v.MatchReason); Text(v.Product); Text(v.Version);
             }
 
             foreach (var f in device.Findings)
             {
                 Require(f is not null && f.RuleId is not null && f.Title is not null, "findings");
-                Text(f!.RuleId); Text(f.Title); Text(f.Evidence); Text(f.Recommendation); Score(f.Score);
+                Text(f!.RuleId); Text(f.Title); Text(f.Evidence); Text(f.Recommendation); Score(f.Score); Defined(f.Level); Defined(f.Status);
             }
 
             Factors(device.RiskFactors);
@@ -219,8 +223,8 @@ public static class AuditArchive
         foreach (var r in d.Recommendations)
         {
             Require(r is not null && r.Device is not null && r.Title is not null && r.Recommendation is not null && r.CveIds is not null, "recommendations");
-            Text(r!.Device); Text(r.Ip); Text(r.Title); Text(r.Recommendation); Score(r.Priority);
-            Count(r.CveIds!.Count); foreach (var cve in r.CveIds) Text(cve);
+            Text(r!.Device); Text(r.Ip); Text(r.Title); Text(r.Recommendation); Score(r.Priority); Defined(r.Level);
+            Count(r.CveIds!.Count); foreach (var cve in r.CveIds) { Require(cve is not null, "recommendations.cveIds"); Text(cve); }
         }
 
         if (d.Posture is { } p)
@@ -233,7 +237,7 @@ public static class AuditArchive
         {
             Require(ch.Items is not null, "changes");
             Count(ch.Items!.Count);
-            foreach (var i in ch.Items) { Require(i is not null && i.Device is not null && i.Description is not null, "changes"); Text(i!.Device); Text(i.Description); }
+            foreach (var i in ch.Items) { Require(i is not null && i.Device is not null && i.Description is not null, "changes"); Text(i!.Device); Text(i.Description); Defined(i.Kind); }
         }
 
         if (d.AiSummary is { } ai) { Require(ai.Text is not null, "aiSummary"); Text(ai.Text); Text(ai.Model); Text(ai.Language); }
@@ -249,6 +253,14 @@ public static class AuditArchive
     {
         if (!condition) throw new AuditImportException($"Plik audytu jest niekompletny (brak wymaganych danych: {part}).");
     }
+
+    /// <summary>Enum values are written as names, but JSON also accepts numbers – an unknown one ("99") is refused.</summary>
+    private static void Defined<T>(T? value) where T : struct, Enum
+    {
+        if (value is { } v && !Enum.IsDefined(v)) throw new AuditImportException("Plik audytu zawiera nieznaną wartość pola.");
+    }
+
+    private static void Defined<T>(T value) where T : struct, Enum => Defined((T?)value);
 
     private static void Text(string? value)
     {

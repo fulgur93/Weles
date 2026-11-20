@@ -297,8 +297,51 @@ public class ReportTests
         var deep = string.Concat(Enumerable.Repeat("{\"a\":", 100)) + "1" + new string('}', 100);
         Assert.Contains("JSON", await ImportErrorAsync(Encoding.UTF8.GetBytes(deep), "a.json"));
 
+        // Regression (review of Stage 9): files that passed validation and then crashed the import or the viewer.
+        Assert.Contains("generatedBy", await ImportErrorAsync(Mutate(n => n.Remove("generatedBy")), "a.json"));
+        Assert.Contains("audit.scope", await ImportErrorAsync(Mutate(n => n["audit"]!["scope"] = new JsonArray(null, "10.0.0.0/24")), "a.json"));
+        Assert.Contains("riskScore", await ImportErrorAsync(Mutate(n => n["devices"]![0]!["riskScore"] = null), "a.json"));
+        Assert.Contains("nieznaną wartość", await ImportErrorAsync(Mutate(n => n["audit"]!["trigger"] = 99), "a.json"));
+        Assert.Contains("nieznaną wartość", await ImportErrorAsync(Mutate(n => n["devices"]![0]!["type"] = 1234), "a.json"));
+        Assert.Contains("cveIds", await ImportErrorAsync(Mutate(n => n["recommendations"]![0]!["cveIds"] = new JsonArray((JsonNode?)null)), "a.json"));
+
         // A bare JSON export is accepted as well.
         Assert.Equal(7, (await AuditArchive.ReadAsync(new MemoryStream(json), "audit.json")).Document.Audit.ScanId);
+    }
+
+    /// <summary>
+    /// Regression (review of Stage 9): a finding resolved and later reopened has ResolvedAt cleared – the audit of the scan
+    /// in between must not show it, because that scan did not see it.
+    /// </summary>
+    [Fact]
+    public async Task A_reopened_finding_is_not_shown_in_the_audit_that_did_not_see_it()
+    {
+        await using var env = await SetupAsync();
+        var t0 = TestData.Now.AddDays(-3);
+        HostScanResult Pc(bool ftp) => ftp
+            ? Host("10.0.0.5", "aa:aa:aa:00:00:05", false, (21, "ftp", null, null), (22, "ssh", "OpenSSH", "8.9p1"))
+            : Host("10.0.0.5", "aa:aa:aa:00:00:05", false, (22, "ssh", "OpenSSH", "9.6p1"));
+        var withFtp = await env.ScanAsync(t0, Pc(true));
+        var without = await env.ScanAsync(t0.AddDays(1), Pc(false));
+        var again = await env.ScanAsync(t0.AddDays(2), Pc(true));
+
+        bool HasFtp(AuditDocument d) => d.Devices.SelectMany(x => x.Findings).Any(f => f.RuleId == RiskRules.Ftp.Id);
+        bool HasCve(AuditDocument d) => d.Devices.SelectMany(x => x.Vulnerabilities).Any(v => v.CveId == "CVE-2023-38408");
+        var first = (await env.Builder.BuildAsync(withFtp))!;
+        var middle = (await env.Builder.BuildAsync(without))!;
+        var last = (await env.Builder.BuildAsync(again))!;
+        Assert.True(HasFtp(first) && HasCve(first));
+        Assert.False(HasFtp(middle));
+        Assert.False(HasCve(middle));
+        Assert.True(HasFtp(last) && HasCve(last));
+    }
+
+    [Fact]
+    public void A_risk_level_without_a_score_does_not_break_the_pdf()
+    {
+        var doc = Sample();
+        var pdf = AuditPdfRenderer.Render(doc with { Devices = [doc.Devices[0] with { RiskScore = null }] }, imported: true);
+        Assert.Equal("%PDF", Encoding.ASCII.GetString(pdf, 0, 4));
     }
 
     [Fact]

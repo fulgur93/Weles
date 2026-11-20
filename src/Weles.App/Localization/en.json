@@ -480,6 +480,7 @@
  "Plik audytu jest niekompletny (brak wymaganych danych: {0}).": "The audit file is incomplete (required data missing: {0}).",
  "Plik audytu jest pusty.": "The audit file is empty.",
  "Plik audytu nie jest poprawnym JSON-em WELES ({0}).": "The audit file is not valid WELES JSON ({0}).",
+ "Plik audytu zawiera nieznaną wartość pola.": "The audit file contains an unknown field value.",
  "Plik audytu zawiera ocenę spoza zakresu 0–100.": "The audit file contains a score outside 0–100.",
  "Plik audytu zawiera zbyt długi tekst.": "The audit file contains a text that is too long.",
  "Plik audytu zawiera zbyt długą listę.": "The audit file contains a list that is too long.",

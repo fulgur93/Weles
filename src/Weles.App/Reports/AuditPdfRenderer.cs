@@ -268,7 +268,7 @@ public static partial class AuditPdfRenderer
                 Cell(t).Text(Labels.Of(dev.Criticality));
                 Cell(t).Text(dev.Services.Count.ToString(culture));
                 Cell(t).Text(dev.Vulnerabilities.Count(v => v.Status == FindingStatus.Open).ToString(culture));
-                Cell(t).Text(dev.RiskLevel is { } level ? $"{dev.RiskScore!.Value.ToString("0", culture)} {Labels.Of(level)}" : "—")
+                Cell(t).Text(dev.RiskLevel is { } level ? $"{(dev.RiskScore ?? 0).ToString("0", culture)} {Labels.Of(level)}" : "—")
                     .FontColor(dev.RiskLevel is { } l ? LevelColor(l) : Muted);
             }
         });
@@ -294,7 +294,7 @@ public static partial class AuditPdfRenderer
                     });
                     if (dev.RiskLevel is { } level)
                     {
-                        row.AutoItem().Text(L.F("Ryzyko {0} – {1}", dev.RiskScore!.Value.ToString("0", culture), Labels.Of(level))).Bold().FontColor(LevelColor(level));
+                        row.AutoItem().Text(L.F("Ryzyko {0} – {1}", (dev.RiskScore ?? 0).ToString("0", culture), Labels.Of(level))).Bold().FontColor(LevelColor(level));
                     }
                 });
 

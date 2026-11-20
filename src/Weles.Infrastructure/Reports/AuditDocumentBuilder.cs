@@ -52,15 +52,15 @@ public sealed class AuditDocumentBuilder(
             .Where(r => r.Result is not null).GroupBy(r => r.Id).ToDictionary(g => g.Key, g => g.First().Result!);
 
         var vulnerabilities = await db.AssetVulnerabilities.AsNoTracking()
-            .Where(v => assetIds.Contains(v.AssetId) && v.FirstDetectedAt <= end && (v.ResolvedAt == null || v.ResolvedAt > end))
+            .Where(v => assetIds.Contains(v.AssetId) && v.FirstDetectedAt <= end)
             .Select(v => new
             {
-                v.AssetId, v.Vulnerability!.CveId, v.Vulnerability.Title, v.Vulnerability.Description, v.Vulnerability.CvssScore, v.Vulnerability.Severity,
+                v.AssetId, v.ResolvedAt, v.Vulnerability!.CveId, v.Vulnerability.Title, v.Vulnerability.Description, v.Vulnerability.CvssScore, v.Vulnerability.Severity,
                 v.Vulnerability.EpssScore, v.Vulnerability.IsKnownExploited, v.MatchStatus, v.MatchConfidence, v.MatchReason, v.Port, v.Product, v.DetectedVersion, v.Status
             })
             .ToListAsync(ct);
         var findings = await db.RiskFindings.AsNoTracking()
-            .Where(f => assetIds.Contains(f.AssetId) && f.CreatedAt <= end && (f.ResolvedAt == null || f.ResolvedAt > end))
+            .Where(f => assetIds.Contains(f.AssetId) && f.CreatedAt <= end)
             .ToListAsync(ct);
 
         var devices = new List<AuditDevice>();
@@ -78,16 +78,33 @@ public sealed class AuditDocumentBuilder(
                         new AuditCertificate(c.Subject, c.Issuer, c.NotAfter, c.IsSelfSigned, c.HostnameMatches, c.TlsProtocol)).FirstOrDefault()))
                 .ToList();
 
-            var cves = asset is null ? [] : vulnerabilities.Where(v => v.AssetId == asset.Id)
-                .Select(v => new AuditVulnerability(v.CveId, v.Title ?? Shorten(v.Description, 160), v.CvssScore, v.Severity, v.EpssScore, v.IsKnownExploited,
-                    v.MatchStatus, v.MatchConfidence, v.MatchReason, v.Port, v.Product, v.DetectedVersion,
-                    // Resolved later – at audit time it was still open.
-                    v.Status == FindingStatus.Resolved ? FindingStatus.Open : v.Status))
+            // What was open at audit time comes from the assessment stored for this scan: a match or finding that was resolved
+            // and later reopened has ResolvedAt cleared, so its dates alone would show it in audits that did not see it.
+            // Accepted risks are not in the assessment – for them (and for scans assessed before risk scoring existed) the
+            // detection dates decide.
+            var assessedCves = result?.Issues.SelectMany(i => i.CveIds ?? []).ToHashSet(StringComparer.Ordinal);
+            var assessedRules = result?.Issues.Where(i => i.RuleId is not null).Select(i => (i.RuleId!, i.Port)).ToHashSet();
+            bool OpenByDates(DateTime? resolvedAt) => resolvedAt is null || resolvedAt > end;
+
+            var cves = asset is null ? [] : vulnerabilities
+                .Where(v => v.AssetId == asset.Id)
+                .Select(v => (Row: v, Status: assessedCves is null
+                    ? OpenByDates(v.ResolvedAt) ? (v.Status == FindingStatus.Accepted ? FindingStatus.Accepted : FindingStatus.Open) : (FindingStatus?)null
+                    : assessedCves.Contains(v.CveId) ? FindingStatus.Open
+                    : v.Status == FindingStatus.Accepted && OpenByDates(v.ResolvedAt) ? FindingStatus.Accepted : null))
+                .Where(x => x.Status is not null)
+                .Select(x => new AuditVulnerability(x.Row.CveId, x.Row.Title ?? Shorten(x.Row.Description, 160), x.Row.CvssScore, x.Row.Severity, x.Row.EpssScore,
+                    x.Row.IsKnownExploited, x.Row.MatchStatus, x.Row.MatchConfidence, x.Row.MatchReason, x.Row.Port, x.Row.Product, x.Row.DetectedVersion, x.Status!.Value))
                 .OrderByDescending(v => v.IsKnownExploited).ThenByDescending(v => v.CvssScore ?? 0).ThenBy(v => v.CveId, StringComparer.Ordinal).ToList();
 
-            var configuration = asset is null ? [] : findings.Where(f => f.AssetId == asset.Id)
-                .Select(f => new AuditFinding(f.RuleId, f.Title, f.Level, f.Score, f.Port, f.Evidence, f.Recommendation,
-                    f.Status == FindingStatus.Resolved ? FindingStatus.Open : f.Status))
+            var configuration = asset is null ? [] : findings
+                .Where(f => f.AssetId == asset.Id)
+                .Select(f => (Row: f, Status: assessedRules is null
+                    ? OpenByDates(f.ResolvedAt) ? (f.Status == FindingStatus.Accepted ? FindingStatus.Accepted : FindingStatus.Open) : (FindingStatus?)null
+                    : assessedRules.Contains((f.RuleId, f.Port)) ? FindingStatus.Open
+                    : f.Status == FindingStatus.Accepted && OpenByDates(f.ResolvedAt) ? FindingStatus.Accepted : null))
+                .Where(x => x.Status is not null)
+                .Select(x => new AuditFinding(x.Row.RuleId, x.Row.Title, x.Row.Level, x.Row.Score, x.Row.Port, x.Row.Evidence, x.Row.Recommendation, x.Status!.Value))
                 .OrderByDescending(f => f.Score).ThenBy(f => f.Port).ToList();
 
             var name = asset is null ? host.Hostname ?? host.IpAddress : asset.CustomName ?? asset.DisplayName;
