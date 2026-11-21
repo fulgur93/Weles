@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Weles.Core.Entities;
 using Weles.Core.Enums;
 using Weles.Core.Models;
+using Weles.Core.Networking;
 using Weles.Core.Risk;
 using Weles.Core.Rules;
 using Weles.Infrastructure.Discovery;
@@ -309,6 +310,57 @@ public class MonitoringTests
     private sealed class Networks(params AttachedNetwork[] attached) : ICurrentNetworkProvider
     {
         public IReadOnlyList<AttachedNetwork> GetAttachedNetworks() => attached;
+    }
+
+    /// <summary>
+    /// Regression (HackNation network, 2026-11-21): the interface was 10.250.192.0/20, the approved scope 10.250.192.0/24
+    /// behind the same router – every device of the scan was hidden as "another network" and the pages stayed empty.
+    /// </summary>
+    [Fact]
+    public async Task A_scope_narrower_than_the_interface_network_is_the_current_network()
+    {
+        await using var env = await SetupAsync();
+        await env.Writer.EnsureSegmentsAsync([new SegmentInfo("10.0.0.0/24", "10.0.0.1", Home, "Cisco"), new SegmentInfo("10.0.0.0/20", "10.0.0.1", Home, "Cisco")]);
+        await env.ScanAsync(TestData.Now.AddDays(-1), "quick", Home, Host("10.0.0.5", "aa:aa:aa:00:00:05", false, (22, "ssh", "OpenSSH", "8.9p1", null)));
+
+        var here = new AssetQueries(env.Db, new Networks(new AttachedNetwork("10.0.0.0/20", Home)));
+        Assert.Empty((await here.CurrentNetworkAsync()).OtherNetworkSegmentIds);
+        var context = await new NetworkQueries(env.Db, here).ContextAsync();
+        Assert.Contains(NetworkQueries.GatewayKey(Home), context.CurrentKeys);
+
+        // A different router with the same addresses is still another network.
+        var elsewhere = new AssetQueries(env.Db, new Networks(new AttachedNetwork("10.0.0.0/20", "cc:cc:cc:00:00:01")));
+        Assert.NotEmpty((await elsewhere.CurrentNetworkAsync()).OtherNetworkSegmentIds);
+        Assert.False(NetworkIdentity.CidrsOverlap("10.0.16.0/24", "10.0.0.0/20"));
+        Assert.True(NetworkIdentity.CidrsOverlap("10.0.15.0/24", "10.0.0.0/20"));
+    }
+
+    /// <summary>
+    /// Regression (2026-11-21): the home scope 192.168.0.0/24 was started by hand on a conference network – the same
+    /// addresses belong to someone else there. A manual scan behind another router needs the user's explicit confirmation.
+    /// </summary>
+    [Fact]
+    public async Task A_manual_scan_on_another_network_needs_confirmation()
+    {
+        await using var env = await SetupAsync();
+        await env.ScanAsync(TestData.Now.AddDays(-1), "quick", Home, Host("10.0.0.5", "aa:aa:aa:00:00:05", false));
+        ScanTargetService Service(params AttachedNetwork[] attached) => new(env.Db, new ScanCoordinator(TimeProvider.System), Options.Create(new ScanOptions()),
+            TimeProvider.System, NullLogger<ScanTargetService>.Instance, new Networks(attached));
+
+        var elsewhere = await Service(new AttachedNetwork("10.0.0.0/20", "cc:cc:cc:00:00:01")).StartScanAsync(env.Target.Id, "quick");
+        Assert.False(elsewhere.Success);
+        Assert.True(elsewhere.OtherNetwork);
+        Assert.Contains("innej sieci", elsewhere.Errors[0]);
+
+        var confirmed = await Service(new AttachedNetwork("10.0.0.0/20", "cc:cc:cc:00:00:01")).StartScanAsync(env.Target.Id, "quick", allowOtherNetwork: true);
+        Assert.True(confirmed.Success);
+        await using (var db = env.Db.CreateDbContext())
+        {
+            await db.Scans.Where(x => x.Id == confirmed.Id).ExecuteUpdateAsync(u => u.SetProperty(x => x.Status, ScanStatus.Cancelled));
+        }
+
+        // Home router, or a gateway WELES cannot identify (empty ARP cache): no question asked.
+        Assert.True((await Service(new AttachedNetwork("10.0.0.0/24", Home)).StartScanAsync(env.Target.Id, "quick")).Success);
     }
 
     [Fact]

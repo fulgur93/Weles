@@ -6,12 +6,15 @@ using Weles.Core.Entities;
 using Weles.Core.Enums;
 using Weles.Core.Networking;
 using Weles.Infrastructure.Database;
+using Weles.Infrastructure.Discovery;
 
 namespace Weles.Infrastructure.Scanning;
 
 public sealed record ScanTargetInput(string Name, string? Description, string Include, string? Exclude, bool AllowPublicAddresses);
 
-public sealed record OperationResult(bool Success, IReadOnlyList<string> Errors, int? Id = null)
+/// <param name="OtherNetwork">The scan was refused because this computer is now on another network (another router) –
+/// the user may confirm and start it anyway.</param>
+public sealed record OperationResult(bool Success, IReadOnlyList<string> Errors, int? Id = null, bool OtherNetwork = false)
 {
     public static OperationResult Ok(int? id = null) => new(true, [], id);
     public static OperationResult Fail(params string[] errors) => new(false, errors);
@@ -35,7 +38,8 @@ public sealed class ScanTargetService(
     ScanCoordinator coordinator,
     IOptions<ScanOptions> options,
     TimeProvider timeProvider,
-    ILogger<ScanTargetService> logger)
+    ILogger<ScanTargetService> logger,
+    ICurrentNetworkProvider? currentNetwork = null)
 {
     public async Task<IReadOnlyList<ScanTargetSummary>> ListAsync(CancellationToken ct = default)
     {
@@ -149,7 +153,9 @@ public sealed class ScanTargetService(
         return deleted == 1 ? OperationResult.Ok() : OperationResult.Fail("Zakres nie istnieje.");
     }
 
-    public async Task<OperationResult> StartScanAsync(int targetId, string portSpecification, ScanTrigger trigger = ScanTrigger.Manual, CancellationToken ct = default)
+    /// <param name="allowOtherNetwork">The user confirmed scanning although the router differs from the scope's last scan.</param>
+    public async Task<OperationResult> StartScanAsync(int targetId, string portSpecification, ScanTrigger trigger = ScanTrigger.Manual, CancellationToken ct = default,
+        bool allowOtherNetwork = false)
     {
         if (!PortSpecification.TryParse(portSpecification, out _, out var portError)) return OperationResult.Fail(portError!);
 
@@ -158,6 +164,11 @@ public sealed class ScanTargetService(
         if (target is null) return OperationResult.Fail("Zakres nie istnieje.");
         if (!target.IsApproved) return OperationResult.Fail("Zakres nie jest zatwierdzony. Zatwierdź go przed uruchomieniem skanu.");
         if (await HasActiveScanAsync(db, targetId, ct)) return OperationResult.Fail("Dla tego zakresu trwa już skan.");
+        if (!allowOtherNetwork && await OtherNetworkAsync(db, target, ct) is { } other)
+        {
+            logger.LogWarning("Scan of scope {TargetId} refused: this computer is on another network than the scope's last scan", targetId);
+            return new OperationResult(false, [other], OtherNetwork: true);
+        }
 
         var scan = new Scan
         {
@@ -175,6 +186,24 @@ public sealed class ScanTargetService(
     {
         logger.LogInformation("Stop requested for scan {ScanId}", scanId);
         return coordinator.RequestStop(scanId);
+    }
+
+    /// <summary>
+    /// A local scope was last scanned behind a known router, and this computer is now behind another one (e.g. the home
+    /// scope 192.168.0.0/24 started on a conference network): the same addresses belong to someone else here. Unknown
+    /// gateways (empty ARP cache) and Internet scopes are not judged.
+    /// </summary>
+    private async Task<string?> OtherNetworkAsync(WelesDbContext db, ScanTarget target, CancellationToken ct)
+    {
+        if (currentNetwork is null || target.IsExternal) return null;
+        var last = await db.Scans.AsNoTracking()
+            .Where(s => s.ScanTargetId == target.Id && s.Status == ScanStatus.Completed && s.NetworkFingerprint != null)
+            .OrderByDescending(s => s.StartedAt).Select(s => s.NetworkFingerprint).FirstOrDefaultAsync(ct);
+        if (last is null) return null;
+        var gateways = currentNetwork.GetAttachedNetworks().Where(n => n.GatewayMac is not null).ToList();
+        if (gateways.Count == 0 || gateways.Any(n => NetworkIdentity.SameNetwork(n.GatewayMac, last))) return null;
+        return $"Komputer jest teraz w innej sieci (router {gateways[0].GatewayMac}) niż ta, w której zakres „{target.Name}” był skanowany (router {last.Split(',')[0]}). "
+               + "Te same adresy należą tu do kogoś innego – skanuj tylko sieć, do której masz uprawnienia.";
     }
 
     private static Task<bool> HasActiveScanAsync(WelesDbContext db, int targetId, CancellationToken ct) =>

@@ -105,13 +105,16 @@ public sealed class AssetQueries(IDbContextFactory<WelesDbContext> contextFactor
         var attached = currentNetwork?.GetAttachedNetworks() ?? [];
         await using var db = await contextFactory.CreateDbContextAsync(ct);
         var segments = await db.NetworkSegments.AsNoTracking().Select(s => new { s.Id, s.Cidr, s.Name, s.GatewayMac, s.GatewayVendor }).ToListAsync(ct);
-        bool IsAttached(string cidr, string? mac) => attached.Any(n => n.Cidr == cidr && NetworkIdentity.SameNetwork(n.GatewayMac, mac));
+        // The same router and overlapping addresses: a scope narrower than the interface network (a /24 scanned inside
+        // a /20) is still this network – an exact CIDR match hid every device of such a scope as "another network".
+        bool IsAttached(string cidr, string? mac) => attached.Any(n => NetworkIdentity.CidrsOverlap(n.Cidr, cidr) && NetworkIdentity.SameNetwork(n.GatewayMac, mac));
 
         var others = attached.Count == 0
             ? new HashSet<int>()
             : segments.Where(s => s.GatewayMac is not null && !IsAttached(s.Cidr, s.GatewayMac)).Select(s => s.Id).ToHashSet();
         var description = string.Join(", ", attached.Select(n =>
-            segments.FirstOrDefault(s => s.Cidr == n.Cidr && s.GatewayMac is not null && NetworkIdentity.SameNetwork(n.GatewayMac, s.GatewayMac)) is { } seg
+            segments.Where(s => s.GatewayMac is not null && NetworkIdentity.CidrsOverlap(s.Cidr, n.Cidr) && NetworkIdentity.SameNetwork(n.GatewayMac, s.GatewayMac))
+                .OrderByDescending(s => s.Cidr == n.Cidr).FirstOrDefault() is { } seg
                 ? NetworkNaming.Label(seg.Cidr, seg.Name, seg.GatewayVendor, seg.GatewayMac)
                 : NetworkNaming.Label(n.Cidr, null, null, n.GatewayMac)));
         return new CurrentNetworkView(others, description);

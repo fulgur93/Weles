@@ -17,4 +17,16 @@ public static class NetworkIdentity
     /// <summary>Unknown on either side means "cannot tell apart" – the networks are treated as the same.</summary>
     public static bool SameNetwork(string? a, string? b) =>
         a is null || b is null || a.Split(',').Intersect(b.Split(',')).Any();
+
+    /// <summary>
+    /// Two CIDRs share addresses – e.g. the interface network 10.250.192.0/20 and a scanned scope 10.250.192.0/24 behind
+    /// the same router. Unparseable values never overlap.
+    /// </summary>
+    public static bool CidrsOverlap(string a, string b)
+    {
+        if (a == b) return true;
+        if (!TargetParser.TryParse(a, out var x, out _) || !TargetParser.TryParse(b, out var y, out _)) return false;
+        if ((x.FullIpv4Range ?? x.Ipv4Range) is not { } r1 || (y.FullIpv4Range ?? y.Ipv4Range) is not { } r2) return false;
+        return r1.Start <= r2.End && r2.Start <= r1.End;
+    }
 }

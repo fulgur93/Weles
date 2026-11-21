@@ -111,7 +111,15 @@
     <div class="card-title"><Icon Name="lock" /> @L.T("Zakresy skanowania")</div>
     @if (_message is not null)
     {
-        <div class="alert @(_messageIsError ? "alert-bad" : "alert-ok")">@_message</div>
+        <div class="alert @(_messageIsError ? "alert-bad" : "alert-ok")">@_message
+            @if (_otherNetworkTarget is { } other)
+            {
+                <div class="actions">
+                    <button class="btn btn-danger btn-sm" disabled="@_busy" @onclick="() => StartAsync(other, allowOtherNetwork: true)">@L.T("Mam uprawnienia do tej sieci – skanuj mimo to")</button>
+                    <button class="btn btn-ghost btn-sm" @onclick="() => { _otherNetworkTarget = null; _message = null; }">@L.T("Anuluj")</button>
+                </div>
+            }
+        </div>
     }
     @if (_targets is null)
     {
@@ -244,6 +252,8 @@
     private bool _busy;
     private string? _message;
     private bool _messageIsError;
+    /// <summary>Scope whose scan was refused because the computer is on another network – waits for the user's confirmation.</summary>
+    private int? _otherNetworkTarget;
     private readonly Dictionary<int, string> _profiles = [];
     private readonly Dictionary<int, string> _customPorts = [];
 
@@ -353,11 +363,12 @@
         await ReloadAsync();
     }
 
-    private async Task StartAsync(int id)
+    private async Task StartAsync(int id, bool allowOtherNetwork = false)
     {
         var spec = _profiles[id] == "custom" ? _customPorts[id] : _profiles[id];
         _busy = true;
-        var result = await Targets.StartScanAsync(id, spec);
+        _otherNetworkTarget = null;
+        var result = await Targets.StartScanAsync(id, spec, allowOtherNetwork: allowOtherNetwork);
         _busy = false;
         if (result.Success)
         {
@@ -366,6 +377,7 @@
         }
 
         Show(string.Join(" ", result.Errors.Select(L.Message)), true);
+        if (result.OtherNetwork) _otherNetworkTarget = id;
     }
 
     private void Show(string message, bool isError = false)
