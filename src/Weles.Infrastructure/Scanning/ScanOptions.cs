@@ -8,6 +8,12 @@ public sealed class ScanOptions
     /// <summary>Largest scope one scan may cover (a /16 – the AGH requirement is above 10 000 addresses). Scopes still need approval.</summary>
     public int MaxHostsPerScan { get; set; } = 65536;
 
+    /// <summary>Scopes larger than this are scanned in subgroups (resume points, pause at a time window's end, throughput).</summary>
+    public int SubgroupThreshold { get; set; } = 1024;
+
+    /// <summary>Size of the first subgroup; the next ones follow the measured speed (about a minute each, 64–4096 addresses).</summary>
+    public int SubgroupInitialSize { get; set; } = 256;
+
     /// <summary>Upper bound of simultaneously open TCP connections across the whole scan.</summary>
     public int MaxConcurrentConnections { get; set; } = 200;
 

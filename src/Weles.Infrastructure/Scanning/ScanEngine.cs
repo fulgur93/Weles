@@ -32,7 +32,8 @@ public sealed class ScanEngine(
         var scan = await db.Scans.Include(s => s.ScanTarget!).ThenInclude(t => t.Entries).SingleAsync(s => s.Id == scanId, CancellationToken.None);
         var target = scan.ScanTarget!;
 
-        if (scan.Status != ScanStatus.Pending)
+        var resuming = scan.Status == ScanStatus.Paused;
+        if (scan.Status != ScanStatus.Pending && !resuming)
         {
             logger.LogWarning("Scan {ScanId} is in state {Status} and will not be started", scanId, scan.Status);
             return;
@@ -46,22 +47,31 @@ public sealed class ScanEngine(
 
         if (cancellationToken.IsCancellationRequested)
         {
-            await FinishAsync(db, scan, ScanStatus.Cancelled, "Skan zatrzymany przed rozpoczęciem.");
+            if (!resuming) await FinishAsync(db, scan, ScanStatus.Cancelled, 0, "Skan zatrzymany przed rozpoczęciem.");
             return;
         }
 
         scan.Status = ScanStatus.Running;
-        scan.StartedAt = Now;
-        scan.SettingsJson = JsonSerializer.Serialize(new
+        if (resuming)
         {
-            options.MaxConcurrentConnections, options.ConnectionsPerSecond, options.ConnectTimeoutMs,
-            options.ParallelHostDiscovery, options.ParallelHostScans, options.UseIcmp
-        });
-        scan.ScopeSnapshot = JsonSerializer.Serialize(target.Entries.Select(e => new { e.Value, e.IsExclusion }));
-        await db.SaveChangesAsync(CancellationToken.None);
+            // Same scope snapshot and settings as the first part – the resume point refers to that address list.
+            await db.SaveChangesAsync(CancellationToken.None);
+            await writer.AddEventAsync(scanId, ScanEventLevel.Info, $"Wznowiono skan zakresu „{target.Name}” od adresu {scan.CompletedAddresses + 1} z {scan.HostsTargeted}.");
+        }
+        else
+        {
+            scan.StartedAt = Now;
+            scan.SettingsJson = JsonSerializer.Serialize(new
+            {
+                options.MaxConcurrentConnections, options.ConnectionsPerSecond, options.ConnectTimeoutMs,
+                options.ParallelHostDiscovery, options.ParallelHostScans, options.UseIcmp
+            });
+            scan.ScopeSnapshot = JsonSerializer.Serialize(target.Entries.Select(e => new { e.Value, e.IsExclusion }));
+            await db.SaveChangesAsync(CancellationToken.None);
 
-        logger.LogInformation("Scan {ScanId} started for scope {Target} (ports: {Ports})", scanId, target.Name, scan.PortSpecification);
-        await writer.AddEventAsync(scanId, ScanEventLevel.Info, $"Rozpoczęto skan zakresu „{target.Name}” (porty: {scan.PortSpecification}).");
+            logger.LogInformation("Scan {ScanId} started for scope {Target} (ports: {Ports})", scanId, target.Name, scan.PortSpecification);
+            await writer.AddEventAsync(scanId, ScanEventLevel.Info, $"Rozpoczęto skan zakresu „{target.Name}” (porty: {scan.PortSpecification}).");
+        }
 
         try
         {
@@ -69,7 +79,8 @@ public sealed class ScanEngine(
             var sink = new DatabaseSink(writer, db, scan);
             var outcome = await scanner.RunAsync(
                 new NetworkScanRequest(target.Entries.Select(e => new ScopeEntry(e.Value, e.IsExclusion)).ToList(), target.AllowPublicAddresses, scan.PortSpecification,
-                    await Fingerprint.SignatureService.CustomPathsAsync(db, CancellationToken.None)),
+                    await Fingerprint.SignatureService.CustomPathsAsync(db, CancellationToken.None), scan.CompletedAddresses,
+                    await ExpectedAddressesAsync(db, scan, CancellationToken.None)),
                 progress, sink, cancellationToken);
             if (outcome.Error is not null)
             {
@@ -77,20 +88,54 @@ public sealed class ScanEngine(
                 return;
             }
 
-            scan.HostsProbed = progress.HostsProbed;
-            await FinishAsync(db, scan, ScanStatus.Completed,
-                $"Skan zakończony: {progress.HostsAlive} hostów, {progress.OpenPorts} otwartych portów, {progress.ServicesIdentified} rozpoznanych usług.");
+            if (outcome.Paused)
+            {
+                await db.Entry(scan).ReloadAsync(CancellationToken.None);
+                scan.Status = ScanStatus.Paused;
+                scan.HostsProbed = progress.HostsProbed;
+                await db.SaveChangesAsync(CancellationToken.None);
+                logger.LogInformation("Scan {ScanId} paused after {Done} of {Total} addresses", scanId, scan.CompletedAddresses, scan.HostsTargeted);
+                return;
+            }
+
+            if (progress.HostsAlive == 0 && progress.HostsProbed > 0)
+            {
+                await writer.AddEventAsync(scanId, ScanEventLevel.Warning,
+                    "Nie wykryto żadnych aktywnych hostów. Jeśli zakres jest w innej sieci niż komputer z WELES, wyniki będą puste – sprawdź zakres w Wykrywaniu sieci.");
+            }
+
+            if (resuming)
+            {
+                await FinishAsync(db, scan, ScanStatus.Completed, progress.HostsProbed, $"Skan zakończony po wznowieniu: w całym zakresie {scan.HostsAlive} hostów, {scan.OpenPorts} otwartych portów.");
+            }
+            else
+            {
+                await FinishAsync(db, scan, ScanStatus.Completed, progress.HostsProbed,
+                    $"Skan zakończony: {progress.HostsAlive} hostów, {progress.OpenPorts} otwartych portów, {progress.ServicesIdentified} rozpoznanych usług.");
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            scan.HostsProbed = progress.HostsProbed;
-            await FinishAsync(db, scan, ScanStatus.Cancelled, $"Skan zatrzymany. Zachowano wyniki dla {progress.HostsCompleted} hostów.");
+            await FinishAsync(db, scan, ScanStatus.Cancelled, progress.HostsProbed, $"Skan zatrzymany. Zachowano wyniki dla {progress.HostsCompleted} hostów.");
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Scan {ScanId} failed", scanId);
-            await FailAsync(db, scan, $"Błąd skanowania: {ex.Message}");
+            await FailAsync(db, scan, $"Błąd skanowania: {ex.Message}", progress.HostsProbed);
         }
+    }
+
+    /// <summary>
+    /// Addresses where hosts answered in earlier completed scans of this scope on the same network – silent ones get a
+    /// second probe (unstable hosts). Bounded, so a huge history does not slow the scan down.
+    /// </summary>
+    private static async Task<IReadOnlySet<IPAddress>> ExpectedAddressesAsync(WelesDbContext db, Scan scan, CancellationToken ct)
+    {
+        var previous = await db.Scans.AsNoTracking()
+            .Where(s => s.ScanTargetId == scan.ScanTargetId && s.Id != scan.Id && s.Status == ScanStatus.Completed)
+            .OrderByDescending(s => s.StartedAt).Select(s => s.Id).Take(5).ToListAsync(ct);
+        var ips = await db.DiscoveredHosts.AsNoTracking().Where(h => previous.Contains(h.ScanId)).Select(h => h.IpAddress).Distinct().Take(4096).ToListAsync(ct);
+        return ips.Select(ip => IPAddress.TryParse(ip, out var a) ? a : null).OfType<IPAddress>().ToHashSet();
     }
 
     /// <summary>Gateway MAC of every local interface whose network contains part of the scope.</summary>
@@ -127,9 +172,10 @@ public sealed class ScanEngine(
         };
     }
 
-    private async Task FinishAsync(WelesDbContext db, Scan scan, ScanStatus status, string message)
+    private async Task FinishAsync(WelesDbContext db, Scan scan, ScanStatus status, int hostsProbed, string message)
     {
         await db.Entry(scan).ReloadAsync(CancellationToken.None); // counters were updated by the writer
+        scan.HostsProbed = hostsProbed; // after the reload – otherwise the in-memory value would be lost
         scan.Status = status;
         scan.CompletedAt = Now;
         await db.SaveChangesAsync(CancellationToken.None);
@@ -137,9 +183,10 @@ public sealed class ScanEngine(
         logger.LogInformation("Scan {ScanId} finished with status {Status}: {HostsAlive} hosts, {OpenPorts} open ports", scan.Id, status, scan.HostsAlive, scan.OpenPorts);
     }
 
-    private async Task FailAsync(WelesDbContext db, Scan scan, string message)
+    private async Task FailAsync(WelesDbContext db, Scan scan, string message, int? hostsProbed = null)
     {
         await db.Entry(scan).ReloadAsync(CancellationToken.None);
+        if (hostsProbed is { } probed) scan.HostsProbed = probed;
         scan.Status = ScanStatus.Failed;
         scan.ErrorMessage = message.Length > 2000 ? message[..2000] : message;
         scan.CompletedAt = Now;
@@ -164,11 +211,18 @@ public sealed class ScanEngine(
 
         public async Task NetworkAsync(string? fingerprint, IReadOnlyList<SegmentInfo> segments)
         {
-            scan.NetworkFingerprint = fingerprint;
+            scan.NetworkFingerprint ??= fingerprint;
             await db.SaveChangesAsync(CancellationToken.None);
             await writer.EnsureSegmentsAsync(segments);
         }
 
         public Task HostAsync(HostScanResult host) => writer.SaveHostAsync(scan.Id, host);
+
+        public async Task SubgroupCompletedAsync(int completedAddresses)
+        {
+            await db.Entry(scan).ReloadAsync(CancellationToken.None); // counters were updated by the writer
+            scan.CompletedAddresses = completedAddresses;
+            await db.SaveChangesAsync(CancellationToken.None);
+        }
     }
 }

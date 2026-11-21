@@ -38,6 +38,16 @@ public sealed class ScanCoordinator(TimeProvider timeProvider)
         return _progress.ContainsKey(scanId);
     }
 
+    /// <summary>Asks a running scan to stop after its current subgroup and wait (status "paused") for a resume.</summary>
+    public bool RequestPause(int scanId, string reason = "na żądanie użytkownika")
+    {
+        if (!_running.ContainsKey(scanId) || !_progress.TryGetValue(scanId, out var progress)) return false;
+        progress.PauseReason = reason;
+        progress.PauseRequested = true;
+        progress.Activity = "Wstrzymywanie po bieżącej podgrupie…";
+        return true;
+    }
+
     public bool IsStopRequested(int scanId) => _stopRequested.ContainsKey(scanId);
 
     public ScanProgress? GetProgress(int scanId) => _progress.GetValueOrDefault(scanId);

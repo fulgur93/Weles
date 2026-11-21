@@ -379,7 +379,7 @@ public class MonitoringTests
         async Task<(int Started, string? Result)> Run(params AttachedNetwork[] attached)
         {
             await using (var db = env.Db.CreateDbContext()) await db.ScanSchedules.ExecuteUpdateAsync(u => u.SetProperty(s => s.NextRunAt, DateTime.UtcNow.AddMinutes(-1)));
-            var started = await new ScanScheduler(env.Db, targets, new Networks(attached), later, NullLogger<ScanScheduler>.Instance).RunDueAsync();
+            var started = await new ScanScheduler(env.Db, targets, coordinator, new Networks(attached), later, NullLogger<ScanScheduler>.Instance).RunDueAsync();
             return (started, (await schedules.ByTargetAsync())[env.Target.Id].LastResult);
         }
 

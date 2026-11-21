@@ -11,7 +11,10 @@ namespace Weles.Infrastructure.Scanning;
 
 /// <summary>What one scan should do: the approved scope and the ports.</summary>
 /// <param name="WebPaths">Extra safe paths custom signatures need.</param>
-public sealed record NetworkScanRequest(IReadOnlyList<ScopeEntry> Entries, bool AllowPublicAddresses, string PortSpecification, IReadOnlyList<string>? WebPaths = null);
+/// <param name="ResumeFrom">Addresses of the scope already processed by this scan (a paused scan continues after them).</param>
+/// <param name="ExpectedAddresses">Addresses where hosts answered in earlier scans – measured again when silent (unstable hosts).</param>
+public sealed record NetworkScanRequest(IReadOnlyList<ScopeEntry> Entries, bool AllowPublicAddresses, string PortSpecification, IReadOnlyList<string>? WebPaths = null,
+    int ResumeFrom = 0, IReadOnlySet<IPAddress>? ExpectedAddresses = null);
 
 /// <summary>Where a scan delivers what it finds – the central database (<see cref="ScanEngine"/>) or a remote agent's upload.</summary>
 public interface IScanSink
@@ -25,10 +28,14 @@ public interface IScanSink
     Task NetworkAsync(string? fingerprint, IReadOnlyList<SegmentInfo> segments);
 
     Task HostAsync(HostScanResult host);
+
+    /// <summary>A subgroup is done: <paramref name="completedAddresses"/> of the scope are processed (the resume point).</summary>
+    Task SubgroupCompletedAsync(int completedAddresses) => Task.CompletedTask;
 }
 
 /// <param name="Error">Why the scan could not run (invalid scope or ports); null when it completed.</param>
-public sealed record NetworkScanOutcome(string? Error);
+/// <param name="Paused">Stopped at a subgroup boundary because the time window closed; resume later.</param>
+public sealed record NetworkScanOutcome(string? Error, bool Paused = false);
 
 /// <summary>
 /// The scanning pipeline without any storage: resolve scope → host discovery (ICMP, TCP, ARP, mDNS) → ports → service
@@ -37,6 +44,11 @@ public sealed record NetworkScanOutcome(string? Error);
 /// </summary>
 public sealed class NetworkScanner(OuiDatabase oui, LocalNetworkDiscovery localNetwork, ScanOptions options, ILogger logger)
 {
+    public const int MinBatchSize = 64;
+    /// <summary>Upper bound of a subgroup – keeps resume points and pauses frequent on fast networks.</summary>
+    public const int MaxBatchSize = 1024;
+    public const double TargetBatchSeconds = 60;
+
     public async Task<NetworkScanOutcome> RunAsync(NetworkScanRequest request, ScanProgress progress, IScanSink sink, CancellationToken cancellationToken)
     {
         progress.Phase = ScanPhase.ResolvingScope;
@@ -76,81 +88,167 @@ public sealed class NetworkScanner(OuiDatabase oui, LocalNetworkDiscovery localN
             ? DiscoverMdnsSafelyAsync(localAddresses, options.MdnsListenMs, cancellationToken)
             : Task.FromResult<IReadOnlyDictionary<IPAddress, MdnsHost>>(new Dictionary<IPAddress, MdnsHost>());
 
-        // Phase 1: which hosts exist?
-        progress.Phase = ScanPhase.HostDiscovery;
-        progress.SetHostsTotal(scope.Addresses.Count);
-        progress.Activity = "Wykrywanie aktywnych hostów (ICMP, TCP)";
-        var alive = new ConcurrentDictionary<IPAddress, LivenessResult>();
-        await Parallel.ForEachAsync(scope.Addresses, new ParallelOptions { MaxDegreeOfParallelism = options.ParallelHostDiscovery, CancellationToken = cancellationToken },
-            async (address, ct) =>
-            {
-                var result = await NetworkProbe.CheckLivenessAsync(address, options, gate, ct);
-                if (result.IsAlive) alive[address] = result;
-                progress.HostProbed(result.IsAlive);
-            });
+        // Subgroups ("podgrupy"): large scopes are scanned piece by piece. The size follows the measured speed (about one
+        // minute per subgroup), each finished subgroup is a resume point, and a closing time window pauses the scan between
+        // subgroups. Scopes up to one subgroup behave exactly like a single pass.
+        var all = scope.Addresses;
+        var scopeSet = all.ToHashSet();
+        var start = Math.Clamp(request.ResumeFrom, 0, all.Count);
+        var batched = all.Count > options.SubgroupThreshold;
+        progress.Batched = batched;
+        progress.SetHostsTotal(all.Count);
+        progress.AddressesDone = start;
+        progress.ResumedFrom = start;
+        if (start > 0) await sink.EventAsync(ScanEventLevel.Info, $"Wznowienie skanu od adresu {start + 1} z {all.Count} (wcześniejsze podgrupy są już zapisane).");
 
-        // Hosts that answer nothing but still resolved via ARP exist on the local segment (e.g. firewalled devices).
-        var arp = ArpTable.Read();
-        var scopeSet = scope.Addresses.ToHashSet();
-        var arpOnly = 0;
-        foreach (var (address, _) in arp)
-        {
-            if (scopeSet.Contains(address) && !alive.ContainsKey(address))
-            {
-                alive[address] = new LivenessResult(true, DiscoveryMethod.Arp, null, null, []);
-                arpOnly++;
-            }
-        }
-
-        var fingerprint = ScanEngine.NetworkFingerprint(interfaces, scope.Addresses, arp);
-        var scopeGatewayVendor = fingerprint is { } fp ? oui.Lookup(fp.Split(',')[0]) : null;
-        await sink.NetworkAsync(fingerprint,
-            request.Entries.Where(e => !e.IsExclusion && TargetParser.TryParse(e.Value, out var t, out _) && t.Kind == ScanTargetEntryKind.Cidr)
-                .Select(e => new SegmentInfo(e.Value, null, fingerprint, scopeGatewayVendor))
-                .Concat(interfaces.Select(i =>
-                {
-                    var mac = i.Gateway is not null && IPAddress.TryParse(i.Gateway, out var gw) ? arp.GetValueOrDefault(gw)?.ToLowerInvariant() : null;
-                    return new SegmentInfo(i.NetworkCidr, i.Gateway, mac, oui.Lookup(mac));
-                }))
-                .ToList());
-        var localMacs = localNetwork.GetLocalMacAddresses();
-
-        var scopeMdns = (await mdnsTask).Where(m => scopeSet.Contains(m.Key)).ToDictionary(m => m.Key, m => m.Value);
-        var mdnsOnly = 0;
-        foreach (var (address, host) in scopeMdns)
-        {
-            if (alive.TryGetValue(address, out var known))
-            {
-                alive[address] = known with { Methods = known.Methods | DiscoveryMethod.Mdns };
-            }
-            else
-            {
-                alive[address] = new LivenessResult(true, DiscoveryMethod.Mdns, null, null, []);
-                mdnsOnly++;
-            }
-        }
-
-        if (scopeMdns.Count > 0)
-        {
-            await sink.EventAsync(ScanEventLevel.Info, $"mDNS: {scopeMdns.Count} urządzeń w zakresie ogłasza {scopeMdns.Sum(m => m.Value.Services.Count)} usług.");
-        }
-
-        progress.AddAlive(arpOnly + mdnsOnly);
-        await sink.EventAsync(ScanEventLevel.Info,
-            $"Wykrywanie hostów zakończone: {alive.Count} aktywnych z {scope.Addresses.Count} adresów" + (arpOnly > 0 ? $" (w tym {arpOnly} wyłącznie z tablicy ARP)." : "."));
-
-        // Phase 2: ports and services per live host.
-        progress.Phase = ScanPhase.PortScan;
-        progress.SetPortsTotal(alive.Sum(a => ports.Count + (scopeMdns.TryGetValue(a.Key, out var m) ? m.Services.Count(s => s.Port is not null) : 0)));
         var prober = new ServiceProber(options, request.WebPaths);
-        await Parallel.ForEachAsync(alive.OrderBy(a => Ipv4Sort(a.Key)), new ParallelOptions { MaxDegreeOfParallelism = options.ParallelHostScans, CancellationToken = cancellationToken },
-            async (entry, ct) =>
+        var localMacs = localNetwork.GetLocalMacAddresses();
+        IReadOnlyDictionary<IPAddress, MdnsHost>? scopeMdns = null;
+        string? fingerprint = null;
+        var networkReported = false;
+        var totalAlive = 0;
+        var totalArpOnly = 0;
+        var batchSize = batched ? Math.Max(1, options.SubgroupInitialSize) : all.Count;
+        var subgroup = 0;
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        for (var index = start; index < all.Count;)
+        {
+            if (progress.PauseRequested)
             {
-                var result = await ScanHostAsync(entry.Key, entry.Value, ports, arp, gateways, localMachine, localMacs, scopeMdns.GetValueOrDefault(entry.Key),
-                    scopeNames.GetValueOrDefault(entry.Key), prober, gate, progress, ct);
-                await sink.HostAsync(result);
-                progress.HostCompleted();
-            });
+                await sink.EventAsync(ScanEventLevel.Info, $"Skan wstrzymany po {index} z {all.Count} adresów – {progress.PauseReason ?? "na żądanie"}.");
+                return new NetworkScanOutcome(null, Paused: true);
+            }
+
+            subgroup++;
+            var batch = all.Skip(index).Take(batchSize).ToList();
+            progress.BeginSubgroup(subgroup, batch.Count);
+            var batchStarted = watch.Elapsed;
+
+            // Phase 1: which hosts exist?
+            progress.Phase = ScanPhase.HostDiscovery;
+            progress.Activity = batched ? $"Podgrupa {subgroup}: wykrywanie hostów ({batch.Count} adresów)" : "Wykrywanie aktywnych hostów (ICMP, TCP)";
+            var alive = new ConcurrentDictionary<IPAddress, LivenessResult>();
+            await Parallel.ForEachAsync(batch, new ParallelOptions { MaxDegreeOfParallelism = options.ParallelHostDiscovery, CancellationToken = cancellationToken },
+                async (address, ct) =>
+                {
+                    var result = await NetworkProbe.CheckLivenessAsync(address, options, gate, ct);
+                    if (result.IsAlive) alive[address] = result;
+                    progress.HostProbed(result.IsAlive);
+                });
+
+            // Hosts that answered in earlier scans but not now are measured once more – unstable hosts often answer late.
+            if (request.ExpectedAddresses is { Count: > 0 } expected)
+            {
+                var silent = batch.Where(a => expected.Contains(a) && !alive.ContainsKey(a)).ToList();
+                if (silent.Count > 0)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+                    var recovered = 0;
+                    await Parallel.ForEachAsync(silent, new ParallelOptions { MaxDegreeOfParallelism = options.ParallelHostDiscovery, CancellationToken = cancellationToken },
+                        async (address, ct) =>
+                        {
+                            var retry = await NetworkProbe.CheckLivenessAsync(address, options, gate, ct);
+                            if (!retry.IsAlive) return;
+                            alive[address] = retry;
+                            Interlocked.Increment(ref recovered);
+                            progress.AddAlive(1);
+                        });
+                    await sink.EventAsync(ScanEventLevel.Info, $"Ponowny pomiar {silent.Count} hostów, które odpowiadały we wcześniejszych skanach: odpowiedziało {recovered}.");
+                }
+            }
+
+            // Hosts that answer nothing but still resolved via ARP exist on the local segment (e.g. firewalled devices).
+            var arp = ArpTable.Read();
+            var batchSet = batch.ToHashSet();
+            foreach (var (address, _) in arp)
+            {
+                if (batchSet.Contains(address) && !alive.ContainsKey(address))
+                {
+                    alive[address] = new LivenessResult(true, DiscoveryMethod.Arp, null, null, []);
+                    totalArpOnly++;
+                    progress.AddAlive(1);
+                }
+            }
+
+            if (!networkReported)
+            {
+                networkReported = true;
+                fingerprint = ScanEngine.NetworkFingerprint(interfaces, all, arp);
+                var scopeGatewayVendor = fingerprint is { } fp ? oui.Lookup(fp.Split(',')[0]) : null;
+                await sink.NetworkAsync(fingerprint,
+                    request.Entries.Where(e => !e.IsExclusion && TargetParser.TryParse(e.Value, out var t, out _) && t.Kind == ScanTargetEntryKind.Cidr)
+                        .Select(e => new SegmentInfo(e.Value, null, fingerprint, scopeGatewayVendor))
+                        .Concat(interfaces.Select(i =>
+                        {
+                            var mac = i.Gateway is not null && IPAddress.TryParse(i.Gateway, out var gw) ? arp.GetValueOrDefault(gw)?.ToLowerInvariant() : null;
+                            return new SegmentInfo(i.NetworkCidr, i.Gateway, mac, oui.Lookup(mac));
+                        }))
+                        .ToList());
+            }
+
+            if (scopeMdns is null)
+            {
+                scopeMdns = (await mdnsTask).Where(m => scopeSet.Contains(m.Key)).ToDictionary(m => m.Key, m => m.Value);
+                if (scopeMdns.Count > 0)
+                {
+                    await sink.EventAsync(ScanEventLevel.Info, $"mDNS: {scopeMdns.Count} urządzeń w zakresie ogłasza {scopeMdns.Sum(m => m.Value.Services.Count)} usług.");
+                }
+            }
+
+            foreach (var (address, host) in scopeMdns.Where(m => batchSet.Contains(m.Key)))
+            {
+                if (alive.TryGetValue(address, out var known))
+                {
+                    alive[address] = known with { Methods = known.Methods | DiscoveryMethod.Mdns };
+                }
+                else
+                {
+                    alive[address] = new LivenessResult(true, DiscoveryMethod.Mdns, null, null, []);
+                    progress.AddAlive(1);
+                }
+            }
+
+            totalAlive += alive.Count;
+            if (!batched)
+            {
+                await sink.EventAsync(ScanEventLevel.Info,
+                    $"Wykrywanie hostów zakończone: {alive.Count} aktywnych z {all.Count} adresów" + (totalArpOnly > 0 ? $" (w tym {totalArpOnly} wyłącznie z tablicy ARP)." : "."));
+            }
+
+            // Phase 2: ports and services per live host.
+            progress.Phase = ScanPhase.PortScan;
+            progress.SetPortsTotal(progress.PortsTotal + alive.Sum(a => ports.Count + (scopeMdns.TryGetValue(a.Key, out var m) ? m.Services.Count(s => s.Port is not null) : 0)));
+            await Parallel.ForEachAsync(alive.OrderBy(a => Ipv4Sort(a.Key)), new ParallelOptions { MaxDegreeOfParallelism = options.ParallelHostScans, CancellationToken = cancellationToken },
+                async (entry, ct) =>
+                {
+                    var result = await ScanHostAsync(entry.Key, entry.Value, ports, arp, gateways, localMachine, localMacs, scopeMdns.GetValueOrDefault(entry.Key),
+                        scopeNames.GetValueOrDefault(entry.Key), prober, gate, progress, ct);
+                    await sink.HostAsync(result);
+                    progress.HostCompleted();
+                });
+
+            index += batch.Count;
+            progress.AddressesDone = index;
+            await sink.SubgroupCompletedAsync(index);
+            if (batched)
+            {
+                var seconds = Math.Max(0.5, (watch.Elapsed - batchStarted).TotalSeconds);
+                var rate = batch.Count / seconds;
+                var remaining = all.Count - index;
+                progress.EstimatedEnd = DateTime.UtcNow.AddSeconds(remaining / Math.Max(rate, 0.1));
+                await sink.EventAsync(ScanEventLevel.Info, string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                    $"Podgrupa {subgroup}{(start > 0 ? " po wznowieniu" : "")}: adresy {batch[0]}–{batch[^1]} ({batch.Count}), aktywne {alive.Count}, {seconds:0} s, tempo {rate:0.0} adr./s; pozostało {remaining} adresów (ok. {remaining / Math.Max(rate, 0.1) / 60:0} min)."));
+                // Next subgroup sized for about TargetBatchSeconds at the measured speed.
+                batchSize = (int)Math.Clamp(rate * TargetBatchSeconds, MinBatchSize, MaxBatchSize);
+            }
+        }
+
+        if (batched)
+        {
+            await sink.EventAsync(ScanEventLevel.Info, start > 0
+                ? $"Wykrywanie hostów zakończone: {totalAlive} aktywnych z {all.Count - start} adresów sprawdzonych po wznowieniu ({subgroup} podgrup); wcześniej sprawdzono {start} adresów."
+                : $"Wykrywanie hostów zakończone: {totalAlive} aktywnych z {all.Count} adresów w {subgroup} podgrupach" + (totalArpOnly > 0 ? $" (w tym {totalArpOnly} wyłącznie z tablicy ARP)." : "."));
+        }
 
         progress.Phase = ScanPhase.Finishing;
         return new NetworkScanOutcome(null);

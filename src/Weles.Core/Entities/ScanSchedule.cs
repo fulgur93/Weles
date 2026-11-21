@@ -26,6 +26,12 @@ public class ScanSchedule
     /// <summary>Gateway fingerprint of the network the scope belongs to; null for scopes without a gateway (e.g. loopback).</summary>
     public string? NetworkFingerprint { get; set; }
 
+    /// <summary>Time window (local time, minutes after midnight; may wrap past midnight). Null – any time.</summary>
+    public int? WindowStartMinute { get; set; }
+    public int? WindowEndMinute { get; set; }
+
+    public Core.Scheduling.TimeWindow? Window => WindowStartMinute is { } start && WindowEndMinute is { } end ? new Core.Scheduling.TimeWindow(start, end) : null;
+
     public DateTime NextRunAt { get; set; }
     public DateTime? LastRunAt { get; set; }
     public int? LastScanId { get; set; }

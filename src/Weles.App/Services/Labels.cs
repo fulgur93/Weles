@@ -14,6 +14,7 @@ public static class Labels
         ScanStatus.Completed => L.T("Zakończony"),
         ScanStatus.Cancelled => L.T("Zatrzymany"),
         ScanStatus.Failed => L.T("Błąd"),
+        ScanStatus.Paused => L.T("Wstrzymany"),
         _ => status.ToString()
     };
 
@@ -21,7 +22,7 @@ public static class Labels
     {
         ScanStatus.Completed => "ok",
         ScanStatus.Running or ScanStatus.Pending => "info",
-        ScanStatus.Cancelled => "warn",
+        ScanStatus.Cancelled or ScanStatus.Paused => "warn",
         ScanStatus.Failed => "bad",
         _ => "muted"
     };
@@ -67,6 +68,7 @@ public static class Labels
         AssetStatus.Missing => L.T("Nieobecne"),
         AssetStatus.NotCovered => L.T("Poza ostatnimi skanami"),
         AssetStatus.Unknown => L.T("Nieznane"),
+        AssetStatus.Intermittent => L.T("Niestabilne"),
         _ => status.ToString()
     };
 
@@ -75,6 +77,7 @@ public static class Labels
         AssetStatus.New => "info",
         AssetStatus.Active => "ok",
         AssetStatus.Missing => "warn",
+        AssetStatus.Intermittent => "warn",
         _ => "muted"
     };
 
@@ -85,6 +88,7 @@ public static class Labels
         AssetStatus.Missing => L.T("Ostatni skan jego sieci obejmujący jego adres nie znalazł urządzenia (skany innych sieci z tym samym zakresem adresów się nie liczą)"),
         AssetStatus.NotCovered => L.T("Żaden zakończony skan nie obejmował ostatnio jego adresu"),
         AssetStatus.Unknown => L.T("Ostatnio sprawdzone w swojej sieci, ale potem skanowano inną sieć – obecny stan nie jest znany. Zaktualizuje się po skanie jego sieci"),
+        AssetStatus.Intermittent => L.T("Nie odpowiedziało w ostatnim skanie (lub kilku), ale mniej razy z rzędu niż próg nieaktywności (3) – może być wyłączone okresowo albo niestabilne"),
         _ => ""
     };
 

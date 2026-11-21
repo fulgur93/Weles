@@ -2,12 +2,22 @@ using Microsoft.Extensions.Options;
 
 namespace Weles.App.Hosting;
 
-public sealed class LocalAccessGuardMiddleware(RequestDelegate next, LocalAccessToken token, IOptions<WelesHostOptions> options, ILogger<LocalAccessGuardMiddleware> logger)
+public sealed class LocalAccessGuardMiddleware(RequestDelegate next, LocalAccessToken token, IOptions<WelesHostOptions> options, PanelLanState lan,
+    ILogger<LocalAccessGuardMiddleware> logger)
 {
     public const string AuthPath = "/auth";
 
+    /// <summary>Paths that exist only for the local browser: the launch-token exchange and the first-administrator setup.</summary>
+    private static readonly string[] LocalOnlyPaths = [AuthPath, "/setup", "/account/setup"];
+
     public async Task InvokeAsync(HttpContext context)
     {
+        if (lan.IsLanRequest(context))
+        {
+            await LanAsync(context);
+            return;
+        }
+
         if (!options.Value.RequireAccessToken)
         {
             await next(context);
@@ -63,6 +73,44 @@ public sealed class LocalAccessGuardMiddleware(RequestDelegate next, LocalAccess
         }
 
         await WriteUnauthorizedAsync(context);
+    }
+
+    /// <summary>
+    /// A request on the LAN listener: only from the listener's own subnet, only with its own address in the Host header
+    /// (DNS rebinding), never cross-site, never the local-only paths. Then the normal login (accounts and roles) decides.
+    /// </summary>
+    private async Task LanAsync(HttpContext context)
+    {
+        var request = context.Request;
+        if (!lan.AllowsClient(context.Connection.RemoteIpAddress))
+        {
+            logger.LogWarning("Rejected LAN panel request from {Remote} (outside {Subnet})", context.Connection.RemoteIpAddress, lan.Subnet);
+            context.Abort();
+            return;
+        }
+
+        if (!lan.IsExpectedHost(request.Host))
+        {
+            logger.LogWarning("Rejected LAN panel request with unexpected Host header");
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            return;
+        }
+
+        if (IsCrossSite(request))
+        {
+            logger.LogWarning("Rejected cross-site LAN request to {Path}", request.Path);
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
+
+        if (LocalOnlyPaths.Any(p => request.Path.StartsWithSegments(p, StringComparison.OrdinalIgnoreCase)))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        context.Response.Headers.StrictTransportSecurity = "max-age=31536000";
+        await next(context);
     }
 
     /// <summary>Cookies are not isolated by port, so every instance (normal/demo) uses its own cookie name.</summary>

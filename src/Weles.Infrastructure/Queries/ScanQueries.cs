@@ -7,7 +7,8 @@ namespace Weles.Infrastructure.Queries;
 
 public sealed record ScanListItem(
     int Id, int TargetId, string TargetName, ScanStatus Status, ScanTrigger Trigger, string PortSpecification,
-    DateTime CreatedAt, DateTime? StartedAt, DateTime? CompletedAt, int HostsTargeted, int HostsAlive, int OpenPorts, string? ErrorMessage);
+    DateTime CreatedAt, DateTime? StartedAt, DateTime? CompletedAt, int HostsTargeted, int HostsAlive, int OpenPorts, string? ErrorMessage,
+    int CompletedAddresses = 0);
 
 public sealed record ScanDetail(ScanListItem Summary, string? ScopeSnapshot, string? SettingsJson, int PortCount, IReadOnlyList<DiscoveredHost> Hosts, IReadOnlyList<ScanEvent> Events);
 
@@ -20,7 +21,7 @@ public sealed class ScanQueries(IDbContextFactory<WelesDbContext> contextFactory
             .OrderByDescending(s => s.CreatedAt)
             .Take(limit)
             .Select(s => new ScanListItem(s.Id, s.ScanTargetId, s.ScanTarget!.Name, s.Status, s.Trigger, s.PortSpecification,
-                s.CreatedAt, s.StartedAt, s.CompletedAt, s.HostsTargeted, s.HostsAlive, s.OpenPorts, s.ErrorMessage))
+                s.CreatedAt, s.StartedAt, s.CompletedAt, s.HostsTargeted, s.HostsAlive, s.OpenPorts, s.ErrorMessage, s.CompletedAddresses))
             .ToListAsync(ct);
     }
 
@@ -40,7 +41,7 @@ public sealed class ScanQueries(IDbContextFactory<WelesDbContext> contextFactory
             .Select(s => new
             {
                 Item = new ScanListItem(s.Id, s.ScanTargetId, s.ScanTarget!.Name, s.Status, s.Trigger, s.PortSpecification,
-                    s.CreatedAt, s.StartedAt, s.CompletedAt, s.HostsTargeted, s.HostsAlive, s.OpenPorts, s.ErrorMessage),
+                    s.CreatedAt, s.StartedAt, s.CompletedAt, s.HostsTargeted, s.HostsAlive, s.OpenPorts, s.ErrorMessage, s.CompletedAddresses),
                 s.ScopeSnapshot, s.SettingsJson, s.PortCount
             })
             .SingleOrDefaultAsync(ct);

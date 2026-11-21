@@ -100,6 +100,16 @@ else
                     <dt>@L.T("Wykryte przez")</dt><dd>@Labels.Of(latest.DiscoveryMethods)</dd>
                 }
                 <dt>@L.T("Status")</dt><dd>@Labels.Describe(_detail.Presence.Status)@(_detail.Presence.ReferenceScanId is { } rs ? L.F(" (skan #{0})", rs) : "")</dd>
+                @if (_detail.PresenceHistory is { Covered: > 0 } ph)
+                {
+                    <dt>@L.T("Obecność")</dt>
+                    <dd>
+                        @L.F("odpowiadało w {0} z {1} ostatnich skanów obejmujących jego adres", ph.Seen, ph.Covered)
+                        @if (ph.ConsecutiveMisses > 0) { <span> · @L.F("brak odpowiedzi {0}× z rzędu", ph.ConsecutiveMisses)</span> }
+                        @if (ph.Unstable) { <StatusPill Tone="warn">@L.T("niestabilne")</StatusPill> }
+                        @if (ph.TimeOfDay is { } tod) { <div class="muted small">@L.Message(tod)</div> }
+                    </dd>
+                }
             </dl>
             @if (!string.IsNullOrEmpty(a.Notes))
             {

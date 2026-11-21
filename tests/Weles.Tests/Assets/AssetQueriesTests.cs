@@ -66,7 +66,8 @@ public class AssetQueriesTests
         var all = (await queries.LoadAllAsync()).ToDictionary(a => a.IpAddress!);
 
         Assert.Equal(AssetStatus.Active, all["10.0.0.5"].Status);
-        Assert.Equal(AssetStatus.Missing, all["10.0.0.6"].Status);
+        Assert.Equal(AssetStatus.Intermittent, all["10.0.0.6"].Status); // one silent covering scan – below the inactivity threshold
+        Assert.Equal((1, 2, 1), (all["10.0.0.6"].Presence!.ConsecutiveMisses, all["10.0.0.6"].Presence!.Covered, all["10.0.0.6"].Presence!.Seen));
         Assert.Equal(AssetStatus.New, all["10.0.0.7"].Status);
         Assert.Equal(AssetStatus.NotCovered, all["10.0.8.8"].Status); // only seen in a cancelled scan
         Assert.Equal([22, 3389], all["10.0.0.5"].OpenPorts);

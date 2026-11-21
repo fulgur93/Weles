@@ -198,6 +198,17 @@ WELES działa w pełni bez agentów. Agent przydaje się, gdy chcesz skanować s
 - **Skany → Import i eksport wyników:** nmap XML, CSV, JSON; cele zakresu z pliku w formularzu zakresu.
 - **Integracje → DefectDojo:** adres, klucz API, produkt/engagement/test, wybór granularności, podgląd, wysyłanie lub plik.
 - Baza jest szyfrowana automatycznie (SQLCipher) – plik `data/weles.db` bez `keys/database.key` jest nieczytelny.
+- **Duże zakresy:** powyżej 1024 adresów skan idzie podgrupami. Na stronie skanu widać numer podgrupy, gotowe adresy i
+  szacowany koniec; w zdarzeniach – tempo każdej podgrupy. **Wstrzymaj** kończy bieżącą podgrupę i zatrzymuje skan;
+  **Wznów skan** kontynuuje od następnej (nic nie jest skanowane drugi raz); **Zakończ bez wznawiania** zostawia zebrane wyniki.
+- **Okno czasowe harmonogramu:** w **Wykrywanie sieci** przy harmonogramie zakresu ustaw np. 22:00–06:00. Skany startują
+  tylko w oknie; skan, który nie zdąży, zostaje wstrzymany i wznawia się sam w kolejnym oknie.
+- **Niestabilne urządzenia:** urządzenie, które nie odpowiedziało w ostatnim skanie (lub dwóch), ma status **Niestabilne**;
+  **Nieobecne** dopiero po 3 kolejnych skanach bez odpowiedzi. Na stronie urządzenia: w ilu skanach odpowiadało, ile razy z
+  rzędu milczy i czy zależy to od pory dnia (np. „odpowiada w godzinach 06:00–18:00, nie odpowiada 00:00–06:00”).
+- **Dostęp z sieci lokalnej:** **Ustawienia → Dostęp z sieci lokalnej** (administrator): wybierz adres tego komputera i port,
+  zapisz, uruchom ponownie WELES. Panel będzie pod `https://adres:port` dla komputerów z tej samej podsieci, po zalogowaniu.
+  Przeglądarka ostrzeże o certyfikacie samopodpisanym – porównaj odcisk SHA-256 z Ustawień.
 
 ## Analityk AI
 

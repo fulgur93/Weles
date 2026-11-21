@@ -18,7 +18,18 @@
 }
 else if (_model.Networks.Count == 0)
 {
-    <section class="card empty"><p>@L.T("Mapa pojawi się po pierwszym skanie.") <a href="discovery">@L.T("Wykrywanie sieci")</a></p></section>
+    <section class="card empty">
+        @if (_networks is not null) { <div class="toolbar"><NetworkPicker Context="_networks" Value="@_filter" /></div> }
+        @if (_filter == NetworkContext.Current && _networks?.Networks.Any(n => n.Devices > 0) == true)
+        {
+            <p>@L.T("W bieżącej sieci nie ma jeszcze urządzeń. W bazie są urządzenia z innych sieci lub zasoby publiczne – wybierz „Wszystkie sieci” albo konkretną sieć powyżej.")</p>
+            <a class="btn btn-primary" href="topology?net=all">@L.T("Pokaż wszystkie sieci")</a>
+        }
+        else
+        {
+            <p>@L.T("Mapa pojawi się po pierwszym skanie.") <a href="discovery">@L.T("Wykrywanie sieci")</a></p>
+        }
+    </section>
 }
 else
 {

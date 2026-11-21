@@ -35,7 +35,7 @@ to to samo urządzenie.
 
 | Zagrożenie | Mechanizm |
 |------------|-----------|
-| Dostęp z sieci LAN / Internetu | Kestrel nasłuchuje wyłącznie na `127.0.0.1`. |
+| Dostęp z sieci LAN / Internetu | Kestrel nasłuchuje na `127.0.0.1`. Opcjonalny dostęp z LAN (domyślnie wyłączony) – patrz „Rozszerzenie AGH”. |
 | DNS rebinding | Odrzucanie żądań z nagłówkiem `Host` innym niż `127.0.0.1` / `localhost` (`AllowedHosts` + własna kontrola w `LocalAccessGuardMiddleware`) – HTTP 400. |
 | Inni użytkownicy / procesy na tym samym komputerze | Losowy 256‑bitowy token generowany przy każdym starcie. Bez ciasteczka sesji każde żądanie (także pliki statyczne i WebSocket Blazora) dostaje HTTP 401. |
 | CSRF, cross-site WebSocket hijacking | Ciasteczko `HttpOnly; SameSite=Strict`; odrzucanie żądań z obcym `Origin` lub `Sec-Fetch-Site: cross-site` (HTTP 403); antiforgery Blazora. |
@@ -137,4 +137,11 @@ WELES łączy się z Internetem **tylko** po kliknięciu „Aktualizuj z Interne
   odrzucane; import nie wysyła ruchu sieciowego.
 - **Sygnatury:** tylko zapytania GET bez parametrów i bez danych formularzy; wyrażenia regularne przerywane po 100 ms;
   ciasteczka zapisywane bez wartości.
+- **Panel w sieci lokalnej (opcja administratora, domyślnie wyłączona):** HTTPS na jednym prywatnym adresie (nigdy
+  0.0.0.0, loopback ani adres publiczny), osobny port; połączenia spoza podsieci tego adresu są zrywane; nagłówek `Host`
+  musi być tym adresem (DNS rebinding); żądania cross-site odrzucane; w LAN nie działa token uruchomieniowy (`/auth`) ani
+  kreator pierwszego administratora (`/setup`) – każde żądanie wymaga konta WELES i roli. Ciasteczko `Secure; HttpOnly;
+  SameSite=Strict`, HSTS. Certyfikat samopodpisany – odcisk SHA-256 do porównania w Ustawieniach.
+- **Okna czasowe i wznawianie:** wznowienie wstrzymanego skanu przechodzi te same kontrole co nowy skan – zakres nadal
+  zatwierdzony, niezmieniony od startu skanu i ta sama sieć (router); inaczej wznowienie jest odrzucane.
 

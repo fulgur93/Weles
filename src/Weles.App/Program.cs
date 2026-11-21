@@ -52,6 +52,12 @@ builder.WebHost.ConfigureKestrel(kestrel =>
 var agentListener = AgentApiMiddleware.Configure(builder, paths);
 builder.Services.AddSingleton(agentListener);
 
+// Optional panel access from the local network (off by default): HTTPS on one private address, login required.
+var panelLan = PanelLanState.Configure(builder, paths, agentListener.Active.Enabled ? agentListener.Active.Port : -1);
+builder.Services.AddSingleton(panelLan);
+// Host filtering stays strict: only the one LAN address is added next to 127.0.0.1/localhost.
+if (panelLan.IsListening) builder.Configuration["AllowedHosts"] = $"{builder.Configuration["AllowedHosts"]};{panelLan.Active.Address}";
+
 CultureInfo.DefaultThreadCurrentCulture = CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.GetCultureInfo("pl-PL");
 
 builder.Services.AddSerilog((_, logger) => logger
@@ -166,6 +172,8 @@ app.Lifetime.ApplicationStarted.Register(() =>
         app.Services.GetRequiredService<RuntimeInfo>().Version, instance.BaseUrl, hostOptions.DemoMode, paths.Root);
     if (agentListener.IsListening) startupLogger.LogInformation("Agent endpoint listening on {Url}", agentListener.Url);
     else if (agentListener.Active.Enabled) startupLogger.LogWarning("Agent endpoint not started: {Error}", agentListener.Error);
+    if (panelLan.IsListening) startupLogger.LogWarning("Panel also available on the local network: {Url} (clients from {Subnet}, login required)", panelLan.Url, panelLan.Subnet);
+    else if (panelLan.Active.Enabled) startupLogger.LogWarning("LAN access to the panel not started: {Error}", panelLan.Error);
 
     // The launch link holds the access token – it goes to the console only, never to the log file.
     Console.WriteLine();

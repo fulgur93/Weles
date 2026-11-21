@@ -11,7 +11,8 @@ public sealed record CompletedScanCoverage(int ScanId, DateTime StartedAt, Scope
         Coverage.Covers(ipAddress) && NetworkIdentity.SameNetwork(Network, assetNetwork);
 }
 
-public sealed record AssetPresence(AssetStatus Status, int? ReferenceScanId, DateTime? ReferenceScanAt);
+/// <param name="ConsecutiveMisses">Covering scans in a row (newest first) without an answer.</param>
+public sealed record AssetPresence(AssetStatus Status, int? ReferenceScanId, DateTime? ReferenceScanAt, int ConsecutiveMisses = 0);
 
 /// <summary>
 /// Presence of an asset is judged against the latest completed scan that covered its address (or observed it).
@@ -24,27 +25,44 @@ public static class AssetStatusRules
     /// <param name="observedInScans">Scans in which the asset was observed.</param>
     /// <param name="firstObservedScanId">Scan of the asset's first observation.</param>
     /// <param name="assetNetwork">Network of the asset's latest observation; scans of another network do not count.</param>
-    public static AssetPresence Evaluate(string? ipAddress, IReadOnlyList<CompletedScanCoverage> completedScans, IReadOnlySet<int> observedInScans, int? firstObservedScanId, string? assetNetwork = null)
+    /// <param name="inactiveAfterMisses">A host that answered before becomes <see cref="AssetStatus.Missing"/> only after this many
+    /// covering scans in a row without an answer; fewer misses make it <see cref="AssetStatus.Intermittent"/> (one silent
+    /// scan of a host that answers at other times of day is not a disappearance).</param>
+    public static AssetPresence Evaluate(string? ipAddress, IReadOnlyList<CompletedScanCoverage> completedScans, IReadOnlySet<int> observedInScans, int? firstObservedScanId,
+        string? assetNetwork = null, int inactiveAfterMisses = PresenceHistory.DefaultInactiveAfterMisses)
     {
         var laterScanOfAnotherNetwork = false;
+        var misses = 0;
+        CompletedScanCoverage? reference = null;
         foreach (var scan in completedScans)
         {
             var observed = observedInScans.Contains(scan.ScanId);
             if (!observed && !scan.Covers(ipAddress, assetNetwork))
             {
-                laterScanOfAnotherNetwork |= IsAnotherNetwork(scan.Network, assetNetwork);
+                if (reference is null) laterScanOfAnotherNetwork |= IsAnotherNetwork(scan.Network, assetNetwork);
+                continue;
+            }
+
+            reference ??= scan;
+            if (!observed)
+            {
+                misses++;
                 continue;
             }
 
             // The user has since moved to (and scanned) another network: what was true here is no longer confirmed.
             var status = laterScanOfAnotherNetwork ? AssetStatus.Unknown
-                : !observed ? AssetStatus.Missing
+                : misses >= inactiveAfterMisses ? AssetStatus.Missing
+                : misses > 0 ? AssetStatus.Intermittent
                 : scan.ScanId == firstObservedScanId ? AssetStatus.New
                 : AssetStatus.Active;
-            return new AssetPresence(status, scan.ScanId, scan.StartedAt);
+            return new AssetPresence(status, reference.ScanId, reference.StartedAt, misses);
         }
 
-        return new AssetPresence(AssetStatus.NotCovered, null, null);
+        // Covered but never observed in any covering scan (e.g. observed only by a scan that is not "completed").
+        return reference is null
+            ? new AssetPresence(AssetStatus.NotCovered, null, null)
+            : new AssetPresence(laterScanOfAnotherNetwork ? AssetStatus.Unknown : AssetStatus.Missing, reference.ScanId, reference.StartedAt, misses);
     }
 
     /// <summary>Both networks identified and different. An unidentified scan (loopback, routed subnet) says nothing.</summary>

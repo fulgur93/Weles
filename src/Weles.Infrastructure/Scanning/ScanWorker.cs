@@ -27,6 +27,7 @@ public sealed class ScanWorker(
             {
                 var engine = services.GetRequiredService<ScanEngine>();
                 await engine.RunAsync(scanId, progress, cts.Token);
+                if (await IsPausedAsync(scanId, stoppingToken)) continue; // post-processing runs once the whole scope is done
                 progress.Phase = ScanPhase.Finishing;
                 progress.Activity = "Dopasowanie podatności i ocena ryzyka";
                 await services.GetRequiredService<ScanPostProcessor>().RunAsync(scanId, stoppingToken);
@@ -42,6 +43,12 @@ public sealed class ScanWorker(
         }
     }
 
+    private async Task<bool> IsPausedAsync(int scanId, CancellationToken ct)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        return await db.Scans.AnyAsync(s => s.Id == scanId && s.Status == ScanStatus.Paused, ct);
+    }
+
     /// <summary>Scans interrupted by an application shutdown are marked, never silently left "running".</summary>
     private async Task RecoverInterruptedScansAsync(CancellationToken ct)
     {
@@ -51,6 +58,15 @@ public sealed class ScanWorker(
         foreach (var scan in stale)
         {
             var wasRunning = scan.Status == ScanStatus.Running;
+            if (wasRunning && scan.CompletedAddresses > 0 && scan.CompletedAddresses < scan.HostsTargeted)
+            {
+                // Finished subgroups are stored: the scan can continue where it stopped instead of starting over.
+                scan.Status = ScanStatus.Paused;
+                db.ScanEvents.Add(new ScanEvent { ScanId = scan.Id, Level = ScanEventLevel.Warning, Timestamp = timeProvider.GetUtcNow().UtcDateTime,
+                    Message = $"Skan przerwany zamknięciem aplikacji po {scan.CompletedAddresses} z {scan.HostsTargeted} adresów – wstrzymany, można go wznowić." });
+                continue;
+            }
+
             scan.Status = wasRunning ? ScanStatus.Failed : ScanStatus.Cancelled;
             scan.CompletedAt = timeProvider.GetUtcNow().UtcDateTime;
             scan.ErrorMessage = wasRunning ? "Skan przerwany – aplikacja została zamknięta w trakcie skanowania." : "Skan oczekujący anulowany po ponownym uruchomieniu aplikacji.";

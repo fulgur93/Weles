@@ -1078,6 +1078,9 @@ namespace Weles.Infrastructure.Database.Migrations
                     b.Property<int?>("AgentId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("CompletedAddresses")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("TEXT");
 
@@ -1216,6 +1219,12 @@ namespace Weles.Infrastructure.Database.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<int>("ScanTargetId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("WindowEndMinute")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("WindowStartMinute")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");

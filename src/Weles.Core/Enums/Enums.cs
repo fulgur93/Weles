@@ -6,7 +6,9 @@ public enum ScanStatus
     Running = 1,
     Completed = 2,
     Cancelled = 3,
-    Failed = 4
+    Failed = 4,
+    /// <summary>Stopped at the end of its time window; resumes from the next subgroup in the next window.</summary>
+    Paused = 5
 }
 
 public enum ScanTrigger
@@ -89,7 +91,9 @@ public enum AssetStatus
     /// <summary>No completed scan covered its address.</summary>
     NotCovered = 3,
     /// <summary>Last judged on its own network, but a later scan ran on another network – its current state is unknown.</summary>
-    Unknown = 4
+    Unknown = 4,
+    /// <summary>Did not answer the latest covering scan(s), fewer times in a row than the inactivity threshold – may be off or unstable.</summary>
+    Intermittent = 5
 }
 
 public enum AssetChangeKind

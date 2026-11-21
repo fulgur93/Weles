@@ -163,8 +163,14 @@ public sealed class ScanTargetService(
         var target = await db.ScanTargets.SingleOrDefaultAsync(t => t.Id == targetId, ct);
         if (target is null) return OperationResult.Fail("Zakres nie istnieje.");
         if (!target.IsApproved) return OperationResult.Fail("Zakres nie jest zatwierdzony. Zatwierdź go przed uruchomieniem skanu.");
+        if (await db.Scans.AsNoTracking().Where(s => s.ScanTargetId == targetId && s.Status == ScanStatus.Paused).Select(s => (int?)s.Id).FirstOrDefaultAsync(ct) is { } paused)
+        {
+            return OperationResult.Fail($"Skan #{paused} tego zakresu jest wstrzymany – wznów go albo zakończ, zanim uruchomisz nowy.");
+        }
+
         if (await HasActiveScanAsync(db, targetId, ct)) return OperationResult.Fail("Dla tego zakresu trwa już skan.");
-        if (!allowOtherNetwork && await OtherNetworkAsync(db, target, ct) is { } other)
+        var otherNetwork = await OtherNetworkAsync(db, target, ct);
+        if (!allowOtherNetwork && otherNetwork is { } other)
         {
             logger.LogWarning("Scan of scope {TargetId} refused: this computer is on another network than the scope's last scan", targetId);
             return new OperationResult(false, [other], OtherNetwork: true);
@@ -177,9 +183,71 @@ public sealed class ScanTargetService(
         };
         db.Scans.Add(scan);
         await db.SaveChangesAsync(ct);
+        if (otherNetwork is not null)
+        {
+            // The user forced a scope from a different network: keep the reason on the scan itself, where the empty
+            // results are visible later, not only in the application log.
+            db.ScanEvents.Add(new ScanEvent { ScanId = scan.Id, Level = ScanEventLevel.Warning, Timestamp = Now,
+                Message = $"Skan wymuszony mimo ostrzeżenia: {otherNetwork} Brak wyników jest spodziewany, dopóki komputer nie będzie w tej sieci." });
+            await db.SaveChangesAsync(ct);
+        }
+
         await coordinator.EnqueueAsync(scan.Id, ct);
         logger.LogInformation("Scan {ScanId} queued for scope {TargetId}", scan.Id, targetId);
         return OperationResult.Ok(scan.Id);
+    }
+
+    /// <summary>
+    /// Continues a paused scan from its last finished subgroup. The same checks as a new scan: the scope must still be
+    /// approved and unchanged, and this computer must be on the network where the scan started (same router).
+    /// </summary>
+    public async Task<OperationResult> ResumeScanAsync(int scanId, CancellationToken ct = default)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        var scan = await db.Scans.Include(s => s.ScanTarget!).ThenInclude(t => t.Entries).SingleOrDefaultAsync(s => s.Id == scanId, ct);
+        if (scan is null) return OperationResult.Fail("Skan nie istnieje.");
+        if (scan.Status != ScanStatus.Paused) return OperationResult.Fail("Wznowić można tylko wstrzymany skan.");
+        var target = scan.ScanTarget!;
+        if (!target.IsApproved) return OperationResult.Fail("Zakres nie jest już zatwierdzony – wstrzymanego skanu nie można wznowić.");
+        if (scan.ScopeSnapshot != System.Text.Json.JsonSerializer.Serialize(target.Entries.Select(e => new { e.Value, e.IsExclusion })))
+        {
+            return OperationResult.Fail("Zakres zmienił się od rozpoczęcia skanu – zakończ ten skan i uruchom nowy.");
+        }
+
+        if (await db.Scans.AnyAsync(s => s.ScanTargetId == scan.ScanTargetId && s.Id != scanId && (s.Status == ScanStatus.Pending || s.Status == ScanStatus.Running), ct))
+        {
+            return OperationResult.Fail("Dla tego zakresu trwa już skan.");
+        }
+
+        if (currentNetwork is not null && !target.IsExternal && scan.NetworkFingerprint is { } network)
+        {
+            var gateways = currentNetwork.GetAttachedNetworks().Where(n => n.GatewayMac is not null).ToList();
+            if (gateways.Count > 0 && !gateways.Any(n => NetworkIdentity.SameNetwork(n.GatewayMac, network)))
+            {
+                return OperationResult.Fail("Komputer jest teraz w innej sieci niż ta, w której skan się zaczął – wznowienie odrzucone.");
+            }
+        }
+
+        if (coordinator.IsActive(scanId)) return OperationResult.Fail("Skan jest już w kolejce.");
+        await coordinator.EnqueueAsync(scanId, ct);
+        logger.LogInformation("Scan {ScanId} resumed", scanId);
+        return OperationResult.Ok(scanId);
+    }
+
+    public bool PauseScan(int scanId) => coordinator.RequestPause(scanId);
+
+    /// <summary>Ends a paused scan for good: it stays "cancelled" with the subgroups it finished.</summary>
+    public async Task<OperationResult> AbandonPausedAsync(int scanId, CancellationToken ct = default)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        var scan = await db.Scans.SingleOrDefaultAsync(s => s.Id == scanId && s.Status == ScanStatus.Paused, ct);
+        if (scan is null || coordinator.IsActive(scanId)) return OperationResult.Fail("Ten skan nie jest wstrzymany.");
+        scan.Status = ScanStatus.Cancelled;
+        scan.CompletedAt = Now;
+        db.ScanEvents.Add(new ScanEvent { ScanId = scanId, Level = ScanEventLevel.Warning, Timestamp = Now,
+            Message = $"Wstrzymany skan zakończony bez wznowienia – zachowano wyniki dla {scan.CompletedAddresses} z {scan.HostsTargeted} adresów." });
+        await db.SaveChangesAsync(ct);
+        return OperationResult.Ok(scanId);
     }
 
     public bool StopScan(int scanId)
@@ -207,7 +275,7 @@ public sealed class ScanTargetService(
     }
 
     private static Task<bool> HasActiveScanAsync(WelesDbContext db, int targetId, CancellationToken ct) =>
-        db.Scans.AnyAsync(s => s.ScanTargetId == targetId && (s.Status == ScanStatus.Pending || s.Status == ScanStatus.Running), ct);
+        db.Scans.AnyAsync(s => s.ScanTargetId == targetId && (s.Status == ScanStatus.Pending || s.Status == ScanStatus.Running || s.Status == ScanStatus.Paused), ct);
 
     internal static (List<ScanTargetEntry> Entries, List<string> Errors) ParseEntries(ScanTargetInput input)
     {

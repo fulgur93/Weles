@@ -21,6 +21,43 @@ public sealed class ScanProgress(int scanId, DateTime startedAt)
     public ScanPhase Phase { get; set; } = ScanPhase.Queued;
     public bool StopRequested { get; set; }
 
+    /// <summary>The time window closed: finish the current subgroup, then pause (the scan resumes in the next window).</summary>
+    public bool PauseRequested { get; set; }
+
+    /// <summary>Why the pause was asked for – the scan event says it ("okno czasowe się skończyło", "na żądanie użytkownika").</summary>
+    public string? PauseReason { get; set; }
+
+    /// <summary>Large scopes are scanned in subgroups; progress then follows the processed addresses.</summary>
+    public bool Batched { get; set; }
+    public int AddressesDone { get; set; }
+    /// <summary>Addresses already done before this run (a resumed scan).</summary>
+    public int ResumedFrom { get; set; }
+    public int Subgroup { get; set; }
+    public DateTime? EstimatedEnd { get; set; }
+    private int _batchSize, _batchProbedStart, _batchPortsCheckedStart, _batchPortsTotalStart;
+
+    /// <summary>Addresses probed so far in the whole scope (including earlier runs of a resumed scan).</summary>
+    public int AddressesProbed => ResumedFrom + _hostsProbed;
+
+    public void BeginSubgroup(int number, int size)
+    {
+        Subgroup = number;
+        _batchSize = size;
+        _batchProbedStart = _hostsProbed;
+        _batchPortsCheckedStart = _portsChecked;
+        _batchPortsTotalStart = _portsTotal;
+    }
+
+    /// <summary>0–1 within the current subgroup: discovery is the first 30 %, ports and services the rest.</summary>
+    private double SubgroupFraction()
+    {
+        if (_batchSize == 0) return 0;
+        var discovery = Math.Min(1, (double)(_hostsProbed - _batchProbedStart) / _batchSize);
+        if (Phase == ScanPhase.HostDiscovery) return 0.3 * discovery;
+        var ports = _portsTotal - _batchPortsTotalStart;
+        return 0.3 + 0.7 * (ports <= 0 ? 1 : Math.Min(1, (double)(_portsChecked - _batchPortsCheckedStart) / ports));
+    }
+
     public int HostsTotal => _hostsTotal;
     public int HostsProbed => _hostsProbed;
     public int HostsAlive => _hostsAlive;
@@ -31,7 +68,9 @@ public sealed class ScanProgress(int scanId, DateTime startedAt)
     public int ServicesIdentified => _services;
     public string? Activity { get => _activity; set => _activity = value; }
 
-    public double PercentComplete => Phase switch
+    public double PercentComplete => Batched && _hostsTotal > 0 && Phase is ScanPhase.HostDiscovery or ScanPhase.PortScan
+        ? Math.Min(99, 100.0 * (AddressesDone + SubgroupFraction() * _batchSize) / _hostsTotal)
+        : Phase switch
     {
         ScanPhase.Queued or ScanPhase.ResolvingScope => 0,
         ScanPhase.HostDiscovery => _hostsTotal == 0 ? 0 : 30.0 * _hostsProbed / _hostsTotal,

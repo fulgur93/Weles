@@ -90,6 +90,26 @@ public class ScanEngineTests
     }
 
     [Fact]
+    public async Task Scan_with_no_live_hosts_is_completed_and_explains_the_empty_result()
+    {
+        // No ICMP and no liveness ports: every probed address stays silent, so the port phase is skipped entirely.
+        await using var h = await Harness.CreateAsync(new ScanOptions
+        {
+            UseIcmp = false, UseMdns = false, LivenessPorts = [], ConnectTimeoutMs = 200, BannerTimeoutMs = 200, ProbeTimeoutMs = 200
+        });
+        var target = await h.ApprovedTargetAsync();
+
+        var scanId = await h.RunAsync(target, "22");
+
+        await using var db = h.Db.CreateDbContext();
+        var scan = await db.Scans.Include(s => s.Events).SingleAsync(s => s.Id == scanId);
+        Assert.Equal(ScanStatus.Completed, scan.Status);
+        Assert.Equal(1, scan.HostsProbed); // was silently reset to 0 by FinishAsync's reload
+        Assert.Equal(0, scan.HostsAlive);
+        Assert.Contains(scan.Events, e => e.Level == ScanEventLevel.Warning && e.Message.Contains("Nie wykryto żadnych aktywnych hostów"));
+    }
+
+    [Fact]
     public async Task Connections_to_a_single_host_are_rate_limited()
     {
         // 30 closed ports at 10 connections/s per host (burst 2) cannot finish in under ~2.8 s.

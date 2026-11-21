@@ -53,7 +53,7 @@ public class NetworkIdentityTests
         Assert.Empty(AssetStatusRules.Absences("192.168.0.226", scans, new HashSet<int> { 1 }, TestData.Now.AddDays(-1), HomeGateway));
 
         // On the same network it is missing.
-        Assert.Equal(AssetStatus.Missing, AssetStatusRules.Evaluate("192.168.0.226", scans, new HashSet<int> { 1 }, 1, OfficeGateway).Status);
+        Assert.Equal(AssetStatus.Missing, AssetStatusRules.Evaluate("192.168.0.226", scans, new HashSet<int> { 1 }, 1, OfficeGateway, inactiveAfterMisses: 1).Status);
     }
 
     [Fact]
@@ -72,7 +72,7 @@ public class NetworkIdentityTests
         // Back home and scanned again: judged normally.
         scans = [Home(3, 1), Office(2, 0), Home(1, -1)];
         Assert.Equal(AssetStatus.Active, AssetStatusRules.Evaluate("192.168.0.50", scans, new HashSet<int> { 1, 3 }, 1, HomeGateway).Status);
-        Assert.Equal(AssetStatus.Missing, AssetStatusRules.Evaluate("192.168.0.51", scans, new HashSet<int> { 1 }, 1, HomeGateway).Status);
+        Assert.Equal(AssetStatus.Missing, AssetStatusRules.Evaluate("192.168.0.51", scans, new HashSet<int> { 1 }, 1, HomeGateway, inactiveAfterMisses: 1).Status);
 
         // Office devices stay active; a later scan without network identity (loopback) changes nothing.
         scans = [new(4, TestData.Now.AddDays(2), loopback), Office(2, 0)];

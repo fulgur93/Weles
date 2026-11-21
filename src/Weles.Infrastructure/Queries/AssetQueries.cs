@@ -33,7 +33,8 @@ public sealed record AssetListItem(
     AssetStatus Status,
     DateTime FirstSeenAt,
     DateTime LastSeenAt,
-    int ObservationCount);
+    int ObservationCount,
+    PresenceSummary? Presence = null);
 
 public enum AssetSortColumn
 {
@@ -84,7 +85,8 @@ public sealed record AssetDetail(
     IReadOnlyList<DiscoveredPort> CurrentPorts,
     IReadOnlyList<AssetObservation> Observations,
     IReadOnlyList<CompletedScanCoverage> Absences,
-    IReadOnlyList<AssetVulnerability> Vulnerabilities);
+    IReadOnlyList<AssetVulnerability> Vulnerabilities,
+    PresenceSummary? PresenceHistory = null);
 
 /// <summary>
 /// Read model for the asset inventory. Data is loaded once per request and filtered/sorted in memory: a local
@@ -167,7 +169,8 @@ public sealed class AssetQueries(IDbContextFactory<WelesDbContext> contextFactor
                 a.Cidr is null ? null : NetworkNaming.Label(a.Cidr, a.SegmentName, a.GatewayVendor, a.GatewayMac),
                 ports.Count, ports.Select(p => p.Port).Order().ToList(),
                 ports.Where(p => p.Product is not null).Select(p => p.Version is null ? p.Product! : $"{p.Product} {p.Version}").Distinct().ToList(),
-                a.OpenVulns, a.CurrentRiskScore, a.CurrentRiskLevel, presence.Status, a.FirstSeenAt, a.LastSeenAt, obs.Count);
+                a.OpenVulns, a.CurrentRiskScore, a.CurrentRiskLevel, presence.Status, a.FirstSeenAt, a.LastSeenAt, obs.Count,
+                Presence(a.PrimaryIpAddress, coverage, obs.Select(o => o.ScanId).ToHashSet(), obs.Count > 0 ? obs[^1].NetworkFingerprint : null));
         }).ToList();
     }
 
@@ -225,8 +228,14 @@ public sealed class AssetQueries(IDbContextFactory<WelesDbContext> contextFactor
             .OrderBy(v => v.Status).ThenByDescending(v => v.Vulnerability!.CvssScore)
             .ToListAsync(ct);
 
-        return new AssetDetail(asset, presence, hosts.LastOrDefault(), history.CurrentPorts, observations, absences, vulnerabilities);
+        return new AssetDetail(asset, presence, hosts.LastOrDefault(), history.CurrentPorts, observations, absences, vulnerabilities,
+            Presence(asset.PrimaryIpAddress, coverage, observed, network));
     }
+
+    /// <summary>Behaviour across the covering scans (newest first): stability, misses in a row, time-of-day pattern.</summary>
+    internal static PresenceSummary Presence(string? ip, IReadOnlyList<CompletedScanCoverage> coverage, IReadOnlySet<int> observed, string? network) =>
+        PresenceHistory.Analyze(coverage.Where(s => observed.Contains(s.ScanId) || s.Covers(ip, network))
+            .Select(s => (s.StartedAt.ToLocalTime(), observed.Contains(s.ScanId))).ToList());
 
     /// <summary>Ports a scan checked; null when its specification can no longer be parsed (then every port counts as checked).</summary>
     internal static IReadOnlySet<int>? CheckedPorts(string specification) =>

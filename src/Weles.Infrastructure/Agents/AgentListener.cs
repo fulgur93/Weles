@@ -66,14 +66,17 @@ public static class AgentCertificate
 {
     public const string FileName = "agent-endpoint.pfx";
 
-    public static X509Certificate2 LoadOrCreate(WelesPaths paths, string address)
+    public static X509Certificate2 LoadOrCreate(WelesPaths paths, string address) => LoadOrCreate(paths, address, FileName, "CN=WELES agent endpoint, O=WELES");
+
+    /// <summary>A self-signed endpoint certificate in the keys directory (also used by the panel's LAN listener).</summary>
+    public static X509Certificate2 LoadOrCreate(WelesPaths paths, string address, string fileName, string subject)
     {
-        var file = Path.Combine(paths.KeysDirectory, FileName);
+        var file = Path.Combine(paths.KeysDirectory, fileName);
         if (!File.Exists(file))
         {
             Directory.CreateDirectory(paths.KeysDirectory);
             using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-            var request = new CertificateRequest("CN=WELES agent endpoint, O=WELES", key, HashAlgorithmName.SHA256);
+            var request = new CertificateRequest(subject, key, HashAlgorithmName.SHA256);
             var san = new SubjectAlternativeNameBuilder();
             san.AddDnsName(Environment.MachineName);
             san.AddIpAddress(IPAddress.Loopback);

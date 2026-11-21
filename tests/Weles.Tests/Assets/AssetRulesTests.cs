@@ -42,7 +42,7 @@ public class AssetRulesTests
 
     [Theory]
     [InlineData("10.0.0.5", new[] { 1, 2 }, 1, AssetStatus.Active, 2)]
-    [InlineData("10.0.0.6", new[] { 1 }, 1, AssetStatus.Missing, 2)]       // scan 2 covered it and did not find it
+    [InlineData("10.0.0.6", new[] { 1 }, 1, AssetStatus.Intermittent, 2)]  // scan 2 covered it and did not find it – once is not "missing" yet
     [InlineData("10.0.0.7", new[] { 2 }, 2, AssetStatus.New, 2)]
     [InlineData("10.0.1.9", new[] { 3 }, 3, AssetStatus.New, 3)]
     [InlineData("172.16.0.1", new int[0], null, AssetStatus.NotCovered, null)]
@@ -52,6 +52,44 @@ public class AssetRulesTests
         var presence = AssetStatusRules.Evaluate(ip, Scans, observed.ToHashSet(), first);
         Assert.Equal(expected, presence.Status);
         Assert.Equal(referenceScan, presence.ReferenceScanId);
+    }
+
+    [Fact]
+    public void A_host_becomes_missing_only_after_several_silent_scans_in_a_row()
+    {
+        var day = new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc);
+        var covering = Enumerable.Range(1, 5).Reverse()
+            .Select(i => new CompletedScanCoverage(i, day.AddDays(i), ScopeCoverage.FromSnapshot(Snapshot(("10.0.0.0/24", false))))).ToList();
+        AssetPresence Seen(params int[] scans) => AssetStatusRules.Evaluate("10.0.0.6", covering, scans.ToHashSet(), 1);
+
+        Assert.Equal((AssetStatus.Intermittent, 1), (Seen(1, 2, 3, 4).Status, Seen(1, 2, 3, 4).ConsecutiveMisses));
+        Assert.Equal((AssetStatus.Intermittent, 2), (Seen(1, 2, 3).Status, Seen(1, 2, 3).ConsecutiveMisses));
+        Assert.Equal((AssetStatus.Missing, 3), (Seen(1, 2).Status, Seen(1, 2).ConsecutiveMisses));
+        Assert.Equal(5, Seen(1, 2).ReferenceScanId);                         // judged against the latest covering scan
+        Assert.Equal(AssetStatus.Active, Seen(1, 3, 5).Status);             // answered in the latest scan
+        Assert.Equal(AssetStatus.Missing, AssetStatusRules.Evaluate("10.0.0.6", covering, new HashSet<int> { 1, 2, 3, 4 }, 1, inactiveAfterMisses: 1).Status);
+    }
+
+    [Fact]
+    public void Presence_history_finds_unstable_hosts_and_time_of_day_patterns()
+    {
+        var monday = new DateTime(2026, 11, 2);
+        // A workstation: answers in the afternoon scans, silent at night – for a week.
+        var office = Enumerable.Range(0, 6).SelectMany(d => new[] { (monday.AddDays(d).AddHours(14), true), (monday.AddDays(d).AddHours(2), false) })
+            .OrderByDescending(h => h.Item1).ToList();
+        var summary = PresenceHistory.Analyze(office);
+        Assert.True(summary.Unstable);
+        Assert.Contains("12:00–18:00", summary.TimeOfDay);
+        Assert.Contains("nie odpowiada 00:00–06:00", summary.TimeOfDay);
+
+        // Always present: stable, no pattern.
+        var server = Enumerable.Range(0, 10).Select(i => (monday.AddHours(-6 * i), true)).ToList();
+        Assert.Equal((false, null, 10, 0), (PresenceHistory.Analyze(server).Unstable, PresenceHistory.Analyze(server).TimeOfDay, PresenceHistory.Analyze(server).Seen, PresenceHistory.Analyze(server).ConsecutiveMisses));
+
+        // Flapping without a time pattern.
+        var flaky = Enumerable.Range(0, 8).Select(i => (monday.AddHours(-i * 24), i % 2 == 0)).ToList();
+        Assert.True(PresenceHistory.Analyze(flaky).Unstable);
+        Assert.Null(PresenceHistory.Analyze(flaky).TimeOfDay);
     }
 
     [Fact]

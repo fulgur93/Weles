@@ -7,6 +7,8 @@
 @inject Autostart Autostart
 @inject Weles.Infrastructure.AI.OllamaProcessHost EngineHost
 @inject Microsoft.Extensions.Options.IOptions<Weles.Infrastructure.AI.AiOptions> AiOptions
+@inject PanelLanState Lan
+@inject Weles.Infrastructure.Agents.AgentListenerState AgentListener
 
 <PageTitle>@L.T("Ustawienia · WELES")</PageTitle>
 
@@ -24,7 +26,7 @@
             <dt>@L.T("Wersja")</dt><dd>@Runtime.Version</dd>
             <dt>@L.T("Tryb")</dt><dd>@(Runtime.DemoMode ? L.T("Demonstracyjny (osobna baza)") : L.T("Produkcyjny"))</dd>
             <dt>@L.T("Adres panelu")</dt><dd class="mono">@Runtime.BaseUrl</dd>
-            <dt>@L.T("Dostęp")</dt><dd>@L.T("tylko localhost, sesja chroniona tokenem uruchomieniowym")</dd>
+            <dt>@L.T("Dostęp")</dt><dd>@(Lan.IsListening ? L.F("localhost oraz sieć lokalna {0} ({1}), logowanie kontem WELES", Lan.Url, Lan.Subnet ?? "") : L.T("tylko localhost, sesja chroniona tokenem uruchomieniowym"))</dd>
             <dt>@L.T("Uruchomiono")</dt><dd>@Runtime.StartedAt.ToLocalTime().ToString("g")</dd>
             <dt>@L.T("Środowisko")</dt><dd>@Runtime.Framework</dd>
             <dt>@L.T("System")</dt><dd>@Runtime.OperatingSystem (@Runtime.Architecture)</dd>
@@ -51,6 +53,29 @@
             @if (_autostartError is not null) { <div class="alert alert-bad">@_autostartError</div> }
         }
     </div>
+
+    @if (_isAdmin)
+    {
+        <div class="card">
+            <div class="card-title"><Icon Name="lock" /> @L.T("Dostęp z sieci lokalnej")</div>
+            <p class="muted small">@L.T("Domyślnie panel działa tylko na 127.0.0.1. Po włączeniu jest też dostępny przez HTTPS pod jednym prywatnym adresem tego komputera – tylko dla komputerów z tej samej podsieci i tylko po zalogowaniu kontem WELES (role: administrator, edytor, operator, przeglądający). Pierwsze konto administratora tworzy się wyłącznie lokalnie. Certyfikat jest samopodpisany – porównaj odcisk poniżej z ostrzeżeniem przeglądarki.")</p>
+            <label class="checkbox"><input type="checkbox" @bind="_lanEnabled" /> @L.T("Udostępnij panel w sieci lokalnej")</label>
+            <div class="toolbar">
+                <select class="input" @bind="_lanAddress" aria-label="@L.T("Adres")">
+                    <option value="">@L.T("— wybierz adres —")</option>
+                    @foreach (var a in _lanAddresses) { <option value="@a.Address">@a.Label</option> }
+                </select>
+                <input class="input input-sm" type="number" min="1024" max="65535" @bind="_lanPort" aria-label="@L.T("Port")" />
+                <button class="btn btn-primary btn-sm" @onclick="SaveLan">@L.T("Zapisz")</button>
+            </div>
+            @if (_lanMessage is not null) { <div class="small @(_lanError ? "tone-bad" : "tone-ok")">@L.Message(_lanMessage)</div> }
+            <dl class="facts">
+                <dt>@L.T("Stan")</dt>
+                <dd>@(Lan.IsListening ? L.F("działa: {0} (klienci z {1})", Lan.Url, Lan.Subnet ?? "") : Lan.Active.Enabled ? L.F("nie uruchomiono: {0}", L.Message(Lan.Error ?? "")) : L.T("wyłączony"))</dd>
+                @if (Lan.CertificateSha256 is { } fp) { <dt>@L.T("Odcisk SHA-256")</dt><dd class="mono small break">@fp</dd> }
+            </dl>
+        </div>
+    }
 
     <div class="card">
         <div class="card-title"><Icon Name="database" /> @L.T("Baza danych")</div>
@@ -122,9 +147,42 @@
     [Inject] private IAuthorizationService Authorization { get; set; } = default!;
     private bool _isAdmin;
 
+    private sealed record LanAddress(string Address, string Label);
+    private readonly List<LanAddress> _lanAddresses = [];
+    private bool _lanEnabled;
+    private string _lanAddress = "";
+    private int _lanPort = PanelLanSettings.DefaultPort;
+    private string? _lanMessage;
+    private bool _lanError;
+
+    private void SaveLan()
+    {
+        var settings = new PanelLanSettings(_lanEnabled, _lanAddress, _lanPort);
+        if (_lanEnabled && settings.Validate(AgentListener.Active.Enabled ? AgentListener.Active.Port : -1) is { } error)
+        {
+            (_lanMessage, _lanError) = (error, true);
+            return;
+        }
+
+        settings.Save(Paths);
+        (_lanMessage, _lanError) = (L.T("Zapisano. Uruchom ponownie WELES, aby zmiana zaczęła działać."), false);
+    }
+
     protected override async Task OnInitializedAsync()
     {
         _isAdmin = await Access.CanAsync(AuthState, Authorization, Policies.Admin);
+        var lan = PanelLanSettings.Load(Paths);
+        (_lanEnabled, _lanAddress, _lanPort) = (lan.Enabled, lan.Address, lan.Port);
+        foreach (var nic in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces().Where(n => n.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up))
+        {
+            foreach (var u in nic.GetIPProperties().UnicastAddresses.Where(u => u.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork
+                         && !System.Net.IPAddress.IsLoopback(u.Address) && !Weles.Core.Networking.AddressClassifier.IsPublic(u.Address)))
+            {
+                _lanAddresses.Add(new LanAddress(u.Address.ToString(), $"{u.Address} ({nic.Name}, {PanelLanState.SubnetOf(u.Address.ToString())})"));
+            }
+        }
+
+        if (_lanAddress.Length > 0 && _lanAddresses.All(a => a.Address != _lanAddress)) _lanAddresses.Insert(0, new LanAddress(_lanAddress, _lanAddress));
         _autostart = Autostart.IsEnabled();
         _db = await DatabaseInfo.GetInfoAsync();
         _ai = await Ai.GetStatusAsync();

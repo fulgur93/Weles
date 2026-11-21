@@ -26,7 +26,20 @@ else
             <ScanStatusPill Status="s.Status" />
             @if (IsActive)
             {
-                <Can Policy="@Policies.Modify"><button class="btn btn-danger" disabled="@(_progress?.StopRequested == true)" @onclick="Stop">@(_progress?.StopRequested == true ? L.T("Zatrzymywanie…") : L.T("Zatrzymaj skan"))</button></Can>
+                <Can Policy="@Policies.Modify">
+                    @if (_progress is { Batched: true } && s.Status == ScanStatus.Running)
+                    {
+                        <button class="btn btn-ghost" disabled="@(_progress.PauseRequested)" title="@L.T("Dokończy bieżącą podgrupę adresów i zatrzyma się – wyniki zostają, skan można potem wznowić")" @onclick="Pause">@(_progress.PauseRequested ? L.T("Wstrzymywanie…") : L.T("Wstrzymaj"))</button>
+                    }
+                    <button class="btn btn-danger" disabled="@(_progress?.StopRequested == true)" @onclick="Stop">@(_progress?.StopRequested == true ? L.T("Zatrzymywanie…") : L.T("Zatrzymaj skan"))</button>
+                </Can>
+            }
+            @if (s.Status == ScanStatus.Paused)
+            {
+                <Can Policy="@Policies.Modify">
+                    <button class="btn btn-primary" @onclick="Resume">@L.T("Wznów skan")</button>
+                    <button class="btn btn-ghost" @onclick="Abandon">@L.T("Zakończ bez wznawiania")</button>
+                </Can>
             }
             @if (s.Status == ScanStatus.Completed)
             {
@@ -41,6 +54,29 @@ else
     {
         <div class="alert alert-bad">@L.Message(s.ErrorMessage)</div>
     }
+    @if (_message is not null)
+    {
+        <div class="alert @(_messageOk ? "alert-ok" : "alert-bad")">@L.Message(_message)</div>
+    }
+    @if (s.Status == ScanStatus.Completed && s.HostsAlive == 0 && _detail.Hosts.Count == 0)
+    {
+        <div class="alert alert-warn">
+            @L.T("Skan zakończył się, ale nie wykrył żadnych aktywnych hostów ani portów.")
+            @L.T("Sprawdź, czy zakres jest w tej samej sieci co komputer z WELES – powód znajdziesz w dzienniku skanu. Wyniki wcześniejszych skanów są w topologii po wybraniu odpowiedniej sieci.")
+        </div>
+    }
+    @if (s.Status == ScanStatus.Paused)
+    {
+        <section class="card progress-card">
+            <div class="progress-head">
+                <strong>@L.T("Skan wstrzymany")</strong>
+                <span class="muted small">@L.F("przeskanowano {0} z {1} adresów – wznowienie zacznie od następnej podgrupy", s.CompletedAddresses, s.HostsTargeted)</span>
+                <span class="progress-pct">@(s.HostsTargeted == 0 ? "0" : (100.0 * s.CompletedAddresses / s.HostsTargeted).ToString("0"))%</span>
+            </div>
+            <div class="progress"><div class="progress-fill" style="width:@((s.HostsTargeted == 0 ? 0 : 100.0 * s.CompletedAddresses / s.HostsTargeted).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture))%"></div></div>
+            <p class="muted small">@L.T("Skan zakresu z oknem czasowym wznawia się sam po otwarciu okna. Wyniki wstrzymanego skanu są widoczne, ale status urządzeń (nieobecne, niestabilne) liczy się dopiero po przeskanowaniu całego zakresu.")</p>
+        </section>
+    }
 
     @if (IsActive && _progress is { } p)
     {
@@ -53,7 +89,12 @@ else
             <p class="muted small">@L.T("Skan działa w tle na serwerze WELES: możesz przejść do innych zakładek albo zamknąć kartę przeglądarki – postęp widać w górnym pasku. Skan przerywa tylko przycisk „Zatrzymaj skan” albo zamknięcie aplikacji.")</p>
             <div class="progress"><div class="progress-fill" style="width:@p.PercentComplete.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)%"></div></div>
             <div class="progress-stats">
-                <span>@L.T("Sprawdzone adresy") <strong>@p.HostsProbed / @p.HostsTotal</strong></span>
+                <span>@L.T("Sprawdzone adresy") <strong>@(p.Batched ? p.AddressesProbed : p.HostsProbed) / @p.HostsTotal</strong></span>
+                @if (p.Batched)
+                {
+                    <span>@L.T("Podgrupa") <strong>@p.Subgroup</strong> <span class="muted">(@L.F("gotowe {0} adresów", p.AddressesDone))</span></span>
+                    @if (p.EstimatedEnd is { } eta) { <span>@L.T("Szacowany koniec") <strong>@Labels.Local(eta)</strong></span> }
+                }
                 <span>@L.T("Aktywne hosty") <strong>@p.HostsAlive</strong></span>
                 <span>@L.T("Przeskanowane hosty") <strong>@p.HostsCompleted</strong></span>
                 <span>@L.T("Otwarte porty") <strong>@p.OpenPorts</strong></span>
@@ -142,7 +183,7 @@ else
     private Task? _pollTask;
     private readonly CancellationTokenSource _cts = new();
 
-    private bool IsActive => _detail?.Summary.Status is ScanStatus.Pending or ScanStatus.Running;
+    private bool IsActive => _detail?.Summary.Status is ScanStatus.Pending or ScanStatus.Running || (_detail is not null && Coordinator.IsActive(ScanId));
 
     protected override async Task OnParametersSetAsync()
     {
@@ -181,6 +222,36 @@ else
         catch (OperationCanceledException)
         {
         }
+    }
+
+    private string? _message;
+    private bool _messageOk;
+
+    private void Pause()
+    {
+        Targets.PauseScan(ScanId);
+        _progress = Coordinator.GetProgress(ScanId);
+    }
+
+    private async Task Resume()
+    {
+        var result = await Targets.ResumeScanAsync(ScanId);
+        (_message, _messageOk) = result.Success ? (L.T("Skan wznowiony."), true) : (string.Join(" ", result.Errors), false);
+        await Task.Delay(300);
+        await LoadAsync();
+        if (IsActive && (_pollTask is null || _pollTask.IsCompleted))
+        {
+            _timer?.Dispose();
+            _timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            _pollTask = PollAsync();
+        }
+    }
+
+    private async Task Abandon()
+    {
+        var result = await Targets.AbandonPausedAsync(ScanId);
+        (_message, _messageOk) = result.Success ? (L.T("Skan zakończony bez wznawiania – zachowano zebrane wyniki."), true) : (string.Join(" ", result.Errors), false);
+        await LoadAsync();
     }
 
     private void Stop()

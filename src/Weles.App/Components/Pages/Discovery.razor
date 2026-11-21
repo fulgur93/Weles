@@ -226,7 +226,11 @@
                             </select>
                             @if (schedule is { Interval: not null } sc)
                             {
-                                <span class="muted small">@L.F("profil {0} · następny {1}", sc.PortSpecification, Labels.Local(sc.NextRunAt))@(sc.LastResult is { } last ? " · " + L.Message(last) : "")</span>
+                                <span class="small" title="@L.T("Skany startują tylko w tym oknie (czas lokalny, może przechodzić przez północ). Skan, który nie zdąży, zostaje wstrzymany po bieżącej podgrupie adresów i wznawia się w kolejnym oknie.")">@L.T("okno")</span>
+                                <input type="time" class="input input-sm" value="@WindowPart(sc, true)" @onchange="e => SetWindowAsync(t.Id, sc, e.Value?.ToString(), null)" aria-label="@L.T("Początek okna")" />
+                                <span class="small">–</span>
+                                <input type="time" class="input input-sm" value="@WindowPart(sc, false)" @onchange="e => SetWindowAsync(t.Id, sc, null, e.Value?.ToString())" aria-label="@L.T("Koniec okna")" />
+                                <span class="muted small">@L.F("profil {0} · następny {1}", sc.PortSpecification, Labels.Local(sc.NextRunAt))@(sc.Window is { } w ? " · " + L.F("okno {0}", w.ToString()) : "")@(sc.LastResult is { } last ? " · " + L.Message(last) : "")</span>
                             }
                             else
                             {
@@ -295,8 +299,42 @@
     {
         ScheduleInterval? interval = Enum.TryParse<ScheduleInterval>(value, out var parsed) ? parsed : null;
         var spec = _profiles.GetValueOrDefault(targetId) == "custom" ? _customPorts.GetValueOrDefault(targetId, "") : _profiles.GetValueOrDefault(targetId, Weles.Core.Networking.PortSpecification.Quick);
-        var result = await Schedules.SetAsync(targetId, interval, spec);
+        var result = await Schedules.SetAsync(targetId, interval, spec, window: _schedules.GetValueOrDefault(targetId)?.Window);
         Show(result.Success ? (interval is null ? L.T("Harmonogram wyłączony.") : L.T("Harmonogram zapisany.")) : string.Join(" ", result.Errors.Select(L.Message)), !result.Success);
+        _schedules = await Schedules.ByTargetAsync();
+    }
+
+    private readonly Dictionary<int, (string Start, string End)> _windowDraft = [];
+
+    private string WindowPart(ScheduleInfo schedule, bool start)
+    {
+        var saved = schedule.Window is { } w ? (w.ToString()[..5], w.ToString()[^5..]) : ("", "");
+        var draft = schedule.Id is { } id && _windowDraft.TryGetValue(id, out var d) ? d : saved;
+        return start ? draft.Item1 : draft.Item2;
+    }
+
+    /// <param name="start">New start (null – unchanged).</param>
+    /// <param name="end">New end (null – unchanged).</param>
+    private async Task SetWindowAsync(int targetId, ScheduleInfo schedule, string? start, string? end)
+    {
+        start ??= WindowPart(schedule, true);
+        end ??= WindowPart(schedule, false);
+        if (string.IsNullOrWhiteSpace(start) != string.IsNullOrWhiteSpace(end))
+        {
+            // Only one end entered so far – saved when both are set (or both cleared).
+            _windowDraft[schedule.Id!.Value] = (start, end);
+            return;
+        }
+
+        _windowDraft.Remove(schedule.Id!.Value);
+        if (!Weles.Core.Scheduling.TimeWindow.TryParse(start, end, out var window))
+        {
+            Show(L.T("Nieprawidłowe okno czasowe – początek i koniec muszą być różnymi godzinami."), true);
+            return;
+        }
+
+        var result = await Schedules.SetAsync(targetId, schedule.Interval, schedule.PortSpecification ?? Weles.Core.Networking.PortSpecification.Quick, window: window);
+        Show(result.Success ? (window is null ? L.T("Okno czasowe usunięte – skany o dowolnej porze.") : L.F("Okno czasowe zapisane: {0}.", window.ToString())) : string.Join(" ", result.Errors.Select(L.Message)), !result.Success);
         _schedules = await Schedules.ByTargetAsync();
     }
 

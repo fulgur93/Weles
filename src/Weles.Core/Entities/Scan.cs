@@ -32,6 +32,9 @@ public class Scan
     /// <summary>Limits (concurrency, rate, timeouts) used for this scan.</summary>
     public string? SettingsJson { get; set; }
 
+    /// <summary>Addresses of the scope already processed (subgroups done) – a paused scan resumes after them.</summary>
+    public int CompletedAddresses { get; set; }
+
     public int HostsAlive { get; set; }
     public int OpenPorts { get; set; }
     public string? ErrorMessage { get; set; }
