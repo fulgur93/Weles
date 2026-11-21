@@ -6,6 +6,7 @@
 @inject NavigationManager Navigation
 @inject ScanCoordinator Coordinator
 @inject ScheduleService Schedules
+@inject NmapEngine Nmap
 @implements IDisposable
 
 <PageTitle>@L.T("Wykrywanie sieci · WELES")</PageTitle>
@@ -186,6 +187,11 @@
                             {
                                 <input class="input input-sm mono" placeholder="22,80,443,8000-8100" @bind="_customPorts[t.Id]" />
                             }
+                            <select class="input input-sm" value="@EngineOf(t.Id)" @onchange="e => _engines[t.Id] = Enum.TryParse<PortEngine>(e.Value?.ToString(), out var en) ? en : PortEngine.Builtin" aria-label="@L.T("Silnik skanowania")"
+                                    title="@(Nmap.Status.IsAvailable ? L.F("nmap {0}: porty i wersje usług (TCP connect, bez skryptów NSE); usługi web, sygnatury i podatności – WELES", Nmap.Status.Version ?? "") : L.T("nmap nie jest zainstalowany – opcjonalny; zainstaluj go, aby używać go jako dodatkowego silnika"))">
+                                <option value="Builtin">@L.T("Silnik WELES")</option>
+                                <option value="Nmap" disabled="@(!Nmap.Status.IsAvailable)">@(Nmap.Status.IsAvailable ? L.F("nmap {0}", Nmap.Status.Version ?? "") : L.T("nmap (nie zainstalowany)"))</option>
+                            </select>
                             @if (t.ActiveScanId is { } activeId)
                             {
                                 <a class="btn btn-primary btn-sm" href="scans/@activeId" title="@L.T("Skan działa w tle – możesz przechodzić między zakładkami. Kliknij, aby zobaczyć postęp.")"><span class="spinner" aria-hidden="true"></span> @L.T("Skan w toku – pokaż postęp")</a>
@@ -230,7 +236,7 @@
                                 <input type="time" class="input input-sm" value="@WindowPart(sc, true)" @onchange="e => SetWindowAsync(t.Id, sc, e.Value?.ToString(), null)" aria-label="@L.T("Początek okna")" />
                                 <span class="small">–</span>
                                 <input type="time" class="input input-sm" value="@WindowPart(sc, false)" @onchange="e => SetWindowAsync(t.Id, sc, null, e.Value?.ToString())" aria-label="@L.T("Koniec okna")" />
-                                <span class="muted small">@L.F("profil {0} · następny {1}", sc.PortSpecification, Labels.Local(sc.NextRunAt))@(sc.Window is { } w ? " · " + L.F("okno {0}", w.ToString()) : "")@(sc.LastResult is { } last ? " · " + L.Message(last) : "")</span>
+                                <span class="muted small">@L.F("profil {0} · następny {1}", sc.PortSpecification, Labels.Local(sc.NextRunAt))@(sc.Window is { } w ? " · " + L.F("okno {0}", w.ToString()) : "")@(sc.Engine == PortEngine.Nmap ? " · nmap" : "")@(sc.LastResult is { } last ? " · " + L.Message(last) : "")</span>
                             }
                             else
                             {
@@ -269,6 +275,9 @@
     /// <summary>Scope whose scan was refused because the computer is on another network – waits for the user's confirmation.</summary>
     private int? _otherNetworkTarget;
     private readonly Dictionary<int, string> _profiles = [];
+    private readonly Dictionary<int, PortEngine> _engines = [];
+
+    private PortEngine EngineOf(int targetId) => _engines.TryGetValue(targetId, out var e) && (e != PortEngine.Nmap || Nmap.Status.IsAvailable) ? e : PortEngine.Builtin;
     private readonly Dictionary<int, string> _customPorts = [];
 
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
@@ -299,7 +308,7 @@
     {
         ScheduleInterval? interval = Enum.TryParse<ScheduleInterval>(value, out var parsed) ? parsed : null;
         var spec = _profiles.GetValueOrDefault(targetId) == "custom" ? _customPorts.GetValueOrDefault(targetId, "") : _profiles.GetValueOrDefault(targetId, Weles.Core.Networking.PortSpecification.Quick);
-        var result = await Schedules.SetAsync(targetId, interval, spec, window: _schedules.GetValueOrDefault(targetId)?.Window);
+        var result = await Schedules.SetAsync(targetId, interval, spec, window: _schedules.GetValueOrDefault(targetId)?.Window, engine: EngineOf(targetId));
         Show(result.Success ? (interval is null ? L.T("Harmonogram wyłączony.") : L.T("Harmonogram zapisany.")) : string.Join(" ", result.Errors.Select(L.Message)), !result.Success);
         _schedules = await Schedules.ByTargetAsync();
     }
@@ -333,7 +342,7 @@
             return;
         }
 
-        var result = await Schedules.SetAsync(targetId, schedule.Interval, schedule.PortSpecification ?? Weles.Core.Networking.PortSpecification.Quick, window: window);
+        var result = await Schedules.SetAsync(targetId, schedule.Interval, schedule.PortSpecification ?? Weles.Core.Networking.PortSpecification.Quick, window: window, engine: schedule.Engine);
         Show(result.Success ? (window is null ? L.T("Okno czasowe usunięte – skany o dowolnej porze.") : L.F("Okno czasowe zapisane: {0}.", window.ToString())) : string.Join(" ", result.Errors.Select(L.Message)), !result.Success);
         _schedules = await Schedules.ByTargetAsync();
     }
@@ -422,7 +431,7 @@
         var spec = _profiles[id] == "custom" ? _customPorts[id] : _profiles[id];
         _busy = true;
         _otherNetworkTarget = null;
-        var result = await Targets.StartScanAsync(id, spec, allowOtherNetwork: allowOtherNetwork);
+        var result = await Targets.StartScanAsync(id, spec, allowOtherNetwork: allowOtherNetwork, engine: EngineOf(id));
         _busy = false;
         if (result.Success)
         {

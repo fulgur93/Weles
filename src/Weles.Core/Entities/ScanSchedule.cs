@@ -21,6 +21,7 @@ public class ScanSchedule
 
     public ScheduleInterval Interval { get; set; }
     public required string PortSpecification { get; set; }
+    public Enums.PortEngine Engine { get; set; }
     public bool IsEnabled { get; set; } = true;
 
     /// <summary>Gateway fingerprint of the network the scope belongs to; null for scopes without a gateway (e.g. loopback).</summary>

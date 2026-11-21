@@ -55,6 +55,6 @@ pwsh deploy/windows/publish.ps1 -Rid win-x64 # artifacts/weles-<ver>-win-x64.zip
 
 Fingerprinting HTTP/HTTPS z sygnaturami (wbudowane i własne), import celów i wyników (nmap XML, CSV, JSON), eksport CSV/JSON,
 integracja z DefectDojo (CVE, CWE, CVSS, EPSS, granularność, reimport), RBAC z 4 rolami, szyfrowanie bazy SQLCipher,
-zakresy do 65 536 adresów skanowane podgrupami z pomiarem tempa, okna czasowe z wstrzymaniem i wznowieniem, obsługa hostów
+opcjonalny silnik nmap (porty i wersje, bez skryptów NSE), zakresy do 65 536 adresów skanowane podgrupami z pomiarem tempa, okna czasowe z wstrzymaniem i wznowieniem, obsługa hostów
 niestabilnych (próg kolejnych braków, zależność od pory dnia), opcjonalny dostęp do panelu z sieci lokalnej (HTTPS,
-logowanie). Szczegóły: `docs/architecture.md` §5i, prezentacja: `docs/presentation/`.
+logowanie). Szczegóły: `docs/architecture.md` §5i.

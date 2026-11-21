@@ -142,6 +142,10 @@ WELES łączy się z Internetem **tylko** po kliknięciu „Aktualizuj z Interne
   musi być tym adresem (DNS rebinding); żądania cross-site odrzucane; w LAN nie działa token uruchomieniowy (`/auth`) ani
   kreator pierwszego administratora (`/setup`) – każde żądanie wymaga konta WELES i roli. Ciasteczko `Secure; HttpOnly;
   SameSite=Strict`, HSTS. Certyfikat samopodpisany – odcisk SHA-256 do porównania w Ustawieniach.
+- **Nmap (opcjonalny):** uruchamiany bez powłoki, z listą argumentów budowaną w kodzie (TCP connect, wykrywanie wersji,
+  limity szybkości WELES); nigdy skrypty NSE, wykrywanie systemu, UDP ani pakiety surowe. Cele to wyłącznie adresy z
+  zatwierdzonego zakresu, przekazane przez plik tymczasowy usuwany po skanie; wynik nmapa nie może poszerzyć zakresu
+  (inne adresy i porty są pomijane). Nmap nie jest wymagany – bez niego skanuje silnik wbudowany.
 - **Okna czasowe i wznawianie:** wznowienie wstrzymanego skanu przechodzi te same kontrole co nowy skan – zakres nadal
   zatwierdzony, niezmieniony od startu skanu i ta sama sieć (router); inaczej wznowienie jest odrzucane.
 

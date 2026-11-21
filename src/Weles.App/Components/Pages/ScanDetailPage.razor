@@ -20,7 +20,7 @@ else
         <div>
             <a class="back-link" href="scans"><Icon Name="arrow-left" Size="14" /> @L.T("Skany")</a>
             <h1>@L.F("Skan #{0}", s.Id) · @L.Message(s.TargetName)</h1>
-            <p class="page-subtitle">@L.T("Porty:") <span class="mono">@s.PortSpecification</span> (@_detail.PortCount) · @L.F("rozpoczęty {0}", Labels.Local(s.StartedAt ?? s.CreatedAt)) · @L.F("czas {0}", Labels.Duration(s.StartedAt, s.CompletedAt))</p>
+            <p class="page-subtitle">@L.T("Porty:") <span class="mono">@s.PortSpecification</span> (@_detail.PortCount)@(s.Engine == PortEngine.Nmap ? " · " + L.T("silnik: nmap") : "") · @L.F("rozpoczęty {0}", Labels.Local(s.StartedAt ?? s.CreatedAt)) · @L.F("czas {0}", Labels.Duration(s.StartedAt, s.CompletedAt))</p>
         </div>
         <div class="header-actions">
             <ScanStatusPill Status="s.Status" />

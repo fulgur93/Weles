@@ -132,7 +132,7 @@ public sealed partial class ScanImportService(
     }
 
     /// <summary>nmap XML: DTD processing prohibited and no resolver – no external entities, no network access.</summary>
-    private static List<ImportedHost> ParseNmap(string xml, out DateTime? started)
+    internal static List<ImportedHost> ParseNmap(string xml, out DateTime? started)
     {
         started = null;
         var doc = new XmlDocument { XmlResolver = null };

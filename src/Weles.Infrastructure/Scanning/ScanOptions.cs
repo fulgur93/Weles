@@ -8,6 +8,12 @@ public sealed class ScanOptions
     /// <summary>Largest scope one scan may cover (a /16 – the AGH requirement is above 10 000 addresses). Scopes still need approval.</summary>
     public int MaxHostsPerScan { get; set; } = 65536;
 
+    /// <summary>Path to the nmap program; empty – searched in PATH (and Program Files\Nmap on Windows). Nmap is optional.</summary>
+    public string? NmapPath { get; set; }
+
+    /// <summary>Upper bound for one nmap run on a subgroup (then the subgroup falls back to the built-in engine).</summary>
+    public int NmapTimeoutSeconds { get; set; } = 1800;
+
     /// <summary>Scopes larger than this are scanned in subgroups (resume points, pause at a time window's end, throughput).</summary>
     public int SubgroupThreshold { get; set; } = 1024;
 

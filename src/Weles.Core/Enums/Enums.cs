@@ -20,6 +20,15 @@ public enum ScanTrigger
     Import = 3
 }
 
+/// <summary>Who finds open ports and service versions. WELES's own probes, web fingerprinting and signatures always run.</summary>
+public enum PortEngine
+{
+    /// <summary>WELES's own C# engine – always available.</summary>
+    Builtin = 0,
+    /// <summary>Nmap (TCP connect + version detection, no NSE scripts) if installed; otherwise the built-in engine.</summary>
+    Nmap = 1
+}
+
 public enum ScanTargetEntryKind
 {
     IpAddress = 0,

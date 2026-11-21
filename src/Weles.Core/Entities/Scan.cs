@@ -14,6 +14,9 @@ public class Scan
     /// <summary>Port specification used for this scan, e.g. "top100" or "22,80,443,8000-8100".</summary>
     public required string PortSpecification { get; set; }
 
+    /// <summary>Port and version engine chosen for the scan (nmap is optional).</summary>
+    public PortEngine Engine { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime? StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }

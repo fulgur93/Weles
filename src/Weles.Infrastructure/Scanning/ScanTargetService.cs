@@ -155,7 +155,7 @@ public sealed class ScanTargetService(
 
     /// <param name="allowOtherNetwork">The user confirmed scanning although the router differs from the scope's last scan.</param>
     public async Task<OperationResult> StartScanAsync(int targetId, string portSpecification, ScanTrigger trigger = ScanTrigger.Manual, CancellationToken ct = default,
-        bool allowOtherNetwork = false)
+        bool allowOtherNetwork = false, PortEngine engine = PortEngine.Builtin)
     {
         if (!PortSpecification.TryParse(portSpecification, out _, out var portError)) return OperationResult.Fail(portError!);
 
@@ -178,7 +178,7 @@ public sealed class ScanTargetService(
 
         var scan = new Scan
         {
-            ScanTargetId = targetId, Status = ScanStatus.Pending, Trigger = trigger,
+            ScanTargetId = targetId, Status = ScanStatus.Pending, Trigger = trigger, Engine = engine,
             PortSpecification = portSpecification.Trim().ToLowerInvariant(), CreatedAt = Now
         };
         db.Scans.Add(scan);

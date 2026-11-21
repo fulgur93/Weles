@@ -23,7 +23,8 @@ public sealed class ScanEngine(
     LocalNetworkDiscovery localNetwork,
     IOptions<ScanOptions> optionsAccessor,
     TimeProvider timeProvider,
-    ILogger<ScanEngine> logger)
+    ILogger<ScanEngine> logger,
+    NmapEngine? nmap = null)
 {
     public async Task RunAsync(int scanId, ScanProgress progress, CancellationToken cancellationToken)
     {
@@ -64,7 +65,8 @@ public sealed class ScanEngine(
             scan.SettingsJson = JsonSerializer.Serialize(new
             {
                 options.MaxConcurrentConnections, options.ConnectionsPerSecond, options.ConnectTimeoutMs,
-                options.ParallelHostDiscovery, options.ParallelHostScans, options.UseIcmp
+                options.ParallelHostDiscovery, options.ParallelHostScans, options.UseIcmp,
+                Engine = scan.Engine.ToString(), Nmap = scan.Engine == PortEngine.Nmap ? nmap?.Status.Version : null
             });
             scan.ScopeSnapshot = JsonSerializer.Serialize(target.Entries.Select(e => new { e.Value, e.IsExclusion }));
             await db.SaveChangesAsync(CancellationToken.None);
@@ -75,12 +77,19 @@ public sealed class ScanEngine(
 
         try
         {
-            var scanner = new NetworkScanner(oui, localNetwork, options, logger);
+            var scanner = new NetworkScanner(oui, localNetwork, options, logger, nmap);
+            if (scan.Engine == PortEngine.Nmap && !resuming)
+            {
+                await writer.AddEventAsync(scanId, ScanEventLevel.Info, nmap is { Status.IsAvailable: true }
+                    ? $"Silnik portów i wersji: nmap {nmap.Status.Version} (TCP connect, wykrywanie wersji, bez skryptów NSE); usługi web, sygnatury i podatności – WELES."
+                    : "Silnik portów i wersji: wybrano nmap, ale nie jest zainstalowany – skanuje wbudowany silnik WELES.");
+            }
+
             var sink = new DatabaseSink(writer, db, scan);
             var outcome = await scanner.RunAsync(
                 new NetworkScanRequest(target.Entries.Select(e => new ScopeEntry(e.Value, e.IsExclusion)).ToList(), target.AllowPublicAddresses, scan.PortSpecification,
                     await Fingerprint.SignatureService.CustomPathsAsync(db, CancellationToken.None), scan.CompletedAddresses,
-                    await ExpectedAddressesAsync(db, scan, CancellationToken.None)),
+                    await ExpectedAddressesAsync(db, scan, CancellationToken.None), scan.Engine),
                 progress, sink, cancellationToken);
             if (outcome.Error is not null)
             {

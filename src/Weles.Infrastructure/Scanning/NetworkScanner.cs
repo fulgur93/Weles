@@ -13,8 +13,9 @@ namespace Weles.Infrastructure.Scanning;
 /// <param name="WebPaths">Extra safe paths custom signatures need.</param>
 /// <param name="ResumeFrom">Addresses of the scope already processed by this scan (a paused scan continues after them).</param>
 /// <param name="ExpectedAddresses">Addresses where hosts answered in earlier scans – measured again when silent (unstable hosts).</param>
+/// <param name="Engine">Who finds open ports and versions; nmap falls back to the built-in engine when missing or failing.</param>
 public sealed record NetworkScanRequest(IReadOnlyList<ScopeEntry> Entries, bool AllowPublicAddresses, string PortSpecification, IReadOnlyList<string>? WebPaths = null,
-    int ResumeFrom = 0, IReadOnlySet<IPAddress>? ExpectedAddresses = null);
+    int ResumeFrom = 0, IReadOnlySet<IPAddress>? ExpectedAddresses = null, PortEngine Engine = PortEngine.Builtin);
 
 /// <summary>Where a scan delivers what it finds – the central database (<see cref="ScanEngine"/>) or a remote agent's upload.</summary>
 public interface IScanSink
@@ -42,7 +43,7 @@ public sealed record NetworkScanOutcome(string? Error, bool Paused = false);
 /// identification → classification. Used by the central application and by remote agents, so both scan exactly the same
 /// way. Cancellation surfaces as <see cref="OperationCanceledException"/>; results delivered before it are kept.
 /// </summary>
-public sealed class NetworkScanner(OuiDatabase oui, LocalNetworkDiscovery localNetwork, ScanOptions options, ILogger logger)
+public sealed class NetworkScanner(OuiDatabase oui, LocalNetworkDiscovery localNetwork, ScanOptions options, ILogger logger, NmapEngine? nmap = null)
 {
     public const int MinBatchSize = 64;
     /// <summary>Upper bound of a subgroup – keeps resume points and pauses frequent on fast networks.</summary>
@@ -111,6 +112,7 @@ public sealed class NetworkScanner(OuiDatabase oui, LocalNetworkDiscovery localN
         var batchSize = batched ? Math.Max(1, options.SubgroupInitialSize) : all.Count;
         var subgroup = 0;
         var watch = System.Diagnostics.Stopwatch.StartNew();
+        var nmapWarned = false;
         for (var index = start; index < all.Count;)
         {
             if (progress.PauseRequested)
@@ -218,11 +220,39 @@ public sealed class NetworkScanner(OuiDatabase oui, LocalNetworkDiscovery localN
             // Phase 2: ports and services per live host.
             progress.Phase = ScanPhase.PortScan;
             progress.SetPortsTotal(progress.PortsTotal + alive.Sum(a => ports.Count + (scopeMdns.TryGetValue(a.Key, out var m) ? m.Services.Count(s => s.Port is not null) : 0)));
+            IReadOnlyDictionary<IPAddress, NmapHost>? nmapResults = null;
+            if (request.Engine == PortEngine.Nmap && alive.Count > 0)
+            {
+                if (nmap is not { Status.IsAvailable: true })
+                {
+                    if (!nmapWarned)
+                    {
+                        nmapWarned = true;
+                        await sink.EventAsync(ScanEventLevel.Warning, "Wybrano silnik nmap, ale nmap nie jest zainstalowany – skan wykonuje wbudowany silnik WELES.");
+                    }
+                }
+                else
+                {
+                    progress.Activity = $"nmap: porty i wersje usług ({alive.Count} hostów)";
+                    var nmapWatch = System.Diagnostics.Stopwatch.StartNew();
+                    try
+                    {
+                        nmapResults = await nmap.ScanAsync(alive.Keys.ToList(), ports, cancellationToken);
+                        await sink.EventAsync(ScanEventLevel.Info, string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                            $"nmap {nmap.Status.Version}: {nmapResults.Count} hostów, {nmapResults.Values.Sum(h => h.Ports.Count)} otwartych portów, {nmapWatch.Elapsed.TotalSeconds:0} s."));
+                    }
+                    catch (NmapException ex)
+                    {
+                        await sink.EventAsync(ScanEventLevel.Warning, $"nmap: {ex.Message} – tę podgrupę skanuje wbudowany silnik WELES.");
+                    }
+                }
+            }
+
             await Parallel.ForEachAsync(alive.OrderBy(a => Ipv4Sort(a.Key)), new ParallelOptions { MaxDegreeOfParallelism = options.ParallelHostScans, CancellationToken = cancellationToken },
                 async (entry, ct) =>
                 {
                     var result = await ScanHostAsync(entry.Key, entry.Value, ports, arp, gateways, localMachine, localMacs, scopeMdns.GetValueOrDefault(entry.Key),
-                        scopeNames.GetValueOrDefault(entry.Key), prober, gate, progress, ct);
+                        scopeNames.GetValueOrDefault(entry.Key), prober, gate, progress, ct, nmapResults?.GetValueOrDefault(entry.Key));
                     await sink.HostAsync(result);
                     progress.HostCompleted();
                 });
@@ -254,16 +284,49 @@ public sealed class NetworkScanner(OuiDatabase oui, LocalNetworkDiscovery localN
         return new NetworkScanOutcome(null);
     }
 
+    /// <summary>
+    /// nmap's service guess next to WELES's own identification: it replaces a weak one (port number only, unrecognised
+    /// banner, bare TLS) and fills a missing version of the same product; a strong WELES identification stays. Always
+    /// recorded in <c>Extra["nmap.service"]</c>.
+    /// </summary>
+    internal static Core.Models.ServiceIdentification WithNmap(Core.Models.ServiceIdentification id, Import.ImportedPort nmapPort)
+    {
+        var summary = string.Join(' ', new[] { nmapPort.Service, nmapPort.Product, nmapPort.Version }.Where(x => !string.IsNullOrEmpty(x)));
+        if (summary.Length > 0) id.Extra["nmap.service"] = summary.Length > 200 ? summary[..200] : summary;
+        var weak = id.Method is "port-hint" or "banner-unrecognized" or "tls-handshake";
+        if (weak && (nmapPort.Product is not null || nmapPort.Service is not null))
+        {
+            var name = nmapPort.Service is { } s ? (nmapPort.Tls && !s.StartsWith("ssl/", StringComparison.Ordinal) ? "ssl/" + s : s) : id.ServiceName;
+            return id with
+            {
+                ServiceName = name, Product = nmapPort.Product ?? id.Product, Version = nmapPort.Product is null ? id.Version : nmapPort.Version ?? id.Version,
+                Cpe = nmapPort.Cpe ?? id.Cpe, IsTls = id.IsTls || nmapPort.Tls,
+                Confidence = Math.Max(id.Confidence, nmapPort.Product is null ? 40 : Math.Min(nmapPort.Confidence ?? 60, 80)),
+                Method = id.Method + "+nmap"
+            };
+        }
+
+        if (id.Version is null && nmapPort.Version is not null && nmapPort.Product is not null
+            && (id.Product is null || nmapPort.Product.Contains(id.Product, StringComparison.OrdinalIgnoreCase) || id.Product.Contains(nmapPort.Product, StringComparison.OrdinalIgnoreCase)))
+        {
+            return id with { Product = id.Product ?? nmapPort.Product, Version = nmapPort.Version, Cpe = id.Cpe ?? nmapPort.Cpe, Method = id.Method + "+nmap" };
+        }
+
+        return id;
+    }
+
     private async Task<HostScanResult> ScanHostAsync(
         IPAddress address, LivenessResult liveness, IReadOnlyList<int> ports, IReadOnlyDictionary<IPAddress, string> arp,
         IReadOnlySet<IPAddress> gateways, IReadOnlyDictionary<IPAddress, string?> localMachine, IReadOnlySet<string> localMacs, MdnsHost? mdns, string? scopeName,
-        ServiceProber prober, ConnectionGate gate, ScanProgress progress, CancellationToken ct)
+        ServiceProber prober, ConnectionGate gate, ScanProgress progress, CancellationToken ct, NmapHost? nmapHost = null)
     {
         progress.Activity = $"Skanowanie portów {address}";
         // Per-host limits on top of the global gate, so no single device sees a connection flood.
         await using var hostGate = new ConnectionGate(options.MaxConcurrentConnectionsPerHost, options.ConnectionsPerSecondPerHost);
         var open = new ConcurrentDictionary<int, string>();
         foreach (var known in liveness.OpenPorts.Where(ports.Contains)) open[known] = "syn-ack";
+        // With nmap, its open ports are the port scan; WELES only confirms them with its own service probes below.
+        if (nmapHost is not null) foreach (var p in nmapHost.Ports) open[p.Port] = "nmap";
 
         // Ports advertised over mDNS (e.g. Android wireless debugging on a random port) are always checked.
         var announcedPorts = mdns?.Services.Where(s => s.Port is > 0).Select(s => s.Port!.Value) ?? [];
@@ -274,6 +337,12 @@ public sealed class NetworkScanner(OuiDatabase oui, LocalNetworkDiscovery localN
             if (open.ContainsKey(port))
             {
                 progress.PortChecked(true);
+                return;
+            }
+
+            if (nmapHost is not null && !announcedPorts.Contains(port))
+            {
+                progress.PortChecked(false); // nmap checked it and found it closed or filtered
                 return;
             }
 
@@ -296,6 +365,11 @@ public sealed class NetworkScanner(OuiDatabase oui, LocalNetworkDiscovery localN
                 using (await gate.AcquireAsync(token))
                 {
                     probe = await prober.ProbeAsync(address, port.Key, hostname, token);
+                }
+
+                if (nmapHost?.Ports.FirstOrDefault(p => p.Port == port.Key) is { } fromNmap)
+                {
+                    probe = probe with { Identification = WithNmap(probe.Identification, fromNmap) };
                 }
 
                 if (mdns?.Services.FirstOrDefault(s => s.Port == port.Key) is { } announced)

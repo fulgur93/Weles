@@ -1087,6 +1087,9 @@ namespace Weles.Infrastructure.Database.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("Engine")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("ErrorMessage")
                         .HasMaxLength(2000)
                         .HasColumnType("TEXT");
@@ -1189,6 +1192,9 @@ namespace Weles.Infrastructure.Database.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("Engine")
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("Interval")
                         .HasColumnType("INTEGER");

@@ -10,7 +10,7 @@ using Weles.Infrastructure.Discovery;
 namespace Weles.Infrastructure.Scanning;
 
 public sealed record ScheduleInfo(int? Id, ScheduleInterval? Interval, string? PortSpecification, bool IsEnabled, DateTime? NextRunAt, DateTime? LastRunAt, int? LastScanId, string? LastResult, string? NetworkFingerprint,
-    Weles.Core.Scheduling.TimeWindow? Window = null);
+    Weles.Core.Scheduling.TimeWindow? Window = null, PortEngine Engine = PortEngine.Builtin);
 
 /// <summary>Creates and changes schedules; the checks that keep automatic scans inside the user's consent live here and in <see cref="ScanScheduler"/>.</summary>
 public sealed class ScheduleService(IDbContextFactory<WelesDbContext> contextFactory, TimeProvider timeProvider)
@@ -19,7 +19,7 @@ public sealed class ScheduleService(IDbContextFactory<WelesDbContext> contextFac
     {
         await using var db = await contextFactory.CreateDbContextAsync(ct);
         return await db.ScanSchedules.AsNoTracking().ToDictionaryAsync(s => s.ScanTargetId,
-            s => new ScheduleInfo(s.Id, s.Interval, s.PortSpecification, s.IsEnabled, s.NextRunAt, s.LastRunAt, s.LastScanId, s.LastResult, s.NetworkFingerprint, s.Window), ct);
+            s => new ScheduleInfo(s.Id, s.Interval, s.PortSpecification, s.IsEnabled, s.NextRunAt, s.LastRunAt, s.LastScanId, s.LastResult, s.NetworkFingerprint, s.Window, s.Engine), ct);
     }
 
     /// <summary>
@@ -28,7 +28,7 @@ public sealed class ScheduleService(IDbContextFactory<WelesDbContext> contextFac
     /// </summary>
     /// <param name="window">Daily time window (local time) for the scans; null – any time.</param>
     public async Task<OperationResult> SetAsync(int targetId, ScheduleInterval? interval, string portSpecification, CancellationToken ct = default,
-        Weles.Core.Scheduling.TimeWindow? window = null)
+        Weles.Core.Scheduling.TimeWindow? window = null, PortEngine engine = PortEngine.Builtin)
     {
         if (window is { IsValid: false }) return OperationResult.Fail("Nieprawidłowe okno czasowe – początek i koniec muszą być różnymi godzinami.");
         await using var db = await contextFactory.CreateDbContextAsync(ct);
@@ -55,6 +55,7 @@ public sealed class ScheduleService(IDbContextFactory<WelesDbContext> contextFac
         existing.PortSpecification = portSpecification.Trim().ToLowerInvariant();
         existing.IsEnabled = true;
         existing.NetworkFingerprint = lastScan.NetworkFingerprint;
+        existing.Engine = engine;
         existing.WindowStartMinute = window?.StartMinute;
         existing.WindowEndMinute = window?.EndMinute;
         existing.NextRunAt = now + ScanSchedule.Length(interval.Value);
@@ -170,7 +171,7 @@ public sealed class ScanScheduler(
                 continue;
             }
 
-            var result = await targets.StartScanAsync(schedule.ScanTargetId, schedule.PortSpecification, ScanTrigger.Scheduled, ct);
+            var result = await targets.StartScanAsync(schedule.ScanTargetId, schedule.PortSpecification, ScanTrigger.Scheduled, ct, engine: schedule.Engine);
             if (result.Success)
             {
                 schedule.LastScanId = result.Id;

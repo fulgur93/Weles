@@ -201,6 +201,9 @@ WELES działa w pełni bez agentów. Agent przydaje się, gdy chcesz skanować s
 - **Duże zakresy:** powyżej 1024 adresów skan idzie podgrupami. Na stronie skanu widać numer podgrupy, gotowe adresy i
   szacowany koniec; w zdarzeniach – tempo każdej podgrupy. **Wstrzymaj** kończy bieżącą podgrupę i zatrzymuje skan;
   **Wznów skan** kontynuuje od następnej (nic nie jest skanowane drugi raz); **Zakończ bez wznawiania** zostawia zebrane wyniki.
+- **Nmap (opcjonalnie):** jeśli nmap jest zainstalowany (Ustawienia pokazują wersję), w **Wykrywanie sieci** obok profilu
+  portów wybierz **nmap**. Nmap szuka otwartych portów i wersji usług, a WELES nadal rozpoznaje usługi web, sygnatury i
+  podatności. Bez nmapa wszystko działa na silniku WELES. Instalacja: Linux `sudo apt install nmap`, Windows – instalator z nmap.org.
 - **Okno czasowe harmonogramu:** w **Wykrywanie sieci** przy harmonogramie zakresu ustaw np. 22:00–06:00. Skany startują
   tylko w oknie; skan, który nie zdąży, zostaje wstrzymany i wznawia się sam w kolejnym oknie.
 - **Niestabilne urządzenia:** urządzenie, które nie odpowiedziało w ostatnim skanie (lub dwóch), ma status **Niestabilne**;
