@@ -107,6 +107,18 @@ WELES łączy się z Internetem **tylko** po kliknięciu „Aktualizuj z Interne
 - Zaimportowany audyt nie jest łączony z inwentarzem i nie uruchamia żadnych skanów.
 - Log zawiera tylko fakt eksportu/importu (format, rozmiar, nazwa pliku) – nie treść audytu.
 
-## Planowane
+## Agenci (Etap 10)
 
-- Agenci: rejestracja jednorazowym kodem, tokeny przechowywane jako hash, unieważnianie, ograniczenie do przypisanych zakresów – Etap 10.
+- Punkt połączeń agentów jest domyślnie wyłączony. Włączony nasłuchuje na jednym wybranym adresie prywatnym (nigdy na
+  wszystkich interfejsach ani adresie publicznym), wyłącznie HTTPS (TLS 1.2/1.3), i obsługuje tylko protokół agentów –
+  panel WELES pozostaje dostępny wyłącznie z 127.0.0.1.
+- Agent łączy się zawsze sam (wychodząco); WELES nie łączy się z agentem. Serwer jest uwierzytelniany przypiętym SHA‑256
+  certyfikatu – inny certyfikat zrywa połączenie, zanim cokolwiek zostanie wysłane.
+- Rejestracja jednorazowym kodem (256 bitów, 24 h, przechowywany jako SHA‑256). Token agenta (256 bitów) w bazie tylko jako
+  SHA‑256; u agenta chroniony DPAPI (Windows) lub plikiem 0600 (Linux). Nieudane próby są ograniczane (429 po 10 próbach
+  w 10 minut z jednego adresu). Unieważnienie działa natychmiast i anuluje skany agenta. Token nie trafia do logów.
+- Agent może skanować tylko lokalne zakresy (bez domen i adresów publicznych) przypisane i zatwierdzone w panelu; sam też
+  odrzuca zadania z domenami i nie skanuje adresów publicznych.
+- Dane od agenta są niezaufane: limit 8 MB na żądanie, ≤ 64 hosty na partię, host spoza zakresu skanu lub nieprawidłowy
+  jest odrzucany, teksty są przycinane i oczyszczane, agent może zmieniać tylko własny trwający skan.
+- Usługa agenta w Linuksie działa jako osobny użytkownik bez uprawnień (`NoNewPrivileges`, `ProtectSystem=strict`).

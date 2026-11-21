@@ -1,0 +1,31 @@
+@* Checkboxes of scopes an agent may get (local only: addresses, CIDRs, ranges). *@
+@using Weles.Infrastructure.Agents
+
+@if (Scopes.Count == 0)
+{
+    <p class="muted small">@L.T("Brak zakresów, które można przypisać agentowi. Utwórz zakres sieci lokalnej (adresy, CIDR, przedziały – bez domen) w module Wykrywanie sieci.")</p>
+}
+else
+{
+    <div class="scope-choice">
+        <span class="small muted">@L.T("Zakresy, które agent może skanować:")</span>
+        @foreach (var s in Scopes)
+        {
+            <label class="checkbox small">
+                <input type="checkbox" checked="@Selected.Contains(s.Id)" @onchange="e => Toggle(s.Id, e.Value is true)" />
+                @s.Name @if (!s.IsApproved) { <span class="muted">(@L.T("niezatwierdzony"))</span> }
+            </label>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<AgentScopeView> Scopes { get; set; } = [];
+    [Parameter, EditorRequired] public HashSet<int> Selected { get; set; } = [];
+
+    private void Toggle(int id, bool on)
+    {
+        if (on) Selected.Add(id);
+        else Selected.Remove(id);
+    }
+}

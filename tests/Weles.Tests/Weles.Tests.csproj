@@ -21,6 +21,7 @@
     <ProjectReference Include="..\..\src\Weles.Core\Weles.Core.csproj" />
     <ProjectReference Include="..\..\src\Weles.Infrastructure\Weles.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Weles.App\Weles.App.csproj" />
+    <ProjectReference Include="..\..\src\Weles.Agent\Weles.Agent.csproj" />
   </ItemGroup>
 
 </Project>

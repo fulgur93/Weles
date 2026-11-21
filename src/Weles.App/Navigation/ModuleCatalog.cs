@@ -11,8 +11,8 @@ public sealed record WelesModule(
     IReadOnlyList<string> PlannedCapabilities);
 
 /// <summary>
-/// Single source of truth for navigation. Texts are Polish dictionary keys – the UI shows them through <see cref="Localization.L"/>. Modules that are not implemented yet are shown
-/// as "planned" with their delivery stage – never as an empty, seemingly working screen.
+/// Single source of truth for navigation. Texts are Polish dictionary keys – the UI shows them through <see cref="Localization.L"/>. A module that is not
+/// implemented yet would be shown as "planned" with its delivery stage – never as an empty, seemingly working screen.
 /// </summary>
 public static class ModuleCatalog
 {
@@ -57,7 +57,7 @@ public static class ModuleCatalog
             "Raporty PDF oraz eksport/import audytu (JSON/ZIP) do przeniesienia na inny komputer.",
             ["Raport PDF z podsumowaniem, urządzeniami, podatnościami i rekomendacjami", "Zmiany od poprzedniego audytu", "Eksport i import pełnego audytu"]),
 
-        new("Agenci", "agents", "agents", "System", 10, false,
+        new("Agenci", "agents", "agents", "System", 10, true,
             "Opcjonalne agenty (Windows/Linux) skanujące inne segmenty sieci i raportujące przez wychodzące HTTPS.",
             ["Rejestracja i unieważnianie dostępu", "Uwierzytelniona komunikacja wychodząca", "Wyłącznie zatwierdzone zakresy"]),
         new("Ustawienia", "settings", "settings", "System", 1, true,

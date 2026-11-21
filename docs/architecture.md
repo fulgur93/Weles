@@ -71,7 +71,7 @@ Weles/
 │  │  ├─ Platform/ (ścieżki danych)
 │  │  ├─ AI/  Discovery/  Scanning/  Vulnerabilities/  RiskAssessment/
 │  │  └─ NetworkTopology/  Reporting/             (tworzone w swoich etapach)
-│  └─ Weles.Agent/                  Worker Service – dopiero w Etapie 10
+│  └─ Weles.Agent/                  Worker Service agenta (Etap 10): Communication/, Configuration/, Scanning/, Workers/
 ├─ tests/Weles.Tests/               xUnit: jednostkowe + integracyjne (WebApplicationFactory, SQLite)
 ├─ deploy/{windows,linux,demo-lab}/
 └─ docs/
@@ -81,7 +81,7 @@ Odstępstwa od propozycji z założeń (uzasadnione):
 - Nazwy projektów `Weles.*` (konwencja .NET PascalCase) zamiast `WELES.*`.
 - Testy w `tests/`, a nie `src/` – standard, upraszcza publikację (`dotnet publish src/Weles.App`).
 - `Repositories/` **nie powstaje** – `DbContext` jest już repozytorium/unit of work; dodatkowa warstwa nic by nie dała. Zapytania domenowe trafiają do serwisów zapytań (np. `DashboardQueries`).
-- `Weles.Agent` nie jest tworzony w Etapie 1, by nie dodawać pustego projektu.
+- `Weles.Agent` powstał w Etapie 10; korzysta z `Weles.Infrastructure` (wspólny silnik skanowania `NetworkScanner`, OUI, interfejsy), bez bazy danych.
 - `Layout/`, `Pages/`, `Shared/` są w `Components/` – tego oczekuje szablon Blazor Web App .NET 10.
 
 ## 3. Model AI i dystrybucja
@@ -175,7 +175,7 @@ Kluczowa decyzja: **rozdzielenie tożsamości od obserwacji**.
 | `ExternalTarget` + `ExternalAnalysis` | 8 | domena lub adres publiczny z datą potwierdzenia uprawnień, opcja CT, znane nazwy, FK `ScanTarget` (zakres skanu aktywnego); analiza pasywna jako migawka JSON (rekordy, hosty ze źródłem, certyfikaty CT) – reguły oceniają ją przy odczycie |
 | `AuditReport`, `AuditAiSummary`, `ImportedAudit` | 9 | **Utworzone (migracja `Stage9Reports`).** `AuditReport`: plik PDF/JSON/ZIP (`ScanId` albo `ImportedAuditId` – check constraint: dokładnie jedno), `FileName` (generowana, nigdy od użytkownika), `SizeBytes`, `Sha256`, `Language`. `AuditAiSummary`: jedno podsumowanie AI na skan (`Text`, `Model`, `Language`). `ImportedAudit`: zweryfikowany dokument audytu jako JSON, unikalny `Sha256` |
 | `AIConversation`, `AIMessage` | 6 | rozmowy + wiadomości (`Role`, `Content`, `ContextSnapshotJson`, `Model`, `TokensIn/Out`) |
-| `Agent`, `AgentScan` | 10 | `Name`, `TokenHash` (nigdy jawny token), `Status`, `LastSeenAt`, `RevokedAt`, dozwolone zakresy |
+| `Agent`, `AgentScope` | 10 | **Utworzone (migracja `Stage10Agents`).** `Agent`: `Name` (unikalna), `Status` (Pending/Active/Revoked), `EnrollmentCodeHash` + `EnrollmentExpiresAt` (jednorazowy kod, 24 h), `TokenHash` (SHA‑256, nigdy jawny token), `LastSeenAt`, `LastAddress`, `Hostname`, `OperatingSystem`, `AgentVersion`, `SystemInfoJson`, `RevokedAt`. `AgentScope` – przypisane zakresy (klucz złożony). Zamiast osobnej `AgentScan`: `Scan.AgentId` (SetNull) + `Trigger = Agent` – skan agenta jest zwykłym skanem w historii, monitoringu, ocenie ryzyka i raportach |
 
 ### 4.4. Zmiany w Etapie 2 (migracja `Stage2Discovery`)
 
@@ -352,6 +352,24 @@ Weryfikacja na kopii bazy użytkownika (2026‑11‑19): sieć przewodowa 47/100
 | Import | `AuditArchive.ReadAsync`: limit 50 MB czytany asynchronicznie (deklarowany rozmiar nie jest zaufany), nic nie jest rozpakowywane na dysk, tylko trzy znane nazwy wpisów (każda inna – w tym `../` – odrzuca plik), limit na wpis (manifest 64 KB, audit.json 20 MB, PDF 40 MB) liczony przy czytaniu, SHA‑256 i rozmiar zgodne z manifestem, JSON z `MaxDepth` 16, walidacja schematu (format, wersja ≤ obsługiwanej, wymagane części, długości tekstów, liczności list, oceny 0–100). Zaimportowany audyt jest tylko do odczytu i **nie trafia do inwentarza** – opisuje inną sieć w innym czasie. Ten sam audyt (SHA‑256 JSON) nie jest importowany dwa razy. |
 | Podsumowanie AI | `AuditSummaryService` – tylko na żądanie, lokalny model, dane wyłącznie z dokumentu audytu (te same, które pokazuje PDF), teksty z sieci czyszczone. Jawne znaczniki „POPRZEDNI AUDYT”/„PIERWSZY AUDYT” – bez nich model na prawdziwych danych pisał „to pierwszy audyt” mimo porównania w danych. W PDF opisane jako interpretacja z nazwą modelu i datą. |
 
+## 5h. Agenci zdalni (Etap 10)
+
+```
+Agent (Worker Service) ──HTTPS, przypięty SHA‑256 certyfikatu──► punkt agentów WELES (osobny port, domyślnie wyłączony)
+   NetworkScanner (ten sam co w WELES)                              AgentApiMiddleware → AgentService → ScanResultWriter → ScanPostProcessor
+```
+
+| Element | Implementacja |
+|---------|---------------|
+| Wspólny silnik | `NetworkScanner` – rozwiązanie zakresu, wykrywanie hostów (ICMP/TCP/ARP/mDNS), porty, usługi, klasyfikacja – bez bazy; wyniki do `IScanSink`. `ScanEngine` zapisuje je do bazy, agent wysyła partiami. Przetwarzanie po skanie (`ScanPostProcessor`: dopasowanie podatności, ocena ryzyka) jest wspólne. |
+| Punkt połączeń | `config/agent-listener.json` (domyślnie wyłączony), stosowany przy starcie: Kestrel HTTPS (TLS 1.2/1.3) na **jednym wybranym adresie prywatnym** – nigdy 0.0.0.0 ani adres publiczny. Certyfikat ECDSA P‑256 tworzony raz w `keys/` (0600), nigdy wymieniany automatycznie. `AgentApiMiddleware` jest pierwszym elementem potoku: połączenia na adres i port agentów obsługuje wyłącznie protokół agentów (inne ścieżki → 404, błędy → sam kod bez strony błędu panelu); panel pozostaje na 127.0.0.1 z tokenem sesji. Zajęty port lub nieaktualny adres – komunikat w UI zamiast zatrzymania WELES. |
+| Protokół | `AgentProtocol` v1, tylko POST JSON (≤ 8 MB): `enroll` (kod → token), `heartbeat` (informacje o systemie; odpowiedź może nieść zadanie lub polecenie zatrzymania), `scans/{id}/results` (≤ 64 hosty, ≤ 20 zdarzeń), `scans/{id}/complete`. Agent nie ma dostępu do niczego innego (inwentarz, inne skany, ustawienia). |
+| Rejestracja i tożsamość | Użytkownik tworzy agenta w panelu → jednorazowy kod (256 bitów, 24 h, w bazie SHA‑256) + polecenie z adresem i odciskiem certyfikatu. Agent weryfikuje serwer **tylko** po odcisku (bez CA i nazwy hosta). Token (256 bitów) w bazie jako SHA‑256; po stronie agenta DPAPI (Windows, zakres maszyny) lub plik 0600 w katalogu 0700 (Linux). Nieudane próby z jednego adresu: po 10 w 10 min → 429. Unieważnienie: token przestaje działać natychmiast, skany agenta są anulowane. |
+| Autoryzacja skanów | Zakres może być przypisany agentowi tylko, gdy jest lokalny (bez domen i adresów publicznych). Skan zleca użytkownik dla zatwierdzonego i przypisanego zakresu; agent dostaje migawkę wpisów z chwili zlecenia. Przy wydaniu zadania ponownie sprawdzane są zatwierdzenie i przypisanie. Agent sam odrzuca zadania z domenami i nigdy nie skanuje adresów publicznych. |
+| Walidacja wyników | Każdy host musi należeć do zakresu skanu (rozwiązanego po stronie WELES bez DNS); duplikaty, nieprawidłowe porty, nieznane typy odrzucane; teksty przycięte i oczyszczone ze znaków sterujących; producent ustalany po OUI przez WELES (nie z danych agenta); metoda wykrycia oznaczona `Agent`. Agent może dotknąć tylko własnego skanu w stanie Running. |
+| Stan | Status w panelu: czeka na rejestrację / połączony (ostatnie wywołanie < 105 s) / nie łączy się / unieważniony, interfejsy sieciowe agenta, ostatni adres. Skan agenta widać na liście aktywnych skanów i można go zatrzymać jak lokalny; brak wywołań agenta przez 10 min → skan „nieudany” (`AgentMaintenanceService`), restart agenta w trakcie skanu → skan „nieudany”, przesłane wyniki zostają. Restart WELES nie przerywa skanów agentów. |
+| Wdrożenie | `deploy/agent/publish-agent.sh` – samodzielny pojedynczy plik (linux-x64/arm64, win-x64). Linux: `deploy/linux/weles-agent.service` (systemd, osobny użytkownik, `NoNewPrivileges`, `ProtectSystem=strict`, bez uprawnień). Windows: `deploy/windows/install-agent.ps1` (rejestracja, ACL konfiguracji, usługa „WELES Agent” z restartem po błędzie). |
+
 ## 5c. Język interfejsu (PL / EN)
 
 - Polski jest językiem źródłowym: każdy tekst w kodzie jest po polsku i jest jednocześnie kluczem słownika
@@ -389,7 +407,7 @@ Weryfikacja na kopii bazy użytkownika (2026‑11‑19): sieć przewodowa 47/100
 | 7 | Monitoring (porównanie skanów, zmiany w czasie, harmonogram z blokadą innej sieci) + topologia (SVG) + ścieżki ataku (hipotezy z pewnością kroków) | ✅ |
 | 8 | External Attack Surface: DNS, SPF/DMARC/CAA, subdomeny z CT, certyfikaty, usługi publiczne; pasywna analiza oddzielona od aktywnego skanu | ✅ |
 | 9 | Raporty PDF, eksport JSON/ZIP z manifestem SHA‑256, import audytu z walidacją, podsumowanie AI audytu | ✅ |
-| 10 | Agenci (Worker Service, HTTPS, rejestracja, unieważnianie) | ⏸ |
+| 10 | Agenci: Worker Service Windows/Linux, wychodzące HTTPS z przypiętym certyfikatem, rejestracja jednorazowym kodem, token jako hash, unieważnianie, tylko przypisane i zatwierdzone zakresy, walidacja wyników | ✅ (Windows: zbudowany, nieprzetestowany na żywym systemie) |
 | 11 | Pakowanie: ZIP/TAR.GZ → instalatory (Inno Setup / AppImage+DEB), Ollama + model | ZIP/TAR.GZ ✅ |
 
 **Konieczne do pierwszej demonstracji:** etapy 1–6, porównanie skanów z etapu 7, PDF z etapu 9, paczki ZIP/TAR.GZ z etapu 11, laboratorium demo.
@@ -452,3 +470,4 @@ Weryfikacja na kopii bazy użytkownika (2026‑11‑19): sieć przewodowa 47/100
 | 2026‑11‑20 | Etap 9: PDF renderowany w warstwie aplikacji (QuestPDF), bo korzysta ze słownika PL/EN interfejsu; dokument audytu i archiwum w Core/Infrastructure. Zaimportowany audyt przechowywany jako zweryfikowana migawka JSON tylko do odczytu – łączenie z lokalnym inwentarzem zafałszowałoby ocenę ryzyka, monitoring i podział na sieci. PDF z archiwum importu nie jest przechowywany (raport generowany ponownie z danych). |
 | 2026‑11‑20 | Przegląd Etapu 9: stan „w chwili audytu” bierze się z oceny ryzyka zapisanej dla skanu (lista CVE i reguł), a nie z dat – ponowne otwarcie problemu zeruje `ResolvedAt`, więc same daty pokazywały w raporcie skanu pośredniego problem, którego ten skan nie widział. Daty decydują tylko dla zaakceptowanych ryzyk i skanów sprzed oceny ryzyka. Walidacja importu uzupełniona o `generatedBy`, wpisy `null` w listach, poziom ryzyka bez wyniku i nieznane wartości wyliczeń (JSON przyjmuje liczby) – takie pliki przechodziły kontrolę i wywracały import lub podgląd. |
 | 2026‑11‑21 | Sieć HackNation (test na prawdziwych danych): interfejs 10.250.192.0/20, zatwierdzony zakres 10.250.192.0/24 za tym samym routerem – wymóg identycznego CIDR ukrywał 168 urządzeń jako „inną sieć” i strony analizy były puste. Bieżąca sieć = ten sam router (MAC bramy) i nakładające się adresy. Ręczny skan zakresu, którego ostatni skan był za innym routerem, wymaga jawnego potwierdzenia uprawnień (zakres domowy 192.168.0.0/24 uruchomiony w sieci konferencyjnej trafiał do cudzej sieci); harmonogram nadal pomija takie skany. |
+| 2026‑11‑21 | Etap 10: agent używa tego samego silnika co WELES (`NetworkScanner` wydzielony z `ScanEngine`) – dwa silniki rozjechałyby się w wynikach. Zaufanie do serwera przez przypięcie SHA‑256 certyfikatu zamiast CA – WELES działa w sieciach bez domeny i PKI. Punkt agentów to osobny port na jednym adresie prywatnym, domyślnie wyłączony – panel nigdy nie wychodzi poza 127.0.0.1. Skan agenta to zwykły `Scan` z `AgentId`, więc trafia do monitoringu, oceny ryzyka, raportów i podziału na sieci bez osobnych ścieżek. Strona „moduł planowany” usunięta – wszystkie moduły są zaimplementowane. |

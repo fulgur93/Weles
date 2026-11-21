@@ -65,7 +65,7 @@ public class LocalAccessIntegrationTests(WelesAppFactory factory) : IClassFixtur
     }
 
     [Fact]
-    public async Task Authenticated_session_can_open_dashboard_settings_and_planned_modules()
+    public async Task Authenticated_session_can_open_dashboard_settings_and_agents()
     {
         var client = await AuthenticatedClientAsync();
 
@@ -76,8 +76,10 @@ public class LocalAccessIntegrationTests(WelesAppFactory factory) : IClassFixtur
         var settings = await client.GetStringAsync("/settings");
         Assert.Contains("weles.db", settings);
 
-        var planned = WebUtility.HtmlDecode(await client.GetStringAsync("/risk"));
-        Assert.Contains("Planowany", planned);
+        // Every module is implemented – the agents page manages agents (the endpoint is off by default).
+        var agents = WebUtility.HtmlDecode(await client.GetStringAsync("/agents"));
+        Assert.Contains("Punkt połączeń agentów", agents);
+        Assert.Contains("Wyłączony (domyślnie)", agents);
     }
 
     [Fact]

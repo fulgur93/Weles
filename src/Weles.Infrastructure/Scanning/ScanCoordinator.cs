@@ -19,6 +19,9 @@ public sealed class ScanCoordinator(TimeProvider timeProvider)
         return _queue.Writer.WriteAsync(scanId, cancellationToken);
     }
 
+    /// <summary>Shows a scan that runs elsewhere (a remote agent) among the active scans, without queueing it here.</summary>
+    internal void Track(int scanId) => _progress.TryAdd(scanId, new ScanProgress(scanId, timeProvider.GetUtcNow().UtcDateTime));
+
     public IAsyncEnumerable<int> DequeueAllAsync(CancellationToken cancellationToken) => _queue.Reader.ReadAllAsync(cancellationToken);
 
     /// <summary>Stops a running scan or prevents a queued one from starting. Results collected so far are kept.</summary>

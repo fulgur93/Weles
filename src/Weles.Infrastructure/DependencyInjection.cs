@@ -62,6 +62,9 @@ public static class DependencyInjection
         services.AddSingleton<VulnerabilityStore>();
         services.AddSingleton<VulnerabilityMatchingService>();
         services.AddSingleton<Risk.RiskAssessmentService>();
+        services.AddSingleton<ScanPostProcessor>();
+        services.AddSingleton<Agents.AgentService>();
+        services.AddHostedService<Agents.AgentMaintenanceService>();
         services.AddSingleton<VulnerabilityDatabaseService>();
         services.AddHostedService<VulnerabilityStartupService>();
 

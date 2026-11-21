@@ -47,5 +47,5 @@ pwsh deploy/windows/publish.ps1 -Rid win-x64 # artifacts/weles-<ver>-win-x64.zip
 | 7 | Monitoring (porównanie skanów, zmiany w czasie, harmonogram tylko w zatwierdzonej sieci), topologia SVG, ścieżki ataku jako hipotezy | ✅ |
 | 8 | External Attack Surface: DNS, SPF/DMARC, subdomeny z CT, certyfikaty, usługi publiczne (pasywnie lub przez zatwierdzony zakres) | ✅ |
 | 9 | Raporty: PDF, eksport JSON/ZIP z SHA‑256, import audytu z walidacją, podsumowanie AI audytu | ✅ |
-| 10 | Agenci | ⏳ następny |
-| 11 | Pakowanie | planowane |
+| 10 | Agenci: Worker Service Windows/Linux, wychodzące HTTPS z przypiętym certyfikatem, rejestracja, unieważnianie, tylko zatwierdzone zakresy | ✅ |
+| 11 | Pakowanie | ⏳ następny |

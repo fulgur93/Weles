@@ -38,6 +38,10 @@ public class Scan
 
     public bool IsDemo { get; set; }
 
+    /// <summary>The remote agent that runs this scan (Trigger = Agent); null for scans run by WELES itself.</summary>
+    public int? AgentId { get; set; }
+    public Agent? Agent { get; set; }
+
     public List<DiscoveredHost> Hosts { get; set; } = [];
     public List<ScanEvent> Events { get; set; } = [];
     public List<RiskFinding> Findings { get; set; } = [];

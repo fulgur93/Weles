@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <Description>Agent WELES: usługa Windows/Linux, która łączy się wychodząco przez HTTPS z aplikacją centralną (certyfikat przypięty po SHA-256), wykonuje wyłącznie zatwierdzone i przypisane skany sieci lokalnej tym samym silnikiem co WELES i odsyła wyniki.</Description>
+    <AssemblyName>weles-agent</AssemblyName>
+    <RootNamespace>Weles.Agent</RootNamespace>
+    <UserSecretsId>weles-agent</UserSecretsId>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Weles.Core\Weles.Core.csproj" />
+    <ProjectReference Include="..\Weles.Infrastructure\Weles.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.15" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.15" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.15" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.15" />
+  </ItemGroup>
+
+</Project>

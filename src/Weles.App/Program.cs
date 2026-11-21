@@ -9,6 +9,7 @@ using Weles.App.Localization;
 using Weles.App.Services;
 using Weles.Infrastructure;
 using Weles.Infrastructure.Database;
+using Weles.Infrastructure.Agents;
 using Weles.Infrastructure.Platform;
 
 // Content root is the application directory, not the current working directory –
@@ -46,6 +47,10 @@ builder.WebHost.ConfigureKestrel(kestrel =>
     kestrel.AddServerHeader = false;
     kestrel.Listen(IPAddress.Loopback, port);
 });
+
+// The agent endpoint (off by default): HTTPS on one chosen private address, agent protocol only.
+var agentListener = AgentApiMiddleware.Configure(builder, paths);
+builder.Services.AddSingleton(agentListener);
 
 CultureInfo.DefaultThreadCurrentCulture = CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.GetCultureInfo("pl-PL");
 
@@ -93,6 +98,9 @@ await app.Services.GetRequiredService<DatabaseInitializer>().InitializeAsync();
 var language = app.Services.GetRequiredService<Weles.App.Localization.LanguageState>();
 await language.LoadAsync();
 
+// First: requests on the agent port are answered by the agent API and never reach the panel.
+app.UseMiddleware<AgentApiMiddleware>();
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
@@ -128,6 +136,8 @@ app.Lifetime.ApplicationStarted.Register(() =>
 
     startupLogger.LogInformation("WELES {Version} started on {Url} (demo mode: {Demo}, data: {DataDir})",
         app.Services.GetRequiredService<RuntimeInfo>().Version, instance.BaseUrl, hostOptions.DemoMode, paths.Root);
+    if (agentListener.IsListening) startupLogger.LogInformation("Agent endpoint listening on {Url}", agentListener.Url);
+    else if (agentListener.Active.Enabled) startupLogger.LogWarning("Agent endpoint not started: {Error}", agentListener.Error);
 
     // The launch link holds the access token – it goes to the console only, never to the log file.
     Console.WriteLine();

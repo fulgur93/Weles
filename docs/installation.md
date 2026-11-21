@@ -34,6 +34,22 @@ Inną lokalizację można wskazać przełącznikiem `--data-dir` lub zmienną `W
 Domyślnie `5080`. Jeżeli jest zajęty, WELES automatycznie wybiera wolny port i wypisuje adres w konsoli.
 Port można zmienić przełącznikiem `--port`. Panel nasłuchuje wyłącznie na `127.0.0.1`.
 
+## Agent (opcjonalnie)
+
+Paczki agenta: `deploy/agent/publish-agent.sh linux-x64` lub `win-x64` (samodzielny plik, bez .NET na komputerze agenta).
+Linux:
+
+```bash
+sudo useradd --system --no-create-home --shell /usr/sbin/nologin weles-agent
+sudo install -d -o weles-agent -g weles-agent -m 0700 /etc/weles-agent
+sudo cp -r weles-agent-<wersja>-linux-x64 /opt/weles-agent
+sudo -u weles-agent /opt/weles-agent/weles-agent enroll --config /etc/weles-agent/agent.json --server https://ADRES:PORT --pin ODCISK --code KOD
+sudo cp /opt/weles-agent/weles-agent.service /etc/systemd/system/ && sudo systemctl enable --now weles-agent
+```
+
+Windows (PowerShell jako administrator, w rozpakowanym katalogu): `.\install-agent.ps1 -Server https://ADRES:PORT -Pin ODCISK -Code KOD`.
+Polecenie z adresem, odciskiem i kodem pokazuje strona **Agenci**.
+
 ## Odinstalowanie
 
 Usuń katalog programu. Aby usunąć również wyniki audytów, usuń katalog danych.

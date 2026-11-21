@@ -19,11 +19,10 @@ otwiera istniejącą sesję zamiast startować drugi serwer.
 | Topologia / Ścieżki ataku / Monitorowanie | mapa sieci, hipotetyczne ścieżki ekspozycji, zmiany między skanami, harmonogram | ✅ Etap 7 |
 | Analityk AI | lokalny asystent: wyjaśnia podatności, ryzyko, zmiany, priorytety napraw | ✅ Etap 6 |
 | Raporty | raport PDF, eksport JSON/ZIP, import audytu, podsumowanie AI audytu | ✅ Etap 9 |
-| Agents | zdalne agenty | Etap 10 |
+| Agenci | zdalni agenci w innych segmentach sieci: rejestracja, zakresy, zlecanie skanów, unieważnianie | ✅ Etap 10 |
 | Settings | wersja, ścieżki, baza, AI, motyw, pobieranie logów | Etap 1 |
 
-Moduły jeszcze niezaimplementowane są oznaczone w menu numerem etapu (np. `E4`) i otwierają opis planowanego zakresu –
-nie pokazują pustych ani pozornie działających ekranów.
+Wszystkie moduły są zaimplementowane.
 
 ## Pierwszy audyt (Network Discovery)
 
@@ -173,6 +172,21 @@ jest też na stronie skanu.
   z niego wygenerować PDF.
 
 Raport opisuje stan z chwili skanu – późniejsze skany nie zmieniają starszego raportu.
+
+## Agenci
+
+WELES działa w pełni bez agentów. Agent przydaje się, gdy chcesz skanować sieć, do której ten komputer nie ma dostępu
+(inne biuro, inny segment).
+
+1. **Agenci → Punkt połączeń agentów**: zaznacz „Włącz”, wybierz adres tego komputera (sieć lokalna lub VPN) i port,
+   zapisz i uruchom ponownie WELES. Zapora musi przepuszczać ten port.
+2. **Nowy agent**: nazwa i zakresy, które agent może skanować (tylko zakresy sieci lokalnej: adresy, CIDR, przedziały).
+   WELES pokaże jednorazowy kod i gotowe polecenie `weles-agent enroll …` z odciskiem certyfikatu.
+3. Na komputerze agenta: Linux – rozpakuj paczkę, zarejestruj agenta i włącz usługę `weles-agent` (plik
+   `weles-agent.service`); Windows – `install-agent.ps1 -Server … -Pin … -Code …` jako administrator.
+4. Gdy agent jest „połączony”, wybierz zatwierdzony zakres i **Zleć skan**. Skan pojawia się w **Skanach**, można go
+   zatrzymać, a wyniki trafiają do wszystkich stron jak skan lokalny.
+5. **Unieważnij** odcina agenta natychmiast.
 
 ## Analityk AI
 

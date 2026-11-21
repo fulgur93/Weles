@@ -1,0 +1,31 @@
+# WELES agent as a systemd service. Install:
+#   sudo useradd --system --no-create-home --shell /usr/sbin/nologin weles-agent
+#   sudo install -d -o weles-agent -g weles-agent -m 0700 /etc/weles-agent
+#   sudo cp -r weles-agent-<version>-linux-x64 /opt/weles-agent
+#   sudo -u weles-agent /opt/weles-agent/weles-agent enroll --config /etc/weles-agent/agent.json --server https://… --pin … --code …
+#   sudo cp weles-agent.service /etc/systemd/system/ && sudo systemctl enable --now weles-agent
+[Unit]
+Description=WELES agent (outbound HTTPS to WELES, approved scans only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=weles-agent
+Group=weles-agent
+ExecStart=/opt/weles-agent/weles-agent run --config /etc/weles-agent/agent.json
+Restart=on-failure
+RestartSec=30
+# The agent only connects out and probes the approved scope: no privileges, read-only system.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadOnlyPaths=/etc/weles-agent
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

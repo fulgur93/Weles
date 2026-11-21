@@ -1,0 +1,319 @@
+@page "/agents"
+@using System.Net
+@using Weles.Core.Networking
+@using Weles.Infrastructure.Agents
+@using Weles.Infrastructure.Discovery
+@using Weles.Infrastructure.Platform
+@inject AgentService Service
+@inject AgentListenerState Listener
+@inject WelesPaths Paths
+@inject LocalNetworkDiscovery LocalNetwork
+@inject NavigationManager Navigation
+
+<PageTitle>@L.T("Agenci · WELES")</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>@L.T("Agenci")</h1>
+        <p class="page-subtitle">@L.T("Agent to mała usługa (Windows lub Linux) na komputerze w innym segmencie sieci. Łączy się sam z WELES przez HTTPS – nie trzeba otwierać u niego żadnych portów – i skanuje wyłącznie zakresy, które mu tu przypiszesz i zatwierdzisz. WELES działa w pełni bez agentów.")</p>
+    </div>
+</div>
+
+<section class="card">
+    <div class="card-title"><Icon Name="lock" /> @L.T("Punkt połączeń agentów")</div>
+    @if (Listener.IsListening)
+    {
+        <div class="alert alert-ok">@L.F("Nasłuch aktywny: {0}. Obsługuje wyłącznie protokół agentów – panel WELES pozostaje dostępny tylko z tego komputera.", Listener.Url)</div>
+    }
+    else if (Listener.Active.Enabled)
+    {
+        <div class="alert alert-bad">@L.T("Nasłuch włączony, ale nie działa:") @L.Message(Listener.Error)</div>
+    }
+    else
+    {
+        <p class="muted">@L.T("Wyłączony (domyślnie). Włącz go tylko wtedy, gdy chcesz używać agentów – otwiera port HTTPS na wybranym adresie tego komputera.")</p>
+    }
+
+    @if (Listener.Pin is { } pin)
+    {
+        <dl class="facts">
+            <dt>@L.T("Odcisk certyfikatu (SHA-256)")</dt><dd class="mono break">@pin</dd>
+        </dl>
+        <p class="muted small">@L.T("Agent przyjmuje wyłącznie certyfikat o tym odcisku. Certyfikat jest tworzony raz i nigdy nie jest wymieniany automatycznie.")</p>
+    }
+
+    <div class="form-grid agent-listener">
+        <label class="checkbox"><input type="checkbox" @bind="_enabled" /> @L.T("Włącz punkt połączeń agentów")</label>
+        <label class="field"><span>@L.T("Adres tego komputera")</span>
+            <select class="input" @bind="_address">
+                @foreach (var a in _addresses) { <option value="@a.Address">@a.Label</option> }
+            </select>
+        </label>
+        <label class="field"><span>@L.T("Port")</span><input class="input mono" type="number" min="1024" max="65535" @bind="_port" /></label>
+    </div>
+    <div class="actions">
+        <button class="btn btn-primary" @onclick="SaveListener">@L.T("Zapisz")</button>
+        @if (_listenerMessage is not null) { <span class="small @(_listenerError ? "tone-bad" : "tone-ok")">@L.Message(_listenerMessage)</span> }
+    </div>
+    <p class="muted small">@L.T("Zmiana zaczyna działać po ponownym uruchomieniu WELES. Dozwolony jest tylko konkretny adres prywatny (sieć lokalna lub VPN) – nigdy wszystkie interfejsy ani adres publiczny. Na tym porcie zapora systemu musi przepuszczać połączenia od agentów.")</p>
+</section>
+
+<section class="card">
+    <div class="card-title"><Icon Name="agents" /> @L.T("Nowy agent")</div>
+    @if (_created is { } created)
+    {
+        <div class="alert alert-ok">
+            <p>@L.F("Utworzono agenta „{0}”. Kod rejestracji jest pokazywany tylko teraz i działa jednorazowo przez 24 godziny.", created.Agent.Name)</p>
+            <p class="small">@L.T("Na komputerze agenta (Linux jako root, Windows jako administrator) uruchom:")</p>
+            <pre class="mono small code-block">@EnrollCommand(created.Code)</pre>
+            @if (!Listener.IsListening) { <p class="small tone-bad">@L.T("Punkt połączeń agentów nie działa – włącz go powyżej i uruchom ponownie WELES, zanim zarejestrujesz agenta.")</p> }
+            <button class="btn btn-ghost btn-sm" @onclick="() => _created = null">@L.T("Ukryj kod")</button>
+        </div>
+    }
+    <div class="form-grid">
+        <label class="field"><span>@L.T("Nazwa")</span><input class="input" maxlength="100" placeholder="@L.T("np. Biuro – piętro 2")" @bind="_name" @bind:event="oninput" /></label>
+    </div>
+    <ScopeChoice Scopes="_eligible" Selected="_newScopes" />
+    <div class="actions">
+        <button class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(_name)" @onclick="CreateAsync">@L.T("Utwórz agenta i kod rejestracji")</button>
+        @if (_createError is not null) { <span class="small tone-bad">@L.Message(_createError)</span> }
+    </div>
+</section>
+
+<section class="card">
+    <div class="card-title"><Icon Name="agents" /> @L.T("Agenci")</div>
+    @if (_agents is null)
+    {
+        <p class="muted">@L.T("Wczytywanie…")</p>
+    }
+    else if (_agents.Count == 0)
+    {
+        <p class="empty">@L.T("Nie ma jeszcze żadnego agenta.")</p>
+    }
+    else
+    {
+        @foreach (var a in _agents)
+        {
+            <div class="agent-card">
+                <div class="agent-head">
+                    <strong>@a.Name</strong>
+                    <StatusPill Tone="@Tone(a)">@StatusText(a)</StatusPill>
+                    @if (a.Hostname is not null) { <span class="muted small">@a.Hostname · @a.OperatingSystem · @L.F("wersja agenta {0}", a.AgentVersion ?? "—")</span> }
+                </div>
+                <div class="muted small">
+                    @if (a.LastSeenAt is { } seen) { <span>@L.F("Ostatnie połączenie: {0} z {1}", Labels.Local(seen), a.LastAddress ?? "—")</span> }
+                    else if (a.Status == AgentStatus.Pending) { <span>@L.F("Kod rejestracji ważny do {0}", Labels.Local(a.EnrollmentExpiresAt))</span> }
+                    @if (a.Scans > 0) { <span> · @L.F("skanów: {0}", a.Scans)</span> }
+                    @if (a.ActiveScanId is { } active) { <span> · <a href="scans/@active">@L.F("Skan #{0} w toku", active)</a></span> }
+                </div>
+                @if (a.System is { Interfaces.Count: > 0 } system)
+                {
+                    <div class="chips">@foreach (var i in system.Interfaces) { <span class="chip mono" title="@i.Name">@i.NetworkCidr@(i.Gateway is null ? "" : " → " + i.Gateway)</span> }</div>
+                }
+
+                @if (a.Status != AgentStatus.Revoked)
+                {
+                    <details>
+                        <summary class="small">@L.F("Przypisane zakresy: {0}", a.Scopes.Count == 0 ? L.T("brak") : string.Join(", ", a.Scopes.Select(s => s.Name)))</summary>
+                        <ScopeChoice Scopes="_eligible" Selected="ScopesOf(a)" />
+                        <button class="btn btn-ghost btn-sm" @onclick="() => SaveScopesAsync(a.Id)">@L.T("Zapisz zakresy")</button>
+                    </details>
+                }
+
+                <div class="actions">
+                    @if (a.Status == AgentStatus.Active)
+                    {
+                        var approved = a.Scopes.Where(s => s.IsApproved).ToList();
+                        @if (approved.Count == 0)
+                        {
+                            <span class="muted small">@L.T("Przypisz agentowi zatwierdzony zakres, aby zlecić skan.")</span>
+                        }
+                        else
+                        {
+                            <select class="input input-sm" @bind="_scanScope[a.Id]">
+                                @foreach (var s in approved) { <option value="@s.Id">@s.Name</option> }
+                            </select>
+                            <select class="input input-sm" @bind="_scanPorts[a.Id]">
+                                <option value="@PortSpecification.Quick">@L.F("Szybki ({0} portów)", PortSpecification.QuickPorts.Count)</option>
+                                <option value="@PortSpecification.Standard">@L.F("Standardowy ({0} portów)", PortSpecification.StandardPorts.Distinct().Count())</option>
+                            </select>
+                            <button class="btn btn-primary btn-sm" disabled="@(a.ActiveScanId is not null)" @onclick="() => StartScanAsync(a)"><Icon Name="play" Size="14" /> @L.T("Zleć skan")</button>
+                        }
+                    }
+                    @if (a.Status == AgentStatus.Pending)
+                    {
+                        <button class="btn btn-ghost btn-sm" @onclick="() => RenewAsync(a)">@L.T("Nowy kod rejestracji")</button>
+                    }
+                    @if (a.Status != AgentStatus.Revoked)
+                    {
+                        @if (_confirmRevoke == a.Id)
+                        {
+                            <button class="btn btn-danger btn-sm" @onclick="() => RevokeAsync(a.Id)">@L.T("Unieważnij dostęp")</button>
+                            <button class="btn btn-ghost btn-sm" @onclick="() => _confirmRevoke = null">@L.T("Anuluj")</button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-ghost btn-sm" @onclick="() => _confirmRevoke = a.Id">@L.T("Unieważnij")</button>
+                        }
+                    }
+                    @if (a.Status != AgentStatus.Active)
+                    {
+                        <button class="btn btn-ghost btn-sm" @onclick="() => DeleteAsync(a.Id)">@L.T("Usuń")</button>
+                    }
+                </div>
+                @if (_agentMessages.TryGetValue(a.Id, out var msg)) { <div class="alert alert-bad">@L.Message(msg)</div> }
+                @if (_renewed.TryGetValue(a.Id, out var code)) { <pre class="mono small code-block">@EnrollCommand(code)</pre> }
+            </div>
+        }
+    }
+</section>
+
+<section class="card">
+    <div class="card-title"><Icon Name="info" /> @L.T("Instalacja agenta")</div>
+    <ul class="small">
+        <li>@L.T("Linux: skopiuj weles-agent do /opt/weles-agent, plik deploy/linux/weles-agent.service do /etc/systemd/system, zarejestruj agenta poleceniem powyżej i uruchom: systemctl enable --now weles-agent.")</li>
+        <li>@L.T("Windows: w PowerShell jako administrator uruchom deploy/windows/install-agent.ps1 z kodem rejestracji – skrypt zarejestruje agenta i utworzy usługę „WELES Agent”.")</li>
+        <li>@L.T("Token agenta jest przechowywany na jego komputerze chroniony (DPAPI w Windows, plik dostępny tylko dla usługi w Linuksie); WELES zna tylko jego skrót. Unieważnienie odcina agenta natychmiast.")</li>
+    </ul>
+</section>
+
+@code {
+    private sealed record AddressOption(string Address, string Label);
+
+    private IReadOnlyList<AgentView>? _agents;
+    private IReadOnlyList<AgentScopeView> _eligible = [];
+    private readonly List<AddressOption> _addresses = [];
+    private bool _enabled;
+    private string _address = "127.0.0.1";
+    private int _port = AgentListenerSettings.DefaultPort;
+    private string? _listenerMessage;
+    private bool _listenerError;
+    private string _name = "";
+    private HashSet<int> _newScopes = [];
+    private AgentEnrollment? _created;
+    private string? _createError;
+    private int? _confirmRevoke;
+    private readonly Dictionary<int, HashSet<int>> _scopeEdits = [];
+    private readonly Dictionary<int, int> _scanScope = [];
+    private readonly Dictionary<int, string> _scanPorts = [];
+    private readonly Dictionary<int, string> _agentMessages = [];
+    private readonly Dictionary<int, string> _renewed = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var saved = AgentListenerSettings.Load(Paths);
+        _enabled = saved.Enabled;
+        _address = saved.Address;
+        _port = saved.Port;
+        foreach (var i in LocalNetwork.GetInterfaces().Where(i => IPAddress.TryParse(i.Address, out var ip)
+                     && ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !AddressClassifier.IsPublic(ip) && !IPAddress.IsLoopback(ip)))
+        {
+            _addresses.Add(new AddressOption(i.Address, $"{i.Address} ({i.Name}, {i.NetworkCidr})"));
+        }
+
+        _addresses.Add(new AddressOption("127.0.0.1", L.T("127.0.0.1 (tylko agent na tym komputerze – test)")));
+        if (_addresses.All(a => a.Address != _address)) _addresses.Insert(0, new AddressOption(_address, _address));
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _agents = await Service.ListAsync();
+        _eligible = await Service.EligibleScopesAsync();
+        foreach (var a in _agents)
+        {
+            _scopeEdits[a.Id] = a.Scopes.Select(s => s.Id).ToHashSet();
+            var approved = a.Scopes.Where(s => s.IsApproved).ToList();
+            if (approved.Count > 0 && (!_scanScope.TryGetValue(a.Id, out var chosen) || approved.All(s => s.Id != chosen))) _scanScope[a.Id] = approved[0].Id;
+            _scanPorts.TryAdd(a.Id, PortSpecification.Quick);
+        }
+    }
+
+    private HashSet<int> ScopesOf(AgentView a) => _scopeEdits.TryGetValue(a.Id, out var set) ? set : _scopeEdits[a.Id] = [];
+
+    private void SaveListener()
+    {
+        var settings = new AgentListenerSettings(_enabled, _address.Trim(), _port);
+        if (settings.Validate() is { } error)
+        {
+            (_listenerMessage, _listenerError) = (error, true);
+            return;
+        }
+
+        settings.Save(Paths);
+        (_listenerMessage, _listenerError) = ("Zapisano. Uruchom ponownie WELES, aby zmiana zaczęła działać.", false);
+    }
+
+    private async Task CreateAsync()
+    {
+        _createError = null;
+        var (enrollment, error) = await Service.CreateAsync(_name, _newScopes.ToList());
+        if (enrollment is null)
+        {
+            _createError = error;
+            return;
+        }
+
+        _created = enrollment;
+        _name = "";
+        _newScopes = [];
+        await LoadAsync();
+    }
+
+    private async Task SaveScopesAsync(int agentId)
+    {
+        _agentMessages.Remove(agentId);
+        if (await Service.SetScopesAsync(agentId, ScopesOf(_agents!.First(a => a.Id == agentId)).ToList()) is { } error) _agentMessages[agentId] = error;
+        await LoadAsync();
+    }
+
+    private async Task StartScanAsync(AgentView agent)
+    {
+        _agentMessages.Remove(agent.Id);
+        var result = await Service.StartScanAsync(agent.Id, _scanScope[agent.Id], _scanPorts[agent.Id]);
+        if (result.Success)
+        {
+            Navigation.NavigateTo($"scans/{result.Id}");
+            return;
+        }
+
+        _agentMessages[agent.Id] = string.Join(" ", result.Errors);
+    }
+
+    private async Task RenewAsync(AgentView agent)
+    {
+        if (await Service.RenewCodeAsync(agent.Id) is { } code) _renewed[agent.Id] = code;
+        await LoadAsync();
+    }
+
+    private async Task RevokeAsync(int id)
+    {
+        _confirmRevoke = null;
+        await Service.RevokeAsync(id);
+        _renewed.Remove(id);
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync(int id)
+    {
+        await Service.DeleteAsync(id);
+        await LoadAsync();
+    }
+
+    private string EnrollCommand(string code) =>
+        $"weles-agent enroll --server https://{_address}:{_port} --pin {Listener.Pin ?? L.T("<odcisk pojawi się po włączeniu nasłuchu>")} --code {code}";
+
+    private static string Tone(AgentView a) => a.Status switch
+    {
+        AgentStatus.Active => a.IsOnline ? "ok" : "warn",
+        AgentStatus.Pending => "info",
+        _ => "muted"
+    };
+
+    private static string StatusText(AgentView a) => a.Status switch
+    {
+        AgentStatus.Active => a.IsOnline ? L.T("połączony") : L.T("nie łączy się"),
+        AgentStatus.Pending => L.T("czeka na rejestrację"),
+        _ => L.T("unieważniony")
+    };
+}

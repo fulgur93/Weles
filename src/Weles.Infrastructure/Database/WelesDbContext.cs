@@ -30,6 +30,8 @@ public class WelesDbContext(DbContextOptions<WelesDbContext> options) : DbContex
     public DbSet<AuditReport> AuditReports => Set<AuditReport>();
     public DbSet<AuditAiSummary> AuditAiSummaries => Set<AuditAiSummary>();
     public DbSet<ImportedAudit> ImportedAudits => Set<ImportedAudit>();
+    public DbSet<Agent> Agents => Set<Agent>();
+    public DbSet<AgentScope> AgentScopes => Set<AgentScope>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

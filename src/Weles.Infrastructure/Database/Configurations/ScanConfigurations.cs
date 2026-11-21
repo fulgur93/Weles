@@ -51,6 +51,8 @@ internal sealed class ScanConfiguration : IEntityTypeConfiguration<Scan>
         b.HasMany(x => x.Hosts).WithOne(x => x.Scan).HasForeignKey(x => x.ScanId).OnDelete(DeleteBehavior.Cascade);
         b.HasMany(x => x.Findings).WithOne(x => x.Scan).HasForeignKey(x => x.ScanId).OnDelete(DeleteBehavior.Cascade);
         b.HasMany(x => x.RiskScores).WithOne(x => x.Scan).HasForeignKey(x => x.ScanId).OnDelete(DeleteBehavior.Cascade);
+        // Deleting an agent keeps the scans it made – audit history stays intact.
+        b.HasOne(x => x.Agent).WithMany().HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.SetNull);
         b.ToTable(t => t.HasCheckConstraint("CK_Scan_Counters", "HostsAlive >= 0 AND OpenPorts >= 0"));
     }
 }

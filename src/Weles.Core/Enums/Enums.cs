@@ -134,3 +134,11 @@ public enum ReportFormat
     Json = 1,
     Zip = 2
 }
+
+public enum AgentStatus
+{
+    /// <summary>Created, waiting for the agent to enroll with its one-time code.</summary>
+    Pending = 0,
+    Active = 1,
+    Revoked = 2
+}

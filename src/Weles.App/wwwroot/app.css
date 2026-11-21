@@ -710,3 +710,12 @@ tr.dim td { opacity: .5; }
 .nowrap { white-space: nowrap; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 label.btn { cursor: pointer; position: relative; }
+
+/* Agents (Stage 10) */
+.agent-card { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 12px; }
+.agent-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 4px; }
+.agent-card details { margin-top: 8px; }
+.scope-choice { display: flex; flex-direction: column; gap: 2px; margin: 6px 0 10px; }
+.scope-choice .checkbox { margin: 2px 0; }
+.code-block { white-space: pre-wrap; word-break: break-all; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; user-select: all; }
+.agent-listener .checkbox { grid-column: 1 / -1; }

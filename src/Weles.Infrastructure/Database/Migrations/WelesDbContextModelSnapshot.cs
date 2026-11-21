@@ -17,6 +17,92 @@ namespace Weles.Infrastructure.Database.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.15");
 
+            modelBuilder.Entity("Weles.Core.Entities.Agent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("AgentVersion")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("EnrolledAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("EnrollmentCodeHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("EnrollmentExpiresAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Hostname")
+                        .HasMaxLength(255)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastAddress")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastSeenAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OperatingSystem")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SystemInfoJson")
+                        .HasMaxLength(64000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TokenHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EnrollmentCodeHash")
+                        .IsUnique();
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.ToTable("Agents");
+                });
+
+            modelBuilder.Entity("Weles.Core.Entities.AgentScope", b =>
+                {
+                    b.Property<int>("AgentId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ScanTargetId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("AgentId", "ScanTargetId");
+
+                    b.HasIndex("ScanTargetId");
+
+                    b.ToTable("AgentScopes");
+                });
+
             modelBuilder.Entity("Weles.Core.Entities.AiConversation", b =>
                 {
                     b.Property<int>("Id")
@@ -902,6 +988,9 @@ namespace Weles.Infrastructure.Database.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("AgentId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("TEXT");
 
@@ -960,6 +1049,8 @@ namespace Weles.Infrastructure.Database.Migrations
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("AgentId");
 
                     b.HasIndex("CreatedAt");
 
@@ -1262,6 +1353,25 @@ namespace Weles.Infrastructure.Database.Migrations
                     b.ToTable("VulnerabilityAffectedProducts");
                 });
 
+            modelBuilder.Entity("Weles.Core.Entities.AgentScope", b =>
+                {
+                    b.HasOne("Weles.Core.Entities.Agent", "Agent")
+                        .WithMany("Scopes")
+                        .HasForeignKey("AgentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Weles.Core.Entities.ScanTarget", "ScanTarget")
+                        .WithMany()
+                        .HasForeignKey("ScanTargetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Agent");
+
+                    b.Navigation("ScanTarget");
+                });
+
             modelBuilder.Entity("Weles.Core.Entities.AiMessage", b =>
                 {
                     b.HasOne("Weles.Core.Entities.AiConversation", "Conversation")
@@ -1455,11 +1565,18 @@ namespace Weles.Infrastructure.Database.Migrations
 
             modelBuilder.Entity("Weles.Core.Entities.Scan", b =>
                 {
+                    b.HasOne("Weles.Core.Entities.Agent", "Agent")
+                        .WithMany()
+                        .HasForeignKey("AgentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Weles.Core.Entities.ScanTarget", "ScanTarget")
                         .WithMany("Scans")
                         .HasForeignKey("ScanTargetId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("Agent");
 
                     b.Navigation("ScanTarget");
                 });
@@ -1506,6 +1623,11 @@ namespace Weles.Infrastructure.Database.Migrations
                         .IsRequired();
 
                     b.Navigation("Vulnerability");
+                });
+
+            modelBuilder.Entity("Weles.Core.Entities.Agent", b =>
+                {
+                    b.Navigation("Scopes");
                 });
 
             modelBuilder.Entity("Weles.Core.Entities.AiConversation", b =>
