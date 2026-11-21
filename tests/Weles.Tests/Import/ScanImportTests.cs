@@ -120,6 +120,12 @@ public class ScanImportTests
 
         Assert.Equal(["10.1.0.10", "a.lab", "", "", "22", "tcp", "ssh", "OpenSSH", "9.6p1"], ScanImportService.SplitCsv("10.1.0.10,a.lab,,,22,tcp,ssh,OpenSSH,9.6p1"));
         Assert.Equal(["=1+1"], ScanImportService.SplitCsv("'=1+1"));   // the export's CSV-injection guard is undone on import
+
+        // Regression (DefectDojo demo test): documentation addresses (TEST-NET 192.0.2.0/24) – reserved for scanning, but a
+        // second import into the scope created by the first one must accept them.
+        var lab1 = await env.Importer.ImportAsync(Text("ip,port,service\n192.0.2.10,21,ftp\n192.0.2.10,22,ssh\n"), "lab1.csv", null);
+        var lab2 = await env.Importer.ImportAsync(Text("ip,port,service\n192.0.2.10,22,ssh\n"), "lab2.csv", lab1.ScopeId);
+        Assert.Equal((1, 1), (lab2.Hosts, lab2.Ports));
     }
 
     [Fact]

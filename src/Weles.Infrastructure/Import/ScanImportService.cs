@@ -68,12 +68,11 @@ public sealed partial class ScanImportService(
         if (scopeId is { } id)
         {
             scope = await db.ScanTargets.Include(t => t.Entries).SingleOrDefaultAsync(t => t.Id == id, ct) ?? throw new ScanImportException("Wybrany zakres nie istnieje.");
-            var resolution = await ScopeResolver.ResolveAsync(scope.Entries.Select(e => new ScopeEntry(e.Value, e.IsExclusion)), true, MaxHosts,
-                (_, _) => Task.FromResult<IReadOnlyList<IPAddress>>([]), ct);
-            var allowed = resolution.Addresses.ToHashSet();
-            var outside = valid.Count(v => !allowed.Contains(v.Address));
+            // Membership only – nothing is scanned, so reserved/documentation ranges a scan would skip still count.
+            var coverage = ScopeCoverage.FromSnapshot(JsonSerializer.Serialize(scope.Entries.Select(e => new { e.Value, e.IsExclusion })));
+            var outside = valid.Count(v => !coverage.Covers(v.Address));
             if (outside > 0) warnings.Add($"Pominięto {outside} hostów spoza zakresu „{scope.Name}”.");
-            valid = valid.Where(v => allowed.Contains(v.Address)).ToList();
+            valid = valid.Where(v => coverage.Covers(v.Address)).ToList();
         }
         else
         {
