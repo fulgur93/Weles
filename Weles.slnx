@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <File Path="src\Instruction.txt" />
     <File Path="src\MainJob.txt" />
     <Project Path="src/Weles.Agent/Weles.Agent.csproj" />
     <Project Path="src/Weles.App/Weles.App.csproj" />
