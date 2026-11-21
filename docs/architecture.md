@@ -133,6 +133,25 @@ prompt 1950 tokenów: domyślnie llama.cpp używa tylko rdzeni P (2 wątki) – 
 Najdroższe jest czytanie danych, dlatego kontekst jest ograniczony (≈ 7 tys. znaków, `num_ctx` 6144), a stałe zasady są
 osobną, pierwszą wiadomością – silnik może je zapamiętać między pytaniami (prefix cache).
 
+### 3.3. Pakowanie (Etap 11)
+
+| Paczka | Zawartość i zachowanie |
+|--------|------------------------|
+| Windows: `weles-setup-<v>-win-x64.exe` (+ `-1.bin`, `-2.bin`) | Inno Setup 6.7.4, `PrivilegesRequired=lowest` – instalacja do `%LOCALAPPDATA%\Programs\WELES` bez administratora. Skróty: WELES, tryb demonstracyjny, opcjonalnie pulpit. Zadanie „autostart” zapisuje tę samą wartość `HKCU\…\Run\WELES` co Ustawienia. `CloseApplications=force` zamyka WELES i Ollamę przed aktualizacją/odinstalowaniem; deinstalator usuwa wpis autostartu (także ustawiony później w aplikacji), dane w `%LOCALAPPDATA%\Weles` zostają. Model (2,4 GB) przekracza limit 2 GB jednego pliku – `DiskSpanning`, model bez kompresji. Wariant `-noai` = jeden plik ~60 MB. Budowany na Linuksie (ISCC pod Wine) albo na Windows (`publish.ps1`). |
+| Linux: `weles_<v>_amd64.deb` | `/opt/weles/{app,runtime/ollama,runtime/models}` (0755/0644, nic zapisywalnego), `/usr/bin/weles`, wpis menu z akcją „Tryb demonstracyjny”, ikona w `hicolor`. Bez usług, użytkowników i skryptów poza odświeżeniem pamięci podręcznej menu. Zależności: biblioteki .NET (libicu, libssl, zlib), zalecane `iputils-ping`. Kompresja zstd. |
+| Linux: `weles-<v>-linux-x64.tar.zst` | ten sam układ do rozpakowania w dowolnym miejscu (`weles` – skrypt startowy). |
+| Ikona | `deploy/assets/weles.{svg,ico}` – ten sam znak co w panelu; `.ico` osadzone w `Weles.exe`, SVG w menu Linuksa (`hicolor/scalable`). |
+
+Autostart (`Weles.App.Hosting.Autostart`): tylko bieżący użytkownik, bez administratora, przełączany w Ustawieniach;
+uruchamia `Weles --no-browser` (z `--data-dir`, jeśli wybrano inny katalog). Druga instancja otwiera przeglądarkę na
+działającej – skrót WELES po zalogowaniu pokazuje panel bez drugiego serwera.
+
+Testy instalacji (2026‑11‑21): paczka DEB rozpakowana jako tylko do odczytu i uruchomiona z pustym katalogiem domowym –
+15 migracji, import bazy podatności (4,9 s), dołączona Ollama z modelem z katalogu tylko do odczytu odpowiada po
+polsku, zamknięcie WELES kończy Ollamę. Instalator Windows w czystym prefiksie Wine: cicha instalacja z autostartem,
+skróty, wpis w rejestrze, start WELES (baza w `%LOCALAPPDATA%\Weles`, strony 200), deinstalacja usuwa program i wpis
+autostartu, dane zostają. Wine nie zastępuje Windows – wynik testu na prawdziwym Windows: patrz §8.
+
 ## 4. Baza danych
 
 SQLite w katalogu danych użytkownika, tryb WAL, migracje EF Core aplikowane automatycznie przy starcie. Czasy w UTC (`DateTime` z `Kind=Utc` – SQLite nie sortuje `DateTimeOffset`).
@@ -408,7 +427,7 @@ Agent (Worker Service) ──HTTPS, przypięty SHA‑256 certyfikatu──► pu
 | 8 | External Attack Surface: DNS, SPF/DMARC/CAA, subdomeny z CT, certyfikaty, usługi publiczne; pasywna analiza oddzielona od aktywnego skanu | ✅ |
 | 9 | Raporty PDF, eksport JSON/ZIP z manifestem SHA‑256, import audytu z walidacją, podsumowanie AI audytu | ✅ |
 | 10 | Agenci: Worker Service Windows/Linux, wychodzące HTTPS z przypiętym certyfikatem, rejestracja jednorazowym kodem, token jako hash, unieważnianie, tylko przypisane i zatwierdzone zakresy, walidacja wyników | ✅ (Windows: zbudowany, nieprzetestowany na żywym systemie) |
-| 11 | Pakowanie: ZIP/TAR.GZ → instalatory (Inno Setup / AppImage+DEB), Ollama + model | ZIP/TAR.GZ ✅ |
+| 11 | Pakowanie: instalator Windows (Inno Setup, per użytkownik), paczka DEB i archiwum TAR.ZST, autostart, dołączona Ollama + model, testy na czystych systemach | ✅ (szczegóły §3.3) |
 
 **Konieczne do pierwszej demonstracji:** etapy 1–6, porównanie skanów z etapu 7, PDF z etapu 9, paczki ZIP/TAR.GZ z etapu 11, laboratorium demo.
 **Można odłożyć:** topologia i ścieżki ataku (efektowne, ale nie w krytycznej ścieżce 2‑minutowego scenariusza), external attack surface, import audytu, agenci, instalatory MSI/DEB, aktualizator.

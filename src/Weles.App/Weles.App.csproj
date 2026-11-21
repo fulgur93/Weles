@@ -14,6 +14,8 @@
   <ItemGroup>
     <EmbeddedResource Include="Localization\en.json" LogicalName="Weles.App.Localization.en.json" />
     <Content Remove="Localization\en.json" />
+    <!-- Development settings never ship in a package. -->
+    <Content Update="appsettings.Development.json" CopyToPublishDirectory="Never" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -23,6 +25,7 @@
     <RootNamespace>Weles.App</RootNamespace>
     <InvariantGlobalization>false</InvariantGlobalization>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <ApplicationIcon>..\..\deploy\assets\weles.ico</ApplicationIcon>
   </PropertyGroup>
 
 </Project>

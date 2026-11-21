@@ -170,14 +170,29 @@ public sealed class OllamaProcessHost(IOptions<AiOptions> options, IAiService ai
         }
     }
 
+    /// <summary>
+    /// Idempotent: the host is registered as a singleton and as a hosted service, so the container disposes it twice –
+    /// the second call used to throw on the already disposed process and ended every shutdown with an unhandled exception
+    /// (found by the clean-system installation test, Stage 11).
+    /// </summary>
     public override void Dispose()
     {
-        if (_process is { HasExited: false } p)
+        var process = Interlocked.Exchange(ref _process, null);
+        if (process is not null)
         {
-            try { p.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+            try
+            {
+                if (!process.HasExited) process.Kill(entireProcessTree: true);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                // Already gone.
+            }
+
+            process.Dispose();
         }
 
-        _process?.Dispose();
         base.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

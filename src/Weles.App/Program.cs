@@ -86,6 +86,7 @@ if (OperatingSystem.IsWindows())
     dataProtection.ProtectKeysWithDpapi();
 }
 builder.Services.AddSingleton(sp => new RuntimeInfo(port, hostOptions.DemoMode, sp.GetRequiredService<TimeProvider>()));
+builder.Services.AddSingleton(sp => new Autostart(sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<WelesHostOptions>>(), sp.GetRequiredService<RuntimeInfo>(), sp.GetRequiredService<ILogger<Autostart>>()));
 builder.Services.AddScoped<ThemeState>();
 builder.Services.AddSingleton<Weles.App.Localization.LanguageState>();
 

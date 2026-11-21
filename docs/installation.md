@@ -6,17 +6,40 @@
 - Nie są wymagane: .NET Runtime, serwer bazy danych, Python, Ollama ani dostęp do Internetu.
 - Lokalne AI (od Etapu 6): ok. 4 GB wolnej pamięci RAM i ok. 4 GB miejsca na dysku. GPU opcjonalne.
 
-## Windows (ZIP – wersja demonstracyjna)
+## Windows – instalator
 
-1. Rozpakuj `weles-<wersja>-win-x64.zip` do dowolnego katalogu (np. `C:\Programy\WELES`).
-2. Uruchom `WELES.cmd`. Otworzy się przeglądarka z panelem.
+1. Uruchom `weles-setup-<wersja>-win-x64.exe`. Wersja z lokalnym AI składa się z pliku `.exe` i plików `-1.bin`, `-2.bin`
+   (model ma 2,4 GB) – trzymaj je w jednym katalogu. Wersja `-noai` to jeden plik bez lokalnego AI.
+2. Instalacja jest **dla bieżącego użytkownika, bez uprawnień administratora**, do `%LOCALAPPDATA%\Programs\WELES`.
+   Opcje: skrót na pulpicie, uruchamianie po zalogowaniu.
+3. Skróty w menu Start: **WELES** i **WELES – tryb demonstracyjny**. Panel otwiera się w przeglądarce (tylko 127.0.0.1).
 
-## Linux (TAR.GZ – wersja demonstracyjna)
+Odinstalowanie: *Ustawienia → Aplikacje → WELES*. Usuwa program i wpis autostartu; wyniki audytów zostają
+w `%LOCALAPPDATA%\Weles`.
+
+## Linux – paczka DEB (Ubuntu 22.04+, Debian 12+)
 
 ```bash
-tar -xzf weles-<wersja>-linux-x64.tar.gz -C ~/opt
+sudo apt install ./weles_<wersja>_amd64.deb
+weles                      # albo z menu: WELES / Tryb demonstracyjny
+```
+
+Program trafia do `/opt/weles` (tylko do odczytu), polecenie `weles` do `/usr/bin`, skrót do menu aplikacji. Paczka nie
+tworzy usług ani użytkowników. Odinstalowanie: `sudo apt remove weles` – dane w `~/.local/share/weles` zostają.
+
+## Linux – archiwum (inne dystrybucje)
+
+```bash
+tar --zstd -xf weles-<wersja>-linux-x64.tar.zst -C ~/opt
 ~/opt/weles-<wersja>-linux-x64/weles
 ```
+
+## Uruchamianie po zalogowaniu
+
+*Ustawienia → Uruchamianie* (albo opcja instalatora Windows). WELES startuje w tle bez otwierania przeglądarki; skrót
+WELES otwiera panel działającej aplikacji. Tylko dla bieżącego użytkownika: Windows – wartość `WELES` w
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, Linux – `~/.config/autostart/weles.desktop`.
+Tryb demonstracyjny nie uruchamia się automatycznie.
 
 ## Gdzie są dane
 
@@ -59,8 +82,13 @@ Usuń katalog programu. Aby usunąć również wyniki audytów, usuń katalog da
 Wymaga .NET SDK 10 (tylko na maszynie budującej):
 
 ```bash
-deploy/linux/publish.sh linux-x64
-pwsh deploy/windows/publish.ps1 -Rid win-x64
+deploy/tools/fetch-ai-runtime.sh            # Ollama dla Linuksa + model (raz; wersja przypięta, SHA-256)
+deploy/tools/fetch-ai-runtime-windows.sh    # Ollama dla Windows + ten sam model
+deploy/linux/build-deb.sh                   # artifacts/weles_<wersja>_amd64.deb   (--without-ai: weles-noai)
+deploy/linux/publish.sh                     # artifacts/weles-<wersja>-linux-x64.tar.zst
+deploy/windows/build-installer.sh           # instalator Windows na Linuksie (Inno Setup pod Wine; --without-ai)
+pwsh deploy/windows/publish.ps1             # na Windows (Inno Setup 6, jeśli zainstalowany)
+deploy/agent/publish-agent.sh linux-x64     # agent (opcjonalnie)
 ```
 
-Instalatory (Inno Setup / AppImage + DEB) oraz dołączanie Ollamy i modelu – Etap 11, opis w `architecture.md` §3.2.
+`deploy/tools/fetch-innosetup.sh` instaluje Inno Setup 6.7.4 (SHA-256 przypięty) w prywatnym prefiksie Wine.

@@ -216,6 +216,11 @@ zapisywany w lokalnej bazie; strona przeładowuje się w nowym języku. Komunika
 (dziennik skanu, uzasadnienia klasyfikacji i dopasowań, nazwy zakresów utworzonych automatycznie) też są wyświetlane
 w wybranym języku. Opisy CVE pochodzą z NVD i są zawsze po angielsku; nazwy nadane przez Ciebie się nie zmieniają.
 
+## Uruchamianie po zalogowaniu
+
+*Ustawienia → Uruchamianie*: WELES startuje po zalogowaniu w tle (bez otwierania przeglądarki). Skrót WELES otwiera
+panel już działającej aplikacji. Ta sama opcja jest w instalatorze Windows.
+
 ## Motyw
 
 Domyślny jest ciemny. Przełącznik w prawym górnym rogu lub w Settings → Wygląd. Wybór zapisywany jest w bazie.

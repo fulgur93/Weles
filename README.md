@@ -48,4 +48,4 @@ pwsh deploy/windows/publish.ps1 -Rid win-x64 # artifacts/weles-<ver>-win-x64.zip
 | 8 | External Attack Surface: DNS, SPF/DMARC, subdomeny z CT, certyfikaty, usługi publiczne (pasywnie lub przez zatwierdzony zakres) | ✅ |
 | 9 | Raporty: PDF, eksport JSON/ZIP z SHA‑256, import audytu z walidacją, podsumowanie AI audytu | ✅ |
 | 10 | Agenci: Worker Service Windows/Linux, wychodzące HTTPS z przypiętym certyfikatem, rejestracja, unieważnianie, tylko zatwierdzone zakresy | ✅ |
-| 11 | Pakowanie | ⏳ następny |
+| 11 | Pakowanie: instalator Windows (bez administratora), paczka DEB, autostart, dołączona Ollama i model | ✅ |

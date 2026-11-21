@@ -81,4 +81,34 @@ public class HostingTests
         var info = new InstanceInfo(1, 5080, "a/b+c", DateTime.UtcNow);
         Assert.Equal("http://127.0.0.1:5080/auth?token=a%2Fb%2Bc", info.LaunchUrl);
     }
+
+    [Fact]
+    public void Autostart_writes_and_removes_the_login_entry()
+    {
+        if (!OperatingSystem.IsLinux()) return; // the Windows variant writes HKCU\...\Run – covered by the installer test on Windows
+        var dir = TempDirectory.Create();
+        try
+        {
+            var options = Microsoft.Extensions.Options.Options.Create(new WelesHostOptions { DataDirectory = "/data/weles dane" });
+            var autostart = new Autostart(options, new RuntimeInfo(5080, false, TimeProvider.System), Microsoft.Extensions.Logging.Abstractions.NullLogger<Autostart>.Instance, dir);
+            Assert.True(autostart.IsSupported);
+            Assert.False(autostart.IsEnabled());
+
+            autostart.Set(true);
+            Assert.True(autostart.IsEnabled());
+            var entry = File.ReadAllText(Path.Combine(dir, Autostart.DesktopFileName));
+            Assert.Contains($"Exec=\"{Environment.ProcessPath}\" --no-browser --data-dir \"/data/weles dane\"", entry);
+            Assert.StartsWith("[Desktop Entry]", entry);
+
+            autostart.Set(false);
+            Assert.False(autostart.IsEnabled());
+
+            // The demo instance never starts at login.
+            Assert.False(new Autostart(options, new RuntimeInfo(5080, true, TimeProvider.System), Microsoft.Extensions.Logging.Abstractions.NullLogger<Autostart>.Instance, dir).IsSupported);
+        }
+        finally
+        {
+            TempDirectory.Delete(dir);
+        }
+    }
 }

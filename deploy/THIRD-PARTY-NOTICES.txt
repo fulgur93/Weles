@@ -5,6 +5,8 @@ WELES – third-party components
 SQLite – Public Domain
 Microsoft.Data.Sqlite / SQLitePCLRaw – MIT / Apache-2.0
 Serilog – Apache-2.0
+QuestPDF – QuestPDF Community License (free for individuals and organisations below 1 M USD annual revenue),
+  (c) QuestPDF; includes the Lato font – SIL Open Font License 1.1, (c) Łukasz Dziedzic; SkiaSharp – MIT
 
 Vulnerability data (bundled snapshot and online updates):
   NVD – National Vulnerability Database, NIST. This product uses data from the NVD API but is not endorsed or

@@ -4,6 +4,7 @@
 @inject Weles.Infrastructure.Database.DatabaseInfoService DatabaseInfo
 @inject IAiService Ai
 @inject ThemeState ThemeState
+@inject Autostart Autostart
 @inject Weles.Infrastructure.AI.OllamaProcessHost EngineHost
 @inject Microsoft.Extensions.Options.IOptions<Weles.Infrastructure.AI.AiOptions> AiOptions
 
@@ -41,6 +42,14 @@
         <div class="card-title" style="margin-top:18px"><Icon Name="surface" /> @L.T("Język")</div>
         <LanguageSwitch />
         <p class="muted small">@L.T("Język interfejsu, komunikatów i uzasadnień generowanych przez WELES. Opisy CVE pochodzą z NVD i są po angielsku.")</p>
+
+        @if (Autostart.IsSupported)
+        {
+            <div class="card-title" style="margin-top:18px"><Icon Name="play" /> @L.T("Uruchamianie")</div>
+            <label class="checkbox"><input type="checkbox" checked="@_autostart" @onchange="ToggleAutostart" /> @L.T("Uruchamiaj WELES po zalogowaniu (w tle, bez otwierania przeglądarki)")</label>
+            <p class="muted small">@L.T("Tylko dla bieżącego użytkownika, bez uprawnień administratora. Panel otworzysz skrótem WELES – trafi do działającej aplikacji.")</p>
+            @if (_autostartError is not null) { <div class="alert alert-bad">@_autostartError</div> }
+        }
     </div>
 
     <div class="card">
@@ -106,9 +115,12 @@
     private Weles.Infrastructure.Database.DatabaseInfo? _db;
     private AiEngineStatus? _ai;
     private bool _checkingAi;
+    private bool _autostart;
+    private string? _autostartError;
 
     protected override async Task OnInitializedAsync()
     {
+        _autostart = Autostart.IsEnabled();
         _db = await DatabaseInfo.GetInfoAsync();
         _ai = await Ai.GetStatusAsync();
     }
@@ -122,6 +134,21 @@
         Weles.Infrastructure.AI.EngineHostState.Disabled => L.T("wyłączone w konfiguracji"),
         _ => L.Message(EngineHost.Message ?? L.T("błąd uruchamiania"))
     };
+
+    private void ToggleAutostart(ChangeEventArgs e)
+    {
+        _autostartError = null;
+        try
+        {
+            Autostart.Set(e.Value is true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            _autostartError = L.F("Nie udało się zmienić ustawienia: {0}", ex.Message);
+        }
+
+        _autostart = Autostart.IsEnabled();
+    }
 
     private async Task RefreshAiAsync()
     {
