@@ -185,6 +185,53 @@ namespace Weles.Infrastructure.Database.Migrations
                     b.ToTable("AiMessages");
                 });
 
+            modelBuilder.Entity("Weles.Core.Entities.AppUser", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Disabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("FailedLogins")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("LastLoginAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LockedUntil")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SecurityStamp")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserName")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserName")
+                        .IsUnique();
+
+                    b.ToTable("Users");
+                });
+
             modelBuilder.Entity("Weles.Core.Entities.ApplicationSetting", b =>
                 {
                     b.Property<string>("Key")
@@ -523,6 +570,43 @@ namespace Weles.Infrastructure.Database.Migrations
                     b.ToTable("Certificates");
                 });
 
+            modelBuilder.Entity("Weles.Core.Entities.CustomSignature", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Json")
+                        .IsRequired()
+                        .HasMaxLength(20000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SignatureId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SignatureId")
+                        .IsUnique();
+
+                    b.ToTable("CustomSignatures");
+                });
+
             modelBuilder.Entity("Weles.Core.Entities.DiscoveredHost", b =>
                 {
                     b.Property<int>("Id")
@@ -672,6 +756,9 @@ namespace Weles.Infrastructure.Database.Migrations
 
                     b.Property<string>("Version")
                         .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("WebJson")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
@@ -1212,6 +1299,51 @@ namespace Weles.Infrastructure.Database.Migrations
                     b.ToTable("ScanTargetEntries");
                 });
 
+            modelBuilder.Entity("Weles.Core.Entities.ServiceTechnology", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Category")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Confidence")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("Cwe")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("DiscoveredServiceId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Evidence")
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SignatureId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Version")
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DiscoveredServiceId");
+
+                    b.HasIndex("Name");
+
+                    b.ToTable("ServiceTechnologies");
+                });
+
             modelBuilder.Entity("Weles.Core.Entities.Vulnerability", b =>
                 {
                     b.Property<int>("Id")
@@ -1614,6 +1746,17 @@ namespace Weles.Infrastructure.Database.Migrations
                     b.Navigation("ScanTarget");
                 });
 
+            modelBuilder.Entity("Weles.Core.Entities.ServiceTechnology", b =>
+                {
+                    b.HasOne("Weles.Core.Entities.DiscoveredService", "Service")
+                        .WithMany("Technologies")
+                        .HasForeignKey("DiscoveredServiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Service");
+                });
+
             modelBuilder.Entity("Weles.Core.Entities.VulnerabilityAffectedProduct", b =>
                 {
                     b.HasOne("Weles.Core.Entities.Vulnerability", "Vulnerability")
@@ -1655,6 +1798,8 @@ namespace Weles.Infrastructure.Database.Migrations
             modelBuilder.Entity("Weles.Core.Entities.DiscoveredService", b =>
                 {
                     b.Navigation("Certificates");
+
+                    b.Navigation("Technologies");
                 });
 
             modelBuilder.Entity("Weles.Core.Entities.ExternalTarget", b =>

@@ -122,3 +122,19 @@ WELES łączy się z Internetem **tylko** po kliknięciu „Aktualizuj z Interne
 - Dane od agenta są niezaufane: limit 8 MB na żądanie, ≤ 64 hosty na partię, host spoza zakresu skanu lub nieprawidłowy
   jest odrzucany, teksty są przycinane i oczyszczane, agent może zmieniać tylko własny trwający skan.
 - Usługa agenta w Linuksie działa jako osobny użytkownik bez uprawnień (`NoNewPrivileges`, `ProtectSystem=strict`).
+
+## Rozszerzenie AGH (RBAC, szyfrowanie, DefectDojo, import)
+
+- **Konta i role:** hasła PBKDF2-SHA256 (600 000 iteracji, sól 16 B, porównanie w stałym czasie); blokada konta po 5 nieudanych
+  próbach na 5 minut; ten sam komunikat dla nieznanej nazwy i złego hasła; zmiana roli lub hasła unieważnia sesje
+  (`SecurityStamp` sprawdzany przy każdym żądaniu); ostatniego administratora nie da się usunąć, wyłączyć ani zdegradować.
+  Po logowaniu przekierowanie wyłącznie na ścieżkę lokalną. Token uruchomieniowy nadal chroni panel na 127.0.0.1.
+- **Szyfrowanie w spoczynku:** cała baza SQLite zaszyfrowana SQLCipher (AES-256); klucz 256-bit w `keys/database.key`
+  (DPAPI w Windows, 0600 w Linuksie). Kopia pliku bazy bez klucza jest nieczytelna.
+- **DefectDojo:** dane wychodzą tylko pod adres skonfigurowany przez użytkownika z rolą Dodawanie/usuwanie/modyfikacja;
+  `http://` tylko dla adresów prywatnych i lokalnych; klucz API szyfrowany (Data Protection), nigdy w logach.
+- **Import plików:** limit 50 MB, XML bez DTD i encji zewnętrznych (XXE), walidacja adresów i portów, hosty spoza zakresu
+  odrzucane; import nie wysyła ruchu sieciowego.
+- **Sygnatury:** tylko zapytania GET bez parametrów i bez danych formularzy; wyrażenia regularne przerywane po 100 ms;
+  ciasteczka zapisywane bez wartości.
+

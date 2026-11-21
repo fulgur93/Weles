@@ -76,6 +76,7 @@ builder.Services.AddSerilog((_, logger) => logger
 builder.Services.Configure<WelesHostOptions>(builder.Configuration.GetSection(WelesHostOptions.SectionName));
 builder.Services.AddWelesInfrastructure(builder.Configuration, paths);
 builder.Services.AddSingleton<LocalAccessToken>();
+builder.Services.AddSingleton<Weles.Infrastructure.Integrations.ISecretProtector, DataProtectionSecretProtector>();
 
 // Data protection keys (antiforgery, circuit state) live in the user's data directory, not in ~/.aspnet.
 var dataProtection = builder.Services.AddDataProtection()
@@ -89,6 +90,26 @@ builder.Services.AddSingleton(sp => new RuntimeInfo(port, hostOptions.DemoMode, 
 builder.Services.AddSingleton(sp => new Autostart(sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<WelesHostOptions>>(), sp.GetRequiredService<RuntimeInfo>(), sp.GetRequiredService<ILogger<Autostart>>()));
 builder.Services.AddScoped<ThemeState>();
 builder.Services.AddSingleton<Weles.App.Localization.LanguageState>();
+
+// RBAC: user accounts with roles; the launch token still guards the loopback panel underneath.
+builder.Services.AddAuthentication(Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(o =>
+    {
+        o.LoginPath = "/login";
+        o.AccessDeniedPath = "/forbidden";
+        o.Cookie.Name = $"weles_auth_{port}";
+        o.Cookie.HttpOnly = true;
+        o.Cookie.SameSite = SameSiteMode.Strict;
+        o.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        o.ExpireTimeSpan = TimeSpan.FromHours(8);
+        o.SlidingExpiration = true;
+        o.Events.OnValidatePrincipal = Weles.App.Security.Policies.ValidateAsync;
+        // API calls get a status code instead of the login page.
+        o.Events.OnRedirectToLogin = ctx => { if (ctx.Request.Path.StartsWithSegments("/api")) ctx.Response.StatusCode = 401; else ctx.Response.Redirect(ctx.RedirectUri); return Task.CompletedTask; };
+        o.Events.OnRedirectToAccessDenied = ctx => { if (ctx.Request.Path.StartsWithSegments("/api")) ctx.Response.StatusCode = 403; else ctx.Response.Redirect(ctx.RedirectUri); return Task.CompletedTask; };
+    });
+builder.Services.AddAuthorization(Weles.App.Security.Policies.Add);
+builder.Services.AddCascadingAuthenticationState();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -118,11 +139,17 @@ app.UseRequestLocalization(options =>
     options.RequestCultureProviders = [new Weles.App.Localization.LanguageState.Provider(language)];
 });
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapStaticAssets();
-app.MapLogEndpoints();
-app.MapReportEndpoints();
+// Every API endpoint needs a signed-in user; the logs (addresses, user names) only an administrator.
+app.MapGroup("").RequireAuthorization(Weles.App.Security.Policies.Admin).MapLogEndpoints();
+var signedIn = app.MapGroup("").RequireAuthorization();
+signedIn.MapReportEndpoints();
+signedIn.MapExportEndpoints();
+Weles.App.Security.AccountEndpoints.MapAccountEndpoints(app);
 app.MapLanguageEndpoints();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

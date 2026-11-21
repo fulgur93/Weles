@@ -68,7 +68,8 @@ public sealed class ScanEngine(
             var scanner = new NetworkScanner(oui, localNetwork, options, logger);
             var sink = new DatabaseSink(writer, db, scan);
             var outcome = await scanner.RunAsync(
-                new NetworkScanRequest(target.Entries.Select(e => new ScopeEntry(e.Value, e.IsExclusion)).ToList(), target.AllowPublicAddresses, scan.PortSpecification),
+                new NetworkScanRequest(target.Entries.Select(e => new ScopeEntry(e.Value, e.IsExclusion)).ToList(), target.AllowPublicAddresses, scan.PortSpecification,
+                    await Fingerprint.SignatureService.CustomPathsAsync(db, CancellationToken.None)),
                 progress, sink, cancellationToken);
             if (outcome.Error is not null)
             {

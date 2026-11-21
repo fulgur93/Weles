@@ -13,7 +13,9 @@ public enum ScanTrigger
 {
     Manual = 0,
     Scheduled = 1,
-    Agent = 2
+    Agent = 2,
+    /// <summary>Results imported from a file (nmap XML, CSV, JSON) – no traffic was sent by WELES.</summary>
+    Import = 3
 }
 
 public enum ScanTargetEntryKind

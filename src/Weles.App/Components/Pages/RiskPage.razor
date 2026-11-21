@@ -100,6 +100,10 @@ else
                                 {
                                     <div class="chips">@foreach (var cve in cves.Take(8)) { <a class="chip mono" href="vulnerabilities/@cve">@cve</a> }@if (cves.Count > 8) { <span class="muted small">@L.F("… i {0} kolejnych", cves.Count - 8)</span> }</div>
                                 }
+                                @if (item.Issue.RuleId is { } rule && Weles.Core.Risk.RiskRules.CweOf(rule) is { } cwe)
+                                {
+                                    <div class="chips"><a class="chip mono" href="https://cwe.mitre.org/data/definitions/@(cwe).html" target="_blank" rel="noopener noreferrer">CWE-@cwe</a></div>
+                                }
                                 <AttackChips Techniques="item.Issue.AttackTechniques" />
                                 <a class="small" href="assets/@item.AssetId">@L.T("Szczegóły urządzenia")</a>
                             </div>

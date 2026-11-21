@@ -29,7 +29,7 @@ else
         </div>
         <div class="header-actions">
             <span title="@Labels.Describe(_detail.Presence.Status)"><StatusPill Tone="@Labels.Tone(_detail.Presence.Status)">@Labels.Of(_detail.Presence.Status)</StatusPill></span>
-            <button class="btn btn-ghost" @onclick="StartEdit"><Icon Name="settings" Size="15" /> @L.T("Edytuj")</button>
+            <Can Policy="@Policies.Modify"><button class="btn btn-ghost" @onclick="StartEdit"><Icon Name="settings" Size="15" /> @L.T("Edytuj")</button></Can>
         </div>
     </div>
 
@@ -183,10 +183,10 @@ else
                                     <td class="small">@L.Message(f.Evidence)</td>
                                     <td>@f.Confidence%</td>
                                     <td><StatusPill Tone="@Labels.Tone(f.Status)">@Labels.Of(f.Status)</StatusPill>@if (f.ResolvedAt is { } r) { <div class="muted small">@Labels.Local(r)</div> }</td>
-                                    <td>
+                                    <td><Can Policy="@Policies.Modify">
                                         @if (f.Status == FindingStatus.Open) { <button class="btn btn-ghost btn-sm" title="@L.T("Ryzyko świadomie zaakceptowane (np. urządzenie odizolowane). Dopasowanie zostaje w historii.")" @onclick="() => SetFindingAsync(f.Id, FindingStatus.Accepted)">@L.T("Akceptuj ryzyko")</button> }
                                         else if (f.Status == FindingStatus.Accepted) { <button class="btn btn-ghost btn-sm" @onclick="() => SetFindingAsync(f.Id, FindingStatus.Open)">@L.T("Otwórz ponownie")</button> }
-                                    </td>
+                                    </Can></td>
                                 </tr>
                             }
                         </tbody>

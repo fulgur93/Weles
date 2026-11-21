@@ -12,7 +12,7 @@
         <h1>@L.T("Powierzchnia ataku")</h1>
         <p class="page-subtitle">@L.T("Domeny i publiczne adresy, do których masz uprawnienia. Analiza pasywna korzysta tylko z publicznych źródeł (DNS, Certificate Transparency) i nie łączy się z Twoimi serwerami. Skanowanie aktywne wymaga osobnego, zatwierdzonego zakresu.")</p>
     </div>
-    <button class="btn btn-primary" @onclick="OpenEditor"><Icon Name="surface" Size="16" /> @L.T("Dodaj domenę lub adres")</button>
+    <Can Policy="@Policies.Manage"><button class="btn btn-primary" @onclick="OpenEditor"><Icon Name="surface" Size="16" /> @L.T("Dodaj domenę lub adres")</button></Can>
 </div>
 
 @if (_editor is not null)
@@ -82,13 +82,13 @@ else
                     <h3 class="mono">@target.Name</h3>
                     <p class="muted small">@(target.Kind == ExternalTargetKind.Domain ? L.T("domena") : L.T("adres publiczny")) · @L.F("uprawnienia potwierdzone {0}", Labels.Local(target.AuthorizedAt))@if (target.Description is not null) { <span> · @target.Description</span> }</p>
                 </div>
-                <div class="actions">
+                <Can Policy="@Policies.Modify"><div class="actions">
                     <button class="btn btn-primary" disabled="@(_running || _busy)" @onclick="RunAsync">
                         <Icon Name="@(_running ? "refresh" : "play")" Size="15" /> @(_running ? L.T("Analiza trwa…") : L.T("Uruchom analizę pasywną"))
                     </button>
                     <button class="btn btn-ghost" @onclick="ToggleSettings"><Icon Name="settings" Size="15" /> @L.T("Ustawienia")</button>
-                    <button class="btn btn-ghost" disabled="@(_running || _busy)" @onclick="DeleteAsync">@L.T("Usuń")</button>
-                </div>
+                    <Can Policy="@Policies.Manage"><button class="btn btn-ghost" disabled="@(_running || _busy)" @onclick="DeleteAsync">@L.T("Usuń")</button></Can>
+                </div></Can>
             </div>
             @if (_settings is not null)
             {
@@ -229,7 +229,7 @@ else
             </ol>
             <p class="small muted">@L.T("Skan aktywny nawiązuje połączenia TCP z publicznymi adresami (porty, banery, TLS, nagłówki HTTP) – bez prób logowania i wykorzystania podatności. Upewnij się, że dostawca hostingu na to pozwala.")</p>
             <div class="actions">
-                <button class="btn btn-primary" disabled="@(_chosen.Count == 0 || _busy)" @onclick="PrepareScopeAsync">@L.F("Przygotuj zakres skanowania ({0})", _chosen.Count)</button>
+                <Can Policy="@Policies.Manage"><button class="btn btn-primary" disabled="@(_chosen.Count == 0 || _busy)" @onclick="PrepareScopeAsync">@L.F("Przygotuj zakres skanowania ({0})", _chosen.Count)</button></Can>
                 @if (target.ScanTargetId is not null)
                 {
                     <a class="btn btn-ghost" href="discovery">@L.T("Wykrywanie sieci")</a>

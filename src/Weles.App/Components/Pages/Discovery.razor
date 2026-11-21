@@ -15,7 +15,7 @@
         <h1>@L.T("Wykrywanie sieci")</h1>
         <p class="page-subtitle">@L.T("Zdefiniuj i zatwierdź zakres, a potem uruchom wykrywanie urządzeń, portów i usług. WELES skanuje wyłącznie zatwierdzone zakresy.")</p>
     </div>
-    <button class="btn btn-primary" @onclick="NewScope"><Icon Name="layers" Size="16" /> @L.T("Nowy zakres")</button>
+    <Can Policy="@Policies.Manage"><button class="btn btn-primary" @onclick="NewScope"><Icon Name="layers" Size="16" /> @L.T("Nowy zakres")</button></Can>
 </div>
 
 <section class="card">
@@ -41,7 +41,7 @@
                             <td class="right">
                                 @if (nic.SuggestedScope.Length > 0)
                                 {
-                                    <button class="btn btn-ghost btn-sm" @onclick="() => ScopeFromInterface(nic)">@L.F("Utwórz zakres {0}", nic.SuggestedScope)</button>
+                                    <Can Policy="@Policies.Manage"><button class="btn btn-ghost btn-sm" @onclick="() => ScopeFromInterface(nic)">@L.F("Utwórz zakres {0}", nic.SuggestedScope)</button></Can>
                                 }
                                 @if (nic.Note is not null) { <div class="muted small">@L.Message(nic.Note)</div> }
                             </td>
@@ -53,7 +53,7 @@
     }
 </section>
 
-@if (_editor is not null)
+@if (_editor is not null && _canManage)
 {
     <section class="card editor">
         <div class="card-title"><Icon Name="layers" /> @(_editingId is null ? L.T("Nowy zakres skanowania") : L.T("Edycja zakresu"))</div>
@@ -68,6 +68,9 @@
                 <span>@L.T("Adresy do skanowania")</span>
                 <textarea class="input mono" rows="5" @bind="_editor.Include" placeholder="192.168.1.0/24&#10;10.0.0.10-10.0.0.50&#10;nas.firma.local"></textarea>
                 <small class="muted">@L.T("IP, CIDR (maks. /16), zakres") <code>@L.T("a.b.c.d-e")</code> @L.T("lub domena – jeden wpis w wierszu.")</small>
+                <label class="btn btn-ghost btn-sm import-targets"><Icon Name="folder" Size="14" /> @L.T("Wczytaj cele z pliku (CSV / JSON)")
+                    <InputFile OnChange="ImportTargetsAsync" accept=".csv,.json,.txt" class="visually-hidden" /></label>
+                @if (_importNote is not null) { <small class="@(_importNoteError ? "tone-bad" : "muted")">@L.Message(_importNote)</small> }
             </label>
             <label class="field">
                 <span>@L.T("Wykluczenia")</span>
@@ -158,7 +161,7 @@
                     </div>
                     <div class="muted small">@L.T("Skany:") @t.ScanCount @(t.LastScanAt is not null ? "· " + L.F("ostatni {0}", Labels.Local(t.LastScanAt)) : "")</div>
 
-                    @if (_approvingId == t.Id)
+                    @if (_approvingId == t.Id && _canManage)
                     {
                         <div class="approval">
                             <p>@L.T("Zatwierdzenie oznacza, że WELES może aktywnie łączyć się z każdym adresem z tego zakresu (wykrywanie hostów, porty, banery usług, TLS, HTTP). WELES nie wykonuje exploitów, prób logowania ani testów destrukcyjnych.")</p>
@@ -171,7 +174,7 @@
                     }
 
                     <div class="actions">
-                        @if (t.IsApproved)
+                        @if (t.IsApproved && _canModify)
                         {
                             <select class="input input-sm" @bind="_profiles[t.Id]">
                                 <option value="@Weles.Core.Networking.PortSpecification.Quick">@L.F("Szybki ({0} portów)", Weles.Core.Networking.PortSpecification.QuickPorts.Count)</option>
@@ -191,17 +194,24 @@
                             {
                                 <button class="btn btn-primary btn-sm" disabled="@_busy" @onclick="() => StartAsync(t.Id)"><Icon Name="play" Size="14" /> @L.T("Uruchom skan")</button>
                             }
-                            <button class="btn btn-ghost btn-sm" @onclick="() => RevokeAsync(t.Id)">@L.T("Cofnij zatwierdzenie")</button>
                         }
-                        else if (_approvingId != t.Id)
+
+                        @if (_canManage)
                         {
-                            <button class="btn btn-primary btn-sm" @onclick="() => { _approvingId = t.Id; _approvalConfirmed = false; }"><Icon Name="check" Size="14" /> @L.T("Zatwierdź…")</button>
+                            @if (t.IsApproved)
+                            {
+                                <button class="btn btn-ghost btn-sm" @onclick="() => RevokeAsync(t.Id)">@L.T("Cofnij zatwierdzenie")</button>
+                            }
+                            else if (_approvingId != t.Id)
+                            {
+                                <button class="btn btn-primary btn-sm" @onclick="() => { _approvingId = t.Id; _approvalConfirmed = false; }"><Icon Name="check" Size="14" /> @L.T("Zatwierdź…")</button>
+                            }
+                            <button class="btn btn-ghost btn-sm" disabled="@t.HasActiveScan" @onclick="() => Edit(t)">@L.T("Edytuj")</button>
+                            <button class="btn btn-ghost btn-sm" disabled="@(t.ScanCount > 0)" title="@(t.ScanCount > 0 ? L.T("Zakres ma historię skanów") : "")" @onclick="() => DeleteAsync(t.Id)">@L.T("Usuń")</button>
                         }
-                        <button class="btn btn-ghost btn-sm" disabled="@t.HasActiveScan" @onclick="() => Edit(t)">@L.T("Edytuj")</button>
-                        <button class="btn btn-ghost btn-sm" disabled="@(t.ScanCount > 0)" title="@(t.ScanCount > 0 ? L.T("Zakres ma historię skanów") : "")" @onclick="() => DeleteAsync(t.Id)">@L.T("Usuń")</button>
                     </div>
 
-                    @if (t.IsApproved)
+                    @if (t.IsApproved && _canModify)
                     {
                         var schedule = _schedules.GetValueOrDefault(t.Id);
                         <div class="schedule">
@@ -257,8 +267,14 @@
     private readonly Dictionary<int, string> _profiles = [];
     private readonly Dictionary<int, string> _customPorts = [];
 
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+    [Inject] private IAuthorizationService Authorization { get; set; } = default!;
+    private bool _canManage, _canModify;
+
     protected override async Task OnInitializedAsync()
     {
+        _canManage = await Access.CanAsync(AuthState, Authorization, Policies.Manage);
+        _canModify = await Access.CanAsync(AuthState, Authorization, Policies.Modify);
         _interfaces = LocalNetwork.GetInterfaces();
         Coordinator.ScanFinished += OnScanFinished;
         await ReloadAsync();
@@ -378,6 +394,31 @@
 
         Show(string.Join(" ", result.Errors.Select(L.Message)), true);
         if (result.OtherNetwork) _otherNetworkTarget = id;
+    }
+
+    private string? _importNote;
+    private bool _importNoteError;
+
+    /// <summary>Targets from a file land in the same form fields as typed ones – same validation, same approval.</summary>
+    private async Task ImportTargetsAsync(InputFileChangeEventArgs e)
+    {
+        if (_editor is null) return;
+        try
+        {
+            using var reader = new StreamReader(e.File.OpenReadStream(20 * 1024 * 1024));
+            var result = Weles.Core.Import.TargetImport.Parse(await reader.ReadToEndAsync(), e.File.Name);
+            string Join(string current, IReadOnlyList<string> added) => string.Join('\n', current.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Concat(added).Distinct());
+            _editor.Include = Join(_editor.Include, result.Includes);
+            _editor.Exclude = Join(_editor.Exclude ?? "", result.Excludes);
+            _importNoteError = result.Errors.Count > 0 && result.Includes.Count == 0;
+            _importNote = L.F("Wczytano z „{0}”: {1} wpisów, {2} wykluczeń", e.File.Name, result.Includes.Count, result.Excludes.Count)
+                          + (result.Errors.Count > 0 ? " · " + L.F("pominięto {0}: {1}", result.Errors.Count, string.Join(" ", result.Errors.Take(3).Select(L.Message))) : "")
+                          + ". " + L.T("Sprawdź podgląd i zapisz zakres.");
+        }
+        catch (IOException)
+        {
+            (_importNote, _importNoteError) = ("Plik jest za duży (najwyżej 20 MB) lub nie da się go odczytać.", true);
+        }
     }
 
     private void Show(string message, bool isError = false)

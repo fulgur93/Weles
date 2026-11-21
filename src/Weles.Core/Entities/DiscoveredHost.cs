@@ -69,6 +69,11 @@ public class DiscoveredService
     public bool IsTls { get; set; }
     public string? ExtraInfoJson { get; set; }
 
+    /// <summary>The HTTP(S) observation (<see cref="Fingerprint.WebObservation"/>) as JSON – signatures are evaluated on it.</summary>
+    public string? WebJson { get; set; }
+
+    public List<ServiceTechnology> Technologies { get; set; } = [];
+
     public List<Certificate> Certificates { get; set; } = [];
 }
 

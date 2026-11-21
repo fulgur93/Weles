@@ -168,7 +168,7 @@ public class ServiceProberTests
     }
 
     [Fact]
-    public async Task Same_host_redirect_is_followed_once_to_read_the_title()
+    public async Task Same_host_redirects_are_followed_without_loops()
     {
         var paths = new List<string>();
         await using var server = new FakeServer(async (s, ct) =>
@@ -179,30 +179,39 @@ public class ServiceProberTests
             lock (paths) paths.Add(path);
             var reply = path == "/"
                 ? "HTTP/1.0 302 Redirect\r\nServer: Http Server\r\nLocation: /main.html\r\n\r\n"
-                : "HTTP/1.0 302 Again\r\nLocation: /third.html\r\n\r\n<title>Main page</title>";
+                : path is "/main.html" or "/third.html"
+                    ? $"HTTP/1.0 302 Again\r\nLocation: /third.html\r\n\r\n<title>Main page</title>"
+                    : "HTTP/1.0 404 Not Found\r\n\r\n";
             await s.WriteAsync(Encoding.ASCII.GetBytes(reply), ct);
         });
 
         var result = await Probe(server.Port);
 
         Assert.Equal("Main page", result.Identification.Extra["http.title"]);
-        Assert.Equal(["/", "/main.html"], paths); // exactly one hop
+        // "/" → /main.html → /third.html, which redirects to itself: the loop is recorded and not requested again.
+        Assert.Equal(["/", "/main.html", "/third.html"], paths.Take(3));
+        Assert.Equal(1, paths.Count(p => p == "/third.html"));
+        Assert.Equal(["302 → /main.html", "302 → /third.html", "302 → /third.html"], result.Identification.Web!.Redirects);
+        // Afterwards only the favicon and the configured safe paths – plain GETs.
+        Assert.All(paths.Skip(3), p => Assert.Contains(p, (string[])["/favicon.ico", .. new ScanOptions().WebProbePaths]));
     }
 
     [Fact]
     public async Task Redirect_to_another_host_is_not_followed()
     {
-        var requests = 0;
-        await using var server = FakeServer.RequestResponse(_ =>
+        var requests = new List<string>();
+        await using var server = FakeServer.RequestResponse(request =>
         {
-            Interlocked.Increment(ref requests);
+            lock (requests) requests.Add(Encoding.ASCII.GetString(request).Split(' ')[1]);
             return "HTTP/1.1 301 Moved\r\nLocation: http://evil.example/\r\n\r\n"u8.ToArray();
         });
 
         var result = await Probe(server.Port);
 
         Assert.Equal("http://evil.example/", result.Identification.Extra["http.location"]);
-        Assert.Equal(1, requests);
+        Assert.Equal(1, requests.Count(p => p == "/"));
+        Assert.DoesNotContain(requests, p => p.Contains("evil"));
+        Assert.Contains(result.Identification.Web!.Redirects, r => r.Contains("http://evil.example/") && r.Contains("nie odwiedzono"));
     }
 
     [Fact]

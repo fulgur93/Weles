@@ -26,11 +26,13 @@ else
             <ScanStatusPill Status="s.Status" />
             @if (IsActive)
             {
-                <button class="btn btn-danger" disabled="@(_progress?.StopRequested == true)" @onclick="Stop">@(_progress?.StopRequested == true ? L.T("Zatrzymywanie…") : L.T("Zatrzymaj skan"))</button>
+                <Can Policy="@Policies.Modify"><button class="btn btn-danger" disabled="@(_progress?.StopRequested == true)" @onclick="Stop">@(_progress?.StopRequested == true ? L.T("Zatrzymywanie…") : L.T("Zatrzymaj skan"))</button></Can>
             }
             @if (s.Status == ScanStatus.Completed)
             {
                 <a class="btn btn-ghost" href="reports/audit/@s.Id"><Icon Name="reports" Size="15" /> @L.T("Raport audytu")</a>
+                <a class="btn btn-ghost" href="api/export/scans/@(s.Id).csv" download><Icon Name="download" Size="15" /> CSV</a>
+                <a class="btn btn-ghost" href="api/export/scans/@(s.Id).json" download><Icon Name="download" Size="15" /> JSON</a>
             }
         </div>
     </div>

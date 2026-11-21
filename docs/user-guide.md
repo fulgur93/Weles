@@ -188,6 +188,17 @@ WELES działa w pełni bez agentów. Agent przydaje się, gdy chcesz skanować s
    zatrzymać, a wyniki trafiają do wszystkich stron jak skan lokalny.
 5. **Unieważnij** odcina agenta natychmiast.
 
+## Rozszerzenie AGH
+
+- **Pierwsze uruchomienie:** WELES prosi o konto administratora. Kolejnych użytkowników dodaje się w **Użytkownicy** z jedną
+  z ról: Administracja; Dodawanie, usuwanie, modyfikacja; Modyfikacja i odczyt; Odczyt.
+- **Usługi web:** każda usługa HTTP/HTTPS z tytułem, kodem, nagłówkami, ciasteczkami, przekierowaniami, favicon i
+  technologiami (CMS, frameworki, panele, staging, IoT) oraz oceną „ciekawości”. Eksport CSV/JSON.
+- **Sygnatury:** własne reguły w JSON (szablon w edytorze), test na zebranych danych, import i eksport.
+- **Skany → Import i eksport wyników:** nmap XML, CSV, JSON; cele zakresu z pliku w formularzu zakresu.
+- **Integracje → DefectDojo:** adres, klucz API, produkt/engagement/test, wybór granularności, podgląd, wysyłanie lub plik.
+- Baza jest szyfrowana automatycznie (SQLCipher) – plik `data/weles.db` bez `keys/database.key` jest nieczytelny.
+
 ## Analityk AI
 
 - Lokalny model językowy (Qwen3‑4B, dołączony do WELES) odpowiada na pytania o Twoją sieć **wyłącznie na podstawie

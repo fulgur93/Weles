@@ -719,3 +719,22 @@ label.btn { cursor: pointer; position: relative; }
 .scope-choice .checkbox { margin: 2px 0; }
 .code-block { white-space: pre-wrap; word-break: break-all; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; user-select: all; }
 .agent-listener .checkbox { grid-column: 1 / -1; }
+
+/* Web services and signatures (AGH extension) */
+.chip.tech-cms { color: #c084fc; border-color: color-mix(in srgb, #c084fc 40%, transparent); }
+.chip.tech-adminpanel { color: var(--risk-critical); border-color: color-mix(in srgb, var(--risk-critical) 40%, transparent); }
+.chip.tech-staging { color: var(--risk-high); border-color: color-mix(in srgb, var(--risk-high) 40%, transparent); }
+.chip.tech-framework, .chip.tech-language { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+.chip.tech-iot { color: var(--risk-medium); border-color: color-mix(in srgb, var(--risk-medium) 40%, transparent); }
+.chip.tech-interesting { color: var(--risk-low); border-color: color-mix(in srgb, var(--risk-low) 40%, transparent); }
+.web-detail { margin-top: 0; }
+.signature-editor { width: 100%; font-size: 12.5px; line-height: 1.45; resize: vertical; }
+
+/* Sign-in (RBAC) */
+.auth-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg); }
+.auth-box { width: min(420px, calc(100vw - 32px)); background: var(--surface-raised, var(--surface)); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; }
+.auth-brand { margin-bottom: 18px; }
+.auth-form { display: flex; flex-direction: column; gap: 14px; margin-top: 12px; }
+.auth-footer { margin-top: 18px; display: flex; justify-content: flex-end; }
+.user-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-muted); }
+.inline-form { display: inline; margin: 0; }

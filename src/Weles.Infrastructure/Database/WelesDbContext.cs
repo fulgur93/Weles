@@ -32,6 +32,9 @@ public class WelesDbContext(DbContextOptions<WelesDbContext> options) : DbContex
     public DbSet<ImportedAudit> ImportedAudits => Set<ImportedAudit>();
     public DbSet<Agent> Agents => Set<Agent>();
     public DbSet<AgentScope> AgentScopes => Set<AgentScope>();
+    public DbSet<ServiceTechnology> ServiceTechnologies => Set<ServiceTechnology>();
+    public DbSet<CustomSignature> CustomSignatures => Set<CustomSignature>();
+    public DbSet<AppUser> Users => Set<AppUser>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

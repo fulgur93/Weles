@@ -1,0 +1,26 @@
+@page "/setup"
+@layout Layout.AuthLayout
+@attribute [AllowAnonymous]
+@inject Weles.Infrastructure.Security.UserService Users
+@inject NavigationManager Navigation
+
+<PageTitle>@L.T("Pierwsze uruchomienie · WELES")</PageTitle>
+
+<h1>@L.T("Konto administratora")</h1>
+<p class="muted small">@L.T("To pierwsze uruchomienie WELES. Utwórz konto administratora – kolejnych użytkowników z rolami dodasz w module Użytkownicy.")</p>
+@if (!string.IsNullOrEmpty(Error)) { <div class="alert alert-bad">@L.Message(Error)</div> }
+<form method="post" action="account/setup" data-enhance="false" class="auth-form">
+    <label class="field"><span>@L.T("Nazwa użytkownika")</span><input class="input" name="userName" value="admin" autocomplete="username" required /></label>
+    <label class="field"><span>@L.F("Hasło (co najmniej {0} znaków)", Weles.Infrastructure.Security.UserService.MinPasswordLength)</span><input class="input" name="password" type="password" autocomplete="new-password" required /></label>
+    <label class="field"><span>@L.T("Powtórz hasło")</span><input class="input" name="password2" type="password" autocomplete="new-password" required /></label>
+    <button class="btn btn-primary" type="submit">@L.T("Utwórz konto i zaloguj")</button>
+</form>
+
+@code {
+    [SupplyParameterFromQuery] public string? Error { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (await Users.AnyAsync()) Navigation.NavigateTo("login", forceLoad: true);
+    }
+}

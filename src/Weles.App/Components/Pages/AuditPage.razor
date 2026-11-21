@@ -79,8 +79,8 @@ else
             @if (ImportId is null)
             {
                 <div class="actions">
-                    <button class="btn btn-ghost" disabled="@(_busy || _aiReady == false)" @onclick="SummarizeAsync"><Icon Name="ai" Size="15" /> @(_document.AiSummary is null ? L.T("Wygeneruj podsumowanie AI") : L.T("Wygeneruj ponownie"))</button>
-                    @if (_document.AiSummary is not null) { <button class="btn btn-ghost" disabled="@_busy" @onclick="DeleteSummaryAsync">@L.T("Usuń podsumowanie")</button> }
+                    <Can Policy="@Policies.Modify"><button class="btn btn-ghost" disabled="@(_busy || _aiReady == false)" @onclick="SummarizeAsync"><Icon Name="ai" Size="15" /> @(_document.AiSummary is null ? L.T("Wygeneruj podsumowanie AI") : L.T("Wygeneruj ponownie"))</button></Can>
+                    @if (_document.AiSummary is not null) { <Can Policy="@Policies.Modify"><button class="btn btn-ghost" disabled="@_busy" @onclick="DeleteSummaryAsync">@L.T("Usuń podsumowanie")</button></Can> }
                     @if (_aiReady == false) { <span class="muted small">@L.T("Silnik AI nie jest gotowy –") <a href="ai">@L.T("Analityk AI")</a></span> }
                 </div>
             }

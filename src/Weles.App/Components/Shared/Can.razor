@@ -1,0 +1,12 @@
+@* Renders its content only for roles allowed by the policy (Policies.Modify / Manage / Admin). In Blazor Server a hidden
+   button has no event handler registered on the circuit, so the action cannot be triggered by a crafted message. *@
+<AuthorizeView Policy="@Policy" Context="_auth">
+    <Authorized>@ChildContent</Authorized>
+    <NotAuthorized>@Otherwise</NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [Parameter, EditorRequired] public string Policy { get; set; } = "";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? Otherwise { get; set; }
+}

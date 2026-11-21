@@ -1,0 +1,1053 @@
+[
+ {
+  "id": "wordpress",
+  "name": "WordPress",
+  "category": "cms",
+  "confidence": 85,
+  "conditions": [
+   {
+    "type": "body",
+    "pattern": "/wp-(content|includes)/"
+   },
+   {
+    "type": "body",
+    "pattern": "<meta name=\"generator\" content=\"WordPress"
+   },
+   {
+    "type": "header",
+    "name": "Link",
+    "pattern": "wp-json"
+   },
+   {
+    "type": "header",
+    "name": "X-Pingback"
+   },
+   {
+    "type": "cookie",
+    "pattern": "^wordpress_|^wp-settings"
+   },
+   {
+    "type": "path",
+    "path": "/wp-login.php",
+    "status": [
+     200
+    ],
+    "pattern": "wp-submit|user_login"
+   }
+  ],
+  "version": {
+   "source": "body",
+   "pattern": "content=\"WordPress ([0-9.]+)"
+  }
+ },
+ {
+  "id": "joomla",
+  "name": "Joomla!",
+  "category": "cms",
+  "confidence": 85,
+  "conditions": [
+   {
+    "type": "body",
+    "pattern": "<meta name=\"generator\" content=\"Joomla"
+   },
+   {
+    "type": "body",
+    "pattern": "/media/(jui|system)/js/|/components/com_"
+   },
+   {
+    "type": "path",
+    "path": "/administrator/",
+    "status": [
+     200
+    ],
+    "pattern": "Joomla"
+   }
+  ],
+  "version": {
+   "source": "body",
+   "pattern": "content=\"Joomla! ([0-9.]+)"
+  }
+ },
+ {
+  "id": "drupal",
+  "name": "Drupal",
+  "category": "cms",
+  "confidence": 85,
+  "conditions": [
+   {
+    "type": "header",
+    "name": "X-Generator",
+    "pattern": "Drupal"
+   },
+   {
+    "type": "header",
+    "name": "X-Drupal-Cache"
+   },
+   {
+    "type": "header",
+    "name": "X-Drupal-Dynamic-Cache"
+   },
+   {
+    "type": "body",
+    "pattern": "<meta name=\"Generator\" content=\"Drupal|/sites/(default|all)/(files|themes|modules)/|drupalSettings"
+   },
+   {
+    "type": "cookie",
+    "pattern": "^S?SESS[0-9a-f]{32}$"
+   }
+  ],
+  "version": {
+   "source": "header:X-Generator",
+   "pattern": "Drupal ([0-9.]+)"
+  }
+ },
+ {
+  "id": "typo3",
+  "name": "TYPO3",
+  "category": "cms",
+  "conditions": [
+   {
+    "type": "body",
+    "pattern": "content=\"TYPO3|/typo3(conf|temp)/"
+   },
+   {
+    "type": "path",
+    "path": "/typo3/",
+    "status": [
+     200,
+     301,
+     302
+    ],
+    "pattern": "TYPO3"
+   }
+  ],
+  "version": {
+   "source": "body",
+   "pattern": "TYPO3 CMS ([0-9.]+)"
+  }
+ },
+ {
+  "id": "magento",
+  "name": "Magento",
+  "category": "cms",
+  "conditions": [
+   {
+    "type": "body",
+    "pattern": "Mage\\.Cookies|/static/version[0-9]+/frontend/|text/x-magento-init"
+   },
+   {
+    "type": "cookie",
+    "pattern": "^(frontend|mage-cache-storage)$"
+   }
+  ]
+ },
+ {
+  "id": "prestashop",
+  "name": "PrestaShop",
+  "category": "cms",
+  "conditions": [
+   {
+    "type": "body",
+    "pattern": "prestashop|var prestashop"
+   },
+   {
+    "type": "cookie",
+    "pattern": "^PrestaShop-"
+   }
+  ]
+ },
+ {
+  "id": "moodle",
+  "name": "Moodle",
+  "category": "cms",
+  "confidence": 85,
+  "conditions": [
+   {
+    "type": "cookie",
+    "pattern": "^MoodleSession"
+   },
+   {
+    "type": "body",
+    "pattern": "M\\.cfg = |moodle-|/theme/yui_combo\\.php"
+   }
+  ]
+ },
+ {
+  "id": "mediawiki",
+  "name": "MediaWiki",
+  "category": "cms",
+  "conditions": [
+   {
+    "type": "body",
+    "pattern": "content=\"MediaWiki|/load\\.php\\?.*modules="
+   }
+  ],
+  "version": {
+   "source": "body",
+   "pattern": "content=\"MediaWiki ([0-9.]+)"
+  }
+ },
+ {
+  "id": "ghost",
+  "name": "Ghost",
+  "category": "cms",
+  "conditions": [
+   {
+    "type": "body",
+    "pattern": "content=\"Ghost [0-9]"
+   },
+   {
+    "type": "header",
+    "name": "X-Ghost-Cache-Status"
+   }
+  ],
+  "version": {
+   "source": "body",
+   "pattern": "content=\"Ghost ([0-9.]+)"
+  }
+ },
+ {
+  "id": "php",
+  "name": "PHP",
+  "category": "language",
+  "conditions": [
+   {
+    "type": "header",
+    "name": "X-Powered-By",
+    "pattern": "PHP"
+   },
+   {
+    "type": "cookie",
+    "pattern": "^PHPSESSID$"
+   }
+  ],
+  "version": {
+   "source": "header:X-Powered-By",
+   "pattern": "PHP/([0-9.]+)"
+  }
+ },
+ {
+  "id": "aspnet",
+  "name": "ASP.NET",
+  "category": "framework",
+  "conditions": [
+   {
+    "type": "header",
+    "name": "X-Powered-By",
+    "pattern": "ASP\\.NET"
+   },
+   {
+    "type": "header",
+    "name": "X-AspNet-Version"
+   },
+   {
+    "type": "header",
+    "name": "X-AspNetMvc-Version"
+   },
+   {
+    "type": "cookie",
+    "pattern": "^ASP\\.NET_SessionId$|^\\.AspNetCore\\."
+   }
+  ],
+  "version": {
+   "source": "header:X-AspNet-Version",
+   "pattern": "([0-9.]+)"
+  }
+ },
+ {
+  "id": "java-servlet",
+  "name": "Java (servlet)",
+  "category": "language",
+  "conditions": [
+   {
+    "type": "cookie",
+    "pattern": "^JSESSIONID$"
+   },
+   {
+    "type": "header",
+    "name": "X-Powered-By",
+    "pattern": "Servlet|JSP"
+   }
+  ]
+ },
+ {
+  "id": "spring-boot",
+  "name": "Spring Boot",
+  "category": "framework",
+  "conditions": [
+   {
+    "type": "body",
+    "pattern": "Whitelabel Error Page"
+   },
+   {
+    "type": "path",
+    "path": "/actuator/health",
+    "status": [
+     200
+    ],
+    "pattern": "\"status\"\\s*:"
+   }
+  ]
+ },
+ {
+  "id": "django",
+  "name": "Django",
+  "category": "framework",
+  "conditions": [
+   {
+    "type": "cookie",
+    "pattern": "^(csrftoken|django_language)$"
+   },
+   {
+    "type": "body",
+    "pattern": "csrfmiddlewaretoken|__admin_media_prefix__"
+   }
+  ]
+ },
+ {
+  "id": "laravel",
+  "name": "Laravel",
+  "category": "framework",
+  "conditions": [
+   {
+    "type": "cookie",
+    "pattern": "^laravel_session$|^XSRF-TOKEN$"
+   }
+  ]
+ },
+ {
+  "id": "rails",
+  "name": "Ruby on Rails",
+  "category": "framework",
+  "conditions": [
+   {
+    "type": "cookie",
+    "pattern": "^_[a-z0-9_]+_session$"
+   },
+   {
+    "type": "body",
+    "pattern": "<meta name=\"csrf-param\" content=\"authenticity_token\""
+   },
+   {
+    "type": "header",
+    "name": "X-Runtime"
+   }
+  ]
+ },
+ {
+  "id": "express",
+  "name": "Express (Node.js)",
+  "category": "framework",
+  "conditions": [
+   {
+    "type": "header",
+    "name": "X-Powered-By",
+    "pattern": "^Express$"
+   },
+   {
+    "type": "cookie",
+    "pattern": "^connect\\.sid$"
+   }
+  ]
+ },
+ {
+  "id": "flask",
+  "name": "Flask / Werkzeug",
+  "category": "framework",
+  "conditions": [
+   {
+    "type": "server",
+    "pattern": "Werkzeug"
+   }
+  ],
+  "version": {
+   "source": "server",
+   "pattern": "Werkzeug/([0-9.]+)"
+  }
+ },
+ {
+  "id": "nextjs",
+  "name": "Next.js",
+  "category": "framework",
+  "conditions": [
+   {
+    "type": "header",
+    "name": "X-Powered-By",
+    "pattern": "Next\\.js"
+   },
+   {
+    "type": "body",
+    "pattern": "/_next/static/|__NEXT_DATA__"
+   }
+  ]
+ },
+ {
+  "id": "angular",
+  "name": "Angular",
+  "category": "framework",
+  "confidence": 70,
+  "conditions": [
+   {
+    "type": "body",
+    "pattern": "ng-version=\"[0-9]|<app-root"
+   }
+  ],
+  "version": {
+   "source": "body",
+   "pattern": "ng-version=\"([0-9.]+)"
+  }
+ },
+ {
+  "id": "react",
+  "name": "React",
+  "category": "framework",
+  "confidence": 65,
+  "conditions": [
+   {
+    "type": "body",
+    "pattern": "data-reactroot|id=\"root\"></div>|react-dom"
+   }
+  ]
+ },
+ {
+  "id": "jquery",
+  "name": "jQuery",
+  "category": "framework",
+  "confidence": 70,
+  "conditions": [
+   {
+    "type": "body",
+    "pattern": "jquery[.-]([0-9.]+)(\\.min)?\\.js|/jquery(\\.min)?\\.js"
+   }
+  ],
+  "version": {
+   "source": "body",
+   "pattern": "jquery[.-]([0-9]+\\.[0-9]+\\.[0-9]+)"
+  }
+ },
+ {
+  "id": "bootstrap",
+  "name": "Bootstrap",
+  "category": "framework",
+  "confidence": 65,
+  "conditions": [
+   {
+    "type": "body",
+    "pattern": "bootstrap(\\.min)?\\.(css|js)"
+   }
+  ]
+ },
+ {
+  "id": "nginx",
+  "name": "nginx",
+  "category": "server",
+  "conditions": [
+   {
+    "type": "server",
+    "pattern": "^nginx"
+   }
+  ],
+  "version": {
+   "source": "server",
+   "pattern": "nginx/([0-9.]+)"
+  }
+ },
+ {
+  "id": "apache",
+  "name": "Apache HTTP Server",
+  "category": "server",
+  "conditions": [
+   {
+    "type": "server",
+    "pattern": "^Apache"
+   }
+  ],
+  "version": {
+   "source": "server",
+   "pattern": "Apache/([0-9.]+)"
+  }
+ },
+ {
+  "id": "iis",
+  "name": "Microsoft IIS",
+  "category": "server",
+  "conditions": [
+   {
+    "type": "server",
+    "pattern": "Microsoft-IIS"
+   }
+  ],
+  "version": {
+   "source": "server",
+   "pattern": "Microsoft-IIS/([0-9.]+)"
+  }
+ },
+ {
+  "id": "tomcat",
+  "name": "Apache Tomcat",
+  "category": "server",
+  "conditions": [
+   {
+    "type": "title",
+    "pattern": "Apache Tomcat"
+   },
+   {
+    "type": "body",
+    "pattern": "Apache Tomcat/[0-9]"
+   }
+  ],
+  "version": {
+   "source": "body",
+   "pattern": "Apache Tomcat/([0-9.]+)"
+  }
+ },
+ {
+  "id": "caddy",
+  "name": "Caddy",
+  "category": "server",
+  "conditions": [
+   {
+    "type": "server",
+    "pattern": "^Caddy"
+   }
+  ]
+ },
+ {
+  "id": "lighttpd",
+  "name": "lighttpd",
+  "category": "server",
+  "conditions": [
+   {
+    "type": "server",
+    "pattern": "^lighttpd"
+   }
+  ],
+  "version": {
+   "source": "server",
+   "pattern": "lighttpd/([0-9.]+)"
+  }
+ },
+ {
+  "id": "openresty",
+  "name": "OpenResty",
+  "category": "server",
+  "conditions": [
+   {
+    "type": "server",
+    "pattern": "openresty"
+   }
+  ],
+  "version": {
+   "source": "server",
+   "pattern": "openresty/([0-9.]+)"
+  }
+ },
+ {
+  "id": "cloudflare",
+  "name": "Cloudflare",
+  "category": "server",
+  "conditions": [
+   {
+    "type": "server",
+    "pattern": "^cloudflare$"
+   },
+   {
+    "type": "header",
+    "name": "CF-RAY"
+   }
+  ]
+ },
+ {
+  "id": "varnish",
+  "name": "Varnish",
+  "category": "server",
+  "conditions": [
+   {
+    "type": "header",
+    "name": "X-Varnish"
+   },
+   {
+    "type": "header",
+    "name": "Via",
+    "pattern": "varnish"
+   }
+  ]
+ },
+ {
+  "id": "phpmyadmin",
+  "name": "phpMyAdmin",
+  "category": "adminPanel",
+  "confidence": 90,
+  "conditions": [
+   {
+    "type": "title",
+    "pattern": "phpMyAdmin"
+   },
+   {
+    "type": "cookie",
+    "pattern": "^phpMyAdmin"
+   }
+  ],
+  "cwe": 284
+ },
+ {
+  "id": "wp-admin",
+  "name": "Panel WordPress (wp-login)",
+  "category": "adminPanel",
+  "conditions": [
+   {
+    "type": "path",
+    "path": "/wp-login.php",
+    "status": [
+     200
+    ],
+    "pattern": "user_login|wp-submit"
+   }
+  ],
+  "cwe": 284
+ },
+ {
+  "id": "joomla-admin",
+  "name": "Panel Joomla (/administrator)",
+  "category": "adminPanel",
+  "conditions": [
+   {
+    "type": "path",
+    "path": "/administrator/",
+    "status": [
+     200
+    ],
+    "pattern": "Joomla|mod-login"
+   }
+  ],
+  "cwe": 284
+ },
+ {
+  "id": "admin-path",
+  "name": "Panel administracyjny (/admin)",
+  "category": "adminPanel",
+  "confidence": 70,
+  "conditions": [
+   {
+    "type": "path",
+    "path": "/admin",
+    "status": [
+     200,
+     401
+    ],
+    "pattern": "admin|login|logowanie|password|hasło"
+   }
+  ],
+  "cwe": 284
+ },
+ {
+  "id": "login-path",
+  "name": "Strona logowania (/login)",
+  "category": "adminPanel",
+  "confidence": 65,
+  "conditions": [
+   {
+    "type": "path",
+    "path": "/login",
+    "status": [
+     200
+    ],
+    "pattern": "type=\"password\""
+   }
+  ],
+  "cwe": 284
+ },
+ {
+  "id": "grafana",
+  "name": "Grafana",
+  "category": "adminPanel",
+  "confidence": 90,
+  "conditions": [
+   {
+    "type": "title",
+    "pattern": "^Grafana"
+   },
+   {
+    "type": "cookie",
+    "pattern": "^grafana_session"
+   },
+   {
+    "type": "body",
+    "pattern": "grafana-app|window\\.grafanaBootData"
+   }
+  ],
+  "version": {
+   "source": "body",
+   "pattern": "\"version\":\"([0-9.]+)\""
+  },
+  "cwe": 284
+ },
+ {
+  "id": "jenkins",
+  "name": "Jenkins",
+  "category": "adminPanel",
+  "confidence": 90,
+  "conditions": [
+   {
+    "type": "header",
+    "name": "X-Jenkins"
+   },
+   {
+    "type": "title",
+    "pattern": "Jenkins"
+   }
+  ],
+  "version": {
+   "source": "header:X-Jenkins",
+   "pattern": "([0-9.]+)"
+  },
+  "cwe": 284
+ },
+ {
+  "id": "gitlab",
+  "name": "GitLab",
+  "category": "adminPanel",
+  "confidence": 90,
+  "conditions": [
+   {
+    "type": "cookie",
+    "pattern": "^_gitlab_session$"
+   },
+   {
+    "type": "body",
+    "pattern": "gon\\.gitlab_url|content=\"GitLab"
+   }
+  ],
+  "cwe": 284
+ },
+ {
+  "id": "kibana",
+  "name": "Kibana",
+  "category": "adminPanel",
+  "confidence": 90,
+  "conditions": [
+   {
+    "type": "header",
+    "name": "kbn-name"
+   },
+   {
+    "type": "title",
+    "pattern": "^Kibana|Elastic$"
+   }
+  ],
+  "version": {
+   "source": "header:kbn-version",
+   "pattern": "([0-9.]+)"
+  },
+  "cwe": 284
+ },
+ {
+  "id": "portainer",
+  "name": "Portainer",
+  "category": "adminPanel",
+  "conditions": [
+   {
+    "type": "title",
+    "pattern": "Portainer"
+   }
+  ],
+  "cwe": 284
+ },
+ {
+  "id": "webmin",
+  "name": "Webmin",
+  "category": "adminPanel",
+  "conditions": [
+   {
+    "type": "server",
+    "pattern": "MiniServ"
+   },
+   {
+    "type": "title",
+    "pattern": "Webmin"
+   }
+  ],
+  "cwe": 284
+ },
+ {
+  "id": "tomcat-manager",
+  "name": "Tomcat Manager",
+  "category": "adminPanel",
+  "conditions": [
+   {
+    "type": "path",
+    "path": "/manager/html",
+    "status": [
+     401,
+     403
+    ]
+   },
+   {
+    "type": "header",
+    "name": "WWW-Authenticate",
+    "pattern": "Tomcat Manager"
+   }
+  ],
+  "cwe": 284
+ },
+ {
+  "id": "prometheus",
+  "name": "Prometheus",
+  "category": "adminPanel",
+  "conditions": [
+   {
+    "type": "title",
+    "pattern": "Prometheus Time Series"
+   }
+  ],
+  "cwe": 284
+ },
+ {
+  "id": "rabbitmq",
+  "name": "RabbitMQ Management",
+  "category": "adminPanel",
+  "conditions": [
+   {
+    "type": "title",
+    "pattern": "RabbitMQ Management"
+   }
+  ],
+  "cwe": 284
+ },
+ {
+  "id": "minio",
+  "name": "MinIO Console",
+  "category": "adminPanel",
+  "conditions": [
+   {
+    "type": "title",
+    "pattern": "MinIO"
+   },
+   {
+    "type": "server",
+    "pattern": "MinIO"
+   }
+  ],
+  "cwe": 284
+ },
+ {
+  "id": "staging-url",
+  "name": "Środowisko testowe / staging",
+  "category": "staging",
+  "confidence": 70,
+  "conditions": [
+   {
+    "type": "url",
+    "pattern": "(^|[./-])(staging|stage|stg|test|testing|dev|develop|uat|preprod|qa|sandbox|demo)([./-]|$)"
+   },
+   {
+    "type": "title",
+    "pattern": "\\b(staging|test environment|środowisko testowe|development|preprod|uat)\\b"
+   },
+   {
+    "type": "header",
+    "name": "X-Robots-Tag",
+    "pattern": "noindex"
+   }
+  ],
+  "match": "any",
+  "cwe": 1188
+ },
+ {
+  "id": "debug-mode",
+  "name": "Tryb debugowania aplikacji",
+  "category": "staging",
+  "confidence": 80,
+  "conditions": [
+   {
+    "type": "body",
+    "pattern": "Whoops! There was an error|DEBUG = True|Traceback \\(most recent call last\\)|Symfony Profiler|X-Debug-Token"
+   },
+   {
+    "type": "header",
+    "name": "X-Debug-Token"
+   }
+  ],
+  "cwe": 489
+ },
+ {
+  "id": "default-page",
+  "name": "Domyślna strona serwera",
+  "category": "interesting",
+  "confidence": 85,
+  "conditions": [
+   {
+    "type": "title",
+    "pattern": "Welcome to nginx|Apache2 (Ubuntu|Debian) Default Page|IIS Windows Server|Test Page for the Apache|It works!"
+   }
+  ],
+  "cwe": 1188
+ },
+ {
+  "id": "directory-listing",
+  "name": "Listowanie katalogu",
+  "category": "interesting",
+  "confidence": 90,
+  "conditions": [
+   {
+    "type": "title",
+    "pattern": "^Index of /"
+   }
+  ],
+  "cwe": 548
+ },
+ {
+  "id": "version-endpoint",
+  "name": "Publiczny endpoint wersji (/version)",
+  "category": "interesting",
+  "confidence": 70,
+  "conditions": [
+   {
+    "type": "path",
+    "path": "/version",
+    "status": [
+     200
+    ],
+    "pattern": "[0-9]+\\.[0-9]+"
+   }
+  ],
+  "version": {
+   "source": "path:/version",
+   "pattern": "([0-9]+\\.[0-9]+(\\.[0-9]+)?)"
+  },
+  "cwe": 200
+ },
+ {
+  "id": "server-header-version",
+  "name": "Wersja w nagłówku odpowiedzi",
+  "category": "interesting",
+  "confidence": 90,
+  "conditions": [
+   {
+    "type": "header",
+    "name": "X-AspNet-Version"
+   },
+   {
+    "type": "server",
+    "pattern": "/[0-9]"
+   },
+   {
+    "type": "header",
+    "name": "X-Powered-By",
+    "pattern": "[0-9]\\."
+   }
+  ],
+  "cwe": 200
+ },
+ {
+  "id": "hikvision",
+  "name": "Kamera Hikvision",
+  "category": "iot",
+  "confidence": 85,
+  "conditions": [
+   {
+    "type": "server",
+    "pattern": "App-webs|DNVRS-Webs|Hikvision"
+   },
+   {
+    "type": "body",
+    "pattern": "doc/page/login\\.asp|Hikvision"
+   }
+  ]
+ },
+ {
+  "id": "dahua",
+  "name": "Kamera Dahua",
+  "category": "iot",
+  "conditions": [
+   {
+    "type": "body",
+    "pattern": "dahua|/jsBase/"
+   },
+   {
+    "type": "title",
+    "pattern": "WEB SERVICE"
+   }
+  ]
+ },
+ {
+  "id": "mikrotik",
+  "name": "MikroTik RouterOS",
+  "category": "iot",
+  "confidence": 85,
+  "conditions": [
+   {
+    "type": "title",
+    "pattern": "RouterOS|MikroTik"
+   },
+   {
+    "type": "body",
+    "pattern": "mikrotik"
+   }
+  ],
+  "version": {
+   "source": "body",
+   "pattern": "RouterOS v([0-9.]+)"
+  }
+ },
+ {
+  "id": "synology",
+  "name": "Synology DSM",
+  "category": "iot",
+  "conditions": [
+   {
+    "type": "title",
+    "pattern": "Synology"
+   },
+   {
+    "type": "body",
+    "pattern": "SYNO\\.SDS|webman/"
+   }
+  ]
+ },
+ {
+  "id": "qnap",
+  "name": "QNAP QTS",
+  "category": "iot",
+  "conditions": [
+   {
+    "type": "title",
+    "pattern": "QNAP|QTS"
+   }
+  ]
+ },
+ {
+  "id": "ubiquiti",
+  "name": "Ubiquiti UniFi",
+  "category": "iot",
+  "conditions": [
+   {
+    "type": "title",
+    "pattern": "UniFi"
+   }
+  ]
+ },
+ {
+  "id": "printer",
+  "name": "Drukarka sieciowa",
+  "category": "iot",
+  "confidence": 75,
+  "conditions": [
+   {
+    "type": "title",
+    "pattern": "HP (LaserJet|OfficeJet|Color)|Brother|EPSON|Canon|Kyocera|Xerox|RICOH"
+   }
+  ]
+ },
+ {
+  "id": "tplink",
+  "name": "Router TP-Link",
+  "category": "iot",
+  "conditions": [
+   {
+    "type": "body",
+    "pattern": "tplinkwifi|TP-LINK|TP-Link"
+   }
+  ]
+ }
+]

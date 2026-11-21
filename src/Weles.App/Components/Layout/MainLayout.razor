@@ -31,6 +31,16 @@
             <ActiveScanIndicator />
             <div class="topbar-spacer"></div>
             <LanguageSwitch Compact="true" Class="segmented-sm" />
+            <AuthorizeView>
+                <Authorized>
+                    <span class="user-badge" title="@Policies.RoleLabel(Enum.Parse<Weles.Core.Entities.UserRole>(context.User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "Viewer"))">
+                        <Icon Name="lock" Size="13" /> @context.User.Identity?.Name
+                    </span>
+                    <form method="post" action="account/logout" data-enhance="false" class="inline-form">
+                        <button class="btn btn-ghost btn-sm" type="submit">@L.T("Wyloguj")</button>
+                    </form>
+                </Authorized>
+            </AuthorizeView>
             <button class="icon-button" @onclick="ThemeState.ToggleAsync" title="@(ThemeState.IsDark ? L.T("Przełącz na jasny motyw") : L.T("Przełącz na ciemny motyw"))">
                 <Icon Name="@(ThemeState.IsDark ? "sun" : "moon")" />
             </button>

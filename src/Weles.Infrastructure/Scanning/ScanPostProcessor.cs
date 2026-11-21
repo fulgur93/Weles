@@ -8,10 +8,11 @@ using Weles.Infrastructure.Vulnerabilities;
 namespace Weles.Infrastructure.Scanning;
 
 /// <summary>
-/// What follows every finished scan – run by WELES itself or by a remote agent: matching against the local
-/// vulnerability database, then risk assessment. Failures are logged and never undo the stored scan.
+/// What follows every finished scan – run by WELES itself or by a remote agent: detection signatures on the web
+/// services, matching against the local vulnerability database, then risk assessment. Failures are logged and never undo the stored scan.
 /// </summary>
 public sealed class ScanPostProcessor(
+    Fingerprint.SignatureService signatures,
     VulnerabilityMatchingService matching,
     RiskAssessmentService risk,
     IDbContextFactory<WelesDbContext> contextFactory,
@@ -20,6 +21,16 @@ public sealed class ScanPostProcessor(
 {
     public async Task RunAsync(int scanId, CancellationToken ct)
     {
+        try
+        {
+            var technologies = await signatures.EvaluateScanAsync(scanId, ct);
+            if (technologies > 0) await AddEventAsync(scanId, ScanEventLevel.Info, $"Sygnatury: rozpoznano {technologies} technologii, paneli i cech usług web.", ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Signature evaluation failed for scan {ScanId}", scanId);
+        }
+
         try
         {
             var summary = await matching.RefreshScanAsync(scanId, ct);

@@ -10,7 +10,8 @@ using Weles.Infrastructure.Discovery;
 namespace Weles.Infrastructure.Scanning;
 
 /// <summary>What one scan should do: the approved scope and the ports.</summary>
-public sealed record NetworkScanRequest(IReadOnlyList<ScopeEntry> Entries, bool AllowPublicAddresses, string PortSpecification);
+/// <param name="WebPaths">Extra safe paths custom signatures need.</param>
+public sealed record NetworkScanRequest(IReadOnlyList<ScopeEntry> Entries, bool AllowPublicAddresses, string PortSpecification, IReadOnlyList<string>? WebPaths = null);
 
 /// <summary>Where a scan delivers what it finds – the central database (<see cref="ScanEngine"/>) or a remote agent's upload.</summary>
 public interface IScanSink
@@ -141,7 +142,7 @@ public sealed class NetworkScanner(OuiDatabase oui, LocalNetworkDiscovery localN
         // Phase 2: ports and services per live host.
         progress.Phase = ScanPhase.PortScan;
         progress.SetPortsTotal(alive.Sum(a => ports.Count + (scopeMdns.TryGetValue(a.Key, out var m) ? m.Services.Count(s => s.Port is not null) : 0)));
-        var prober = new ServiceProber(options);
+        var prober = new ServiceProber(options, request.WebPaths);
         await Parallel.ForEachAsync(alive.OrderBy(a => Ipv4Sort(a.Key)), new ParallelOptions { MaxDegreeOfParallelism = options.ParallelHostScans, CancellationToken = cancellationToken },
             async (entry, ct) =>
             {

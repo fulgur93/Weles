@@ -47,7 +47,7 @@
                 }
                 else
                 {
-                    <button class="btn btn-primary btn-sm" @onclick="Update"><Icon Name="refresh" Size="14" /> @L.T("Aktualizuj z Internetu")</button>
+                    <Can Policy="@Policies.Modify"><button class="btn btn-primary btn-sm" @onclick="Update"><Icon Name="refresh" Size="14" /> @L.T("Aktualizuj z Internetu")</button></Can>
                     <p class="muted small">@L.T("Pobiera publiczne dane z services.nvd.nist.gov, cisa.gov i epss.empiricalsecurity.com. Zapytania zawierają tylko stałą listę produktów WELES – nic o Twojej sieci. Bez Internetu WELES używa ostatnio pobranej bazy. NVD bez klucza API pozwala na 5 zapytań / 30 s, więc pełne pobranie trwa ok. 5 minut.")</p>
                 }
             </div>

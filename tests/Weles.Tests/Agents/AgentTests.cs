@@ -70,7 +70,7 @@ public class AgentTests
         var coordinator = new ScanCoordinator(TimeProvider.System);
         var writer = new ScanResultWriter(db, TimeProvider.System);
         var settings = new SettingsService(db, TimeProvider.System);
-        var post = new ScanPostProcessor(new VulnerabilityMatchingService(db, TimeProvider.System, NullLogger<VulnerabilityMatchingService>.Instance),
+        var post = new ScanPostProcessor(new Weles.Infrastructure.Fingerprint.SignatureService(db, TimeProvider.System, NullLogger<Weles.Infrastructure.Fingerprint.SignatureService>.Instance), new VulnerabilityMatchingService(db, TimeProvider.System, NullLogger<VulnerabilityMatchingService>.Instance),
             new RiskAssessmentService(db, settings, TimeProvider.System, NullLogger<RiskAssessmentService>.Instance), db, TimeProvider.System, NullLogger<ScanPostProcessor>.Instance);
         var opts = Options.Create(options ?? new ScanOptions());
         return new Env

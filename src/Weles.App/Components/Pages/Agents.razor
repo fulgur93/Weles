@@ -1,4 +1,5 @@
 @page "/agents"
+@attribute [Authorize(Policy = Policies.Admin)]
 @using System.Net
 @using Weles.Core.Networking
 @using Weles.Infrastructure.Agents

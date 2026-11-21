@@ -321,6 +321,7 @@ public sealed class ScanResultWriter(IDbContextFactory<WelesDbContext> contextFa
                 DetectionMethod = Truncate(id.Method, 100),
                 IsTls = id.IsTls || probe.Certificate is not null,
                 ExtraInfoJson = BuildExtra(id),
+                WebJson = id.Web is { } web ? System.Text.Json.JsonSerializer.Serialize(web.Bounded(), Core.Fingerprint.SignatureEngine.Json) : null,
             };
 
             if (probe.Certificate is { } c)

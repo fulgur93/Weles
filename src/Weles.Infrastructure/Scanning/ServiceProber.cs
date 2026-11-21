@@ -18,8 +18,14 @@ public sealed record ServiceProbeResult(ServiceIdentification Identification, Ce
 /// passive banner read, protocol greetings (Redis PING, PostgreSQL SSLRequest, RDP negotiation),
 /// one HTTP GET and a TLS handshake. No authentication attempts, no exploitation.
 /// </summary>
-public sealed partial class ServiceProber(ScanOptions options)
+public sealed partial class ServiceProber(ScanOptions options, IReadOnlyList<string>? extraWebPaths = null)
 {
+    private const int MaxRedirectHops = 3;
+
+    /// <summary>Paths requested for signatures: the configured list and what custom signatures need – safe, bounded.</summary>
+    private readonly IReadOnlyList<string> _webPaths = options.WebProbePaths.Concat(extraWebPaths ?? [])
+        .Where(Core.Fingerprint.SignatureEngine.IsSafePath).Distinct(StringComparer.Ordinal).Take(Core.Fingerprint.WebObservation.MaxPaths).ToList();
+
     public const string UserAgent = "WELES-Discovery/0.2 (authorized security audit)";
     private const int MaxResponseBytes = 64 * 1024;
 
@@ -207,13 +213,108 @@ public sealed partial class ServiceProber(ScanOptions options)
 
     private async Task<ServiceIdentification?> TryHttpAsync(IPAddress address, int port, string? hostname, CancellationToken ct)
     {
-        var first = await HttpGetAsync(address, port, hostname, "/", ct);
-        if (first is null) return null;
-        var initial = HttpFingerprinter.Identify(first, isTls: false);
-        if (RedirectPath(first, address, port, hostname, isTls: false) is not { } path) return initial;
+        async Task<(HttpResponseInfo?, byte[])> Get(string path)
+        {
+            using var client = await NetworkProbe.OpenAsync(address, port, options.ConnectTimeoutMs, ct);
+            if (client is null) return (null, []);
+            var raw = await SendHttpRequestAsync(client.GetStream(), address, port, hostname, path, ct);
+            return (HttpResponseParser.TryParse(raw, out var response) ? response : null, raw);
+        }
 
-        var target = await HttpGetAsync(address, port, hostname, path, ct);
-        return target is null ? initial : HttpFingerprinter.CombineRedirect(initial, HttpFingerprinter.Identify(target, isTls: false));
+        var (first, _) = await Get("/");
+        if (first is null) return null;
+        return await ObserveAsync(first, Get, address, port, hostname, isTls: false, certificateSubject: null, ct);
+    }
+
+    /// <summary>
+    /// The identification of a web service and its <see cref="Core.Fingerprint.WebObservation"/>: the same-origin redirect
+    /// chain (at most 3 hops), headers and cookies, a bounded part of the page, the favicon hash and the safe paths.
+    /// </summary>
+    private async Task<ServiceIdentification> ObserveAsync(HttpResponseInfo first, Func<string, Task<(HttpResponseInfo?, byte[])>> get,
+        IPAddress address, int port, string? hostname, bool isTls, string? certificateSubject, CancellationToken ct)
+    {
+        var identification = HttpFingerprinter.Identify(first, isTls, certificateSubject);
+        var final = first;
+        var path = "/";
+        var chain = new List<string>();
+        var setCookies = new List<string>(first.SetCookies ?? []);
+        var visited = new HashSet<string>(StringComparer.Ordinal) { "/" };
+        for (var hop = 0; hop < MaxRedirectHops && RedirectPath(final, address, port, hostname, isTls) is { } next; hop++)
+        {
+            chain.Add($"{final.StatusCode} → {next}");
+            if (!visited.Add(next)) break; // a redirect loop is recorded, not followed again
+            var (target, _) = await get(next);
+            if (target is null) break;
+            final = target;
+            path = next;
+            setCookies.AddRange(target.SetCookies ?? []);
+        }
+
+        if (!ReferenceEquals(final, first)) identification = HttpFingerprinter.CombineRedirect(identification, HttpFingerprinter.Identify(final, isTls, certificateSubject));
+        if (!options.CollectWeb) return identification;
+
+        // An external redirect is recorded but never followed.
+        if (final.StatusCode is >= 300 and < 400 && final.Header("Location") is { } external && RedirectPath(final, address, port, hostname, isTls) is null) chain.Add($"{final.StatusCode} → {BannerParser.Sanitize(external)} (poza celem – nie odwiedzono)");
+
+        int? mmh3 = null;
+        string? md5 = null;
+        var (icon, iconRaw) = await get("/favicon.ico");
+        if (icon is { StatusCode: 200 } && HttpBody(iconRaw) is { Length: > 0 and < 200_000 } bytes && !(icon.Header("Content-Type") ?? "").Contains("html", StringComparison.OrdinalIgnoreCase))
+        {
+            mmh3 = Core.Fingerprint.FaviconHash.Mmh3(bytes);
+            md5 = Core.Fingerprint.FaviconHash.Md5(bytes);
+        }
+
+        var paths = new List<Core.Fingerprint.WebPathResult>();
+        // A server that accepts connections but stops answering would cost a full timeout per path: two silent
+        // answers in a row (favicon included) end the path checks for this service.
+        var silent = icon is null ? 1 : 0;
+        foreach (var p in _webPaths)
+        {
+            if (silent >= 2)
+            {
+                paths.Add(new Core.Fingerprint.WebPathResult(p, 0, null, 0, null));
+                continue;
+            }
+
+            var (response, raw) = await get(p);
+            silent = response is null ? silent + 1 : 0;
+            paths.Add(response is null
+                ? new Core.Fingerprint.WebPathResult(p, 0, null, 0, null)
+                : new Core.Fingerprint.WebPathResult(p, response.StatusCode, response.Title, HttpBody(raw).Length,
+                    response.Body.Length > Core.Fingerprint.WebObservation.MaxPathSampleChars ? response.Body[..Core.Fingerprint.WebObservation.MaxPathSampleChars] : response.Body,
+                    response.Header("Location") is { } l ? BannerParser.Sanitize(l) : null));
+        }
+
+        var host = hostname ?? (address.AddressFamily == AddressFamily.InterNetworkV6 ? $"[{address}]" : address.ToString());
+        var url = $"{(isTls ? "https" : "http")}://{host}{(port is 80 or 443 ? "" : ":" + port)}{path}";
+        var web = new Core.Fingerprint.WebObservation(url, final.StatusCode, final.Title, final.Headers, Core.Fingerprint.WebCookies.Parse(setCookies), chain,
+            final.Body, mmh3, md5, paths).Bounded();
+        return identification with { Web = web };
+    }
+
+    /// <summary>The body bytes of a raw HTTP response (chunked transfer encoding decoded).</summary>
+    internal static byte[] HttpBody(byte[] raw)
+    {
+        var end = raw.AsSpan().IndexOf("\r\n\r\n"u8);
+        if (end < 0) return [];
+        var head = Encoding.Latin1.GetString(raw, 0, end);
+        var body = raw.AsSpan(end + 4).ToArray();
+        if (!head.Contains("transfer-encoding: chunked", StringComparison.OrdinalIgnoreCase)) return body;
+        using var result = new MemoryStream();
+        var pos = 0;
+        while (pos < body.Length)
+        {
+            var lineEnd = body.AsSpan(pos).IndexOf("\r\n"u8);
+            if (lineEnd < 0) break;
+            var sizeText = Encoding.ASCII.GetString(body, pos, lineEnd).Split(';')[0].Trim();
+            if (!int.TryParse(sizeText, System.Globalization.NumberStyles.HexNumber, null, out var size) || size <= 0) break;
+            pos += lineEnd + 2;
+            result.Write(body, pos, Math.Min(size, body.Length - pos));
+            pos += size + 2;
+        }
+
+        return result.ToArray();
     }
 
     private async Task<HttpResponseInfo?> HttpGetAsync(IPAddress address, int port, string? hostname, string path, CancellationToken ct)
@@ -291,15 +392,15 @@ public sealed partial class ServiceProber(ScanOptions options)
         var raw = await SendHttpRequestAsync(ssl, address, port, hostname, "/", ct);
         if (HttpResponseParser.TryParse(raw, out var response))
         {
-            identification = HttpFingerprinter.Identify(response, isTls: true, snapshot?.Subject);
-            if (RedirectPath(response, address, port, hostname, isTls: true) is { } path)
+            async Task<(HttpResponseInfo?, byte[])> Get(string path)
             {
-                await using var second = await OpenTlsAsync(address, port, hostname, ct);
-                if (second is not null && HttpResponseParser.TryParse(await SendHttpRequestAsync(second.Stream, address, port, hostname, path, ct), out var target))
-                {
-                    identification = HttpFingerprinter.CombineRedirect(identification, HttpFingerprinter.Identify(target, isTls: true, snapshot?.Subject));
-                }
+                await using var next = await OpenTlsAsync(address, port, hostname, ct);
+                if (next is null) return (null, []);
+                var bytes = await SendHttpRequestAsync(next.Stream, address, port, hostname, path, ct);
+                return (HttpResponseParser.TryParse(bytes, out var r) ? r : null, bytes);
             }
+
+            identification = await ObserveAsync(response, Get, address, port, hostname, isTls: true, snapshot?.Subject, ct);
         }
         else
         {
@@ -344,17 +445,21 @@ public sealed partial class ServiceProber(ScanOptions options)
         }
     }
 
+    /// <summary>Requests after the first page (redirect hops, favicon, safe paths) wait at most this long for an answer.</summary>
+    private int FollowUpTimeoutMs => Math.Min(options.ProbeTimeoutMs, 2000);
+
     private async Task<byte[]> SendHttpRequestAsync(Stream stream, IPAddress address, int port, string? hostname, string path, CancellationToken ct)
     {
+        var timeoutMs = path == "/" ? options.ProbeTimeoutMs : FollowUpTimeoutMs;
         var host = hostname ?? (address.AddressFamily == AddressFamily.InterNetworkV6 ? $"[{address}]" : address.ToString());
         if (port is not (80 or 443)) host += $":{port}";
         var request = $"GET {path} HTTP/1.1\r\nHost: {host}\r\nUser-Agent: {UserAgent}\r\nAccept: text/html,*/*\r\nConnection: close\r\n\r\n";
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(options.ProbeTimeoutMs);
+            timeout.CancelAfter(timeoutMs);
             await stream.WriteAsync(Encoding.ASCII.GetBytes(request), timeout.Token);
-            return await ReadAsync(stream, options.ProbeTimeoutMs, MaxResponseBytes, ct);
+            return await ReadAsync(stream, timeoutMs, MaxResponseBytes, ct);
         }
         catch (Exception ex) when (ex is IOException or SocketException || (ex is OperationCanceledException && !ct.IsCancellationRequested))
         {

@@ -1,0 +1,103 @@
+@page "/users"
+@attribute [Authorize(Policy = Policies.Admin)]
+@using System.Security.Claims
+@using Weles.Infrastructure.Security
+@inject UserService Service
+
+<PageTitle>@L.T("Użytkownicy · WELES")</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>@L.T("Użytkownicy i role")</h1>
+        <p class="page-subtitle">@L.T("Role: Administracja (wszystko, w tym użytkownicy, ustawienia, agenci); Dodawanie, usuwanie, modyfikacja (zakresy, sygnatury, importy, raporty, integracje); Modyfikacja i odczyt (edycja istniejących danych, uruchamianie skanów); Odczyt (przeglądanie i eksport). Zmiana roli lub hasła kończy sesje danego użytkownika.")</p>
+    </div>
+</div>
+
+<section class="card">
+    <div class="card-title"><Icon Name="lock" /> @L.T("Nowy użytkownik")</div>
+    <div class="form-grid">
+        <label class="field"><span>@L.T("Nazwa użytkownika")</span><input class="input" @bind="_name" autocomplete="off" /></label>
+        <label class="field"><span>@L.T("Rola")</span>
+            <select class="input" @bind="_role">@foreach (var r in Enum.GetValues<Weles.Core.Entities.UserRole>()) { <option value="@r">@Policies.RoleLabel(r)</option> }</select></label>
+        <label class="field"><span>@L.F("Hasło (co najmniej {0} znaków)", UserService.MinPasswordLength)</span><input class="input" type="password" autocomplete="new-password" @bind="_password" /></label>
+    </div>
+    <button class="btn btn-primary" @onclick="CreateAsync">@L.T("Utwórz")</button>
+    @if (_errors.Count > 0) { <div class="alert alert-bad"><ul>@foreach (var e in _errors) { <li>@L.Message(e)</li> }</ul></div> }
+    @if (_message is not null) { <div class="alert alert-ok">@L.Message(_message)</div> }
+</section>
+
+<section class="card">
+    <div class="card-title"><Icon Name="assets" /> @L.T("Konta")</div>
+    <table class="table">
+        <thead><tr><th>@L.T("Nazwa")</th><th>@L.T("Rola")</th><th>@L.T("Stan")</th><th>@L.T("Ostatnie logowanie")</th><th></th></tr></thead>
+        <tbody>
+            @foreach (var u in _users)
+            {
+                <tr>
+                    <td><strong>@u.UserName</strong>@if (u.Id == _me) { <span class="muted small"> · @L.T("to Ty")</span> }</td>
+                    <td><select class="input input-sm" value="@u.Role" @onchange="e => SetRoleAsync(u.Id, e.Value?.ToString())">
+                        @foreach (var r in Enum.GetValues<Weles.Core.Entities.UserRole>()) { <option value="@r">@Policies.RoleLabel(r)</option> }</select></td>
+                    <td>@(u.Disabled ? L.T("wyłączone") : u.Locked ? L.T("zablokowane czasowo") : L.T("aktywne"))</td>
+                    <td>@Labels.Local(u.LastLoginAt)</td>
+                    <td class="right nowrap">
+                        <input class="input input-sm" type="password" placeholder="@L.T("nowe hasło")" autocomplete="new-password" @bind="_reset[u.Id]" />
+                        <button class="btn btn-ghost btn-sm" @onclick="() => ResetAsync(u.Id)">@L.T("Ustaw hasło")</button>
+                        <button class="btn btn-ghost btn-sm" @onclick="() => DisableAsync(u.Id, !u.Disabled)">@(u.Disabled ? L.T("Włącz") : L.T("Wyłącz"))</button>
+                        @if (u.Id != _me) { <button class="btn btn-ghost btn-sm" @onclick="() => DeleteAsync(u.Id)">@L.T("Usuń")</button> }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</section>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationState { get; set; }
+    private IReadOnlyList<UserView> _users = [];
+    private readonly Dictionary<int, string?> _reset = [];
+    private string _name = "", _password = "";
+    private Weles.Core.Entities.UserRole _role = Weles.Core.Entities.UserRole.Viewer;
+    private List<string> _errors = [];
+    private string? _message;
+    private int _me;
+    private string? _by;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthenticationState!).User;
+        _me = int.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : 0;
+        _by = user.Identity?.Name;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _users = await Service.ListAsync();
+        foreach (var u in _users) _reset.TryAdd(u.Id, null);
+    }
+
+    private async Task Done(IReadOnlyList<string> errors, string ok)
+    {
+        _errors = errors.ToList();
+        _message = errors.Count == 0 ? ok : null;
+        await LoadAsync();
+    }
+
+    private async Task CreateAsync()
+    {
+        var (user, errors) = await Service.CreateAsync(_name, _password, _role, _by);
+        if (user is not null) (_name, _password) = ("", "");
+        await Done(errors, L.F("Utworzono konto „{0}”.", user?.UserName));
+    }
+
+    private async Task SetRoleAsync(int id, string? role)
+    {
+        if (Enum.TryParse<Weles.Core.Entities.UserRole>(role, out var r)) await Done(await Service.SetRoleAsync(id, r, _by), "Zmieniono rolę – sesje tego użytkownika wygasły.");
+    }
+
+    private async Task ResetAsync(int id) => await Done(await Service.ResetPasswordAsync(id, _reset.GetValueOrDefault(id) ?? "", _by), "Ustawiono nowe hasło.");
+
+    private async Task DisableAsync(int id, bool disabled) => await Done(await Service.SetDisabledAsync(id, disabled, _by), disabled ? "Konto wyłączone." : "Konto włączone.");
+
+    private async Task DeleteAsync(int id) => await Done(await Service.DeleteAsync(id, _by), "Konto usunięte.");
+}

@@ -1,6 +1,10 @@
 @page "/scans"
 @using Weles.Infrastructure.Queries
+@using Weles.Infrastructure.Import
+@using Weles.Infrastructure.Scanning
 @inject ScanQueries Queries
+@inject ScanImportService Importer
+@inject ScanTargetService Targets
 
 <PageTitle>@L.T("Skany · WELES")</PageTitle>
 
@@ -47,9 +51,67 @@
     }
 </section>
 
+<section class="card">
+    <div class="card-title"><Icon Name="folder" /> @L.T("Import i eksport wyników")</div>
+    <p class="muted small">@L.T("Wczytaj wyniki skanu z innego narzędzia: nmap XML (nmap -oX), CSV (kolumny ip, port, protocol, service, product, version, cpe, banner, hostname, mac) albo JSON (format eksportu WELES). Wyniki trafiają do historii jak zwykły skan – działają porównania, podatności, ryzyko i raporty. WELES nie wysyła przy tym żadnego ruchu.")</p>
+    <div class="actions">
+        <Can Policy="@Policies.Manage">
+        <select class="input input-sm" @bind="_importScope">
+            <option value="0">@L.T("Nowy zakres z adresów z pliku")</option>
+            @foreach (var t in _scopes) { <option value="@t.Id">@L.Message(t.Name)</option> }
+        </select>
+        <label class="btn btn-primary btn-sm"><Icon Name="folder" Size="14" /> @(_importing ? L.T("Importowanie…") : L.T("Wybierz plik wyników"))
+            <InputFile OnChange="ImportAsync" accept=".xml,.csv,.json" class="visually-hidden" disabled="@_importing" /></label>
+        </Can>
+        <a class="btn btn-ghost btn-sm" href="api/export/results.csv" download><Icon Name="download" Size="14" /> @L.T("Eksport CSV (najnowszy stan)")</a>
+        <a class="btn btn-ghost btn-sm" href="api/export/results.json" download><Icon Name="download" Size="14" /> @L.T("Eksport JSON (najnowszy stan)")</a>
+    </div>
+    @if (_importError is not null) { <div class="alert alert-bad">@L.Message(_importError)</div> }
+    @if (_imported is { } r)
+    {
+        <div class="alert alert-ok">@L.F("Zaimportowano ({0}): {1} hostów, {2} otwartych portów.", r.Format, r.Hosts, r.Ports) <a href="scans/@r.ScanId">@L.F("Skan #{0}", r.ScanId)</a>
+            @foreach (var w in r.Warnings.Take(5)) { <div class="small">@L.Message(w)</div> }</div>
+    }
+</section>
+
 @code {
     [Inject] private NavigationManager Navigation { get; set; } = default!;
     private IReadOnlyList<ScanListItem>? _scans;
+    private IReadOnlyList<ScanTargetSummary> _scopes = [];
+    private int _importScope;
+    private bool _importing;
+    private string? _importError;
+    private ScanImportResult? _imported;
 
-    protected override async Task OnInitializedAsync() => _scans = await Queries.ListAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        _scans = await Queries.ListAsync();
+        _scopes = await Targets.ListAsync();
+    }
+
+    private async Task ImportAsync(InputFileChangeEventArgs e)
+    {
+        _importing = true;
+        _importError = null;
+        _imported = null;
+        try
+        {
+            await using var stream = e.File.OpenReadStream(ScanImportService.MaxFileBytes);
+            _imported = await Importer.ImportAsync(stream, e.File.Name, _importScope == 0 ? null : _importScope);
+            _scans = await Queries.ListAsync();
+            _scopes = await Targets.ListAsync();
+        }
+        catch (ScanImportException ex)
+        {
+            _importError = ex.Message;
+        }
+        catch (IOException)
+        {
+            _importError = "Plik jest większy niż 50 MB lub nie da się go odczytać.";
+        }
+        finally
+        {
+            _importing = false;
+        }
+    }
 }

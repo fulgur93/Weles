@@ -1,0 +1,10 @@
+@inherits LayoutComponentBase
+@inject ThemeState ThemeState
+
+<div class="app theme-@ThemeState.Theme auth-page">
+    <main class="auth-box">
+        <div class="brand auth-brand"><BrandMark Size="34" /><span class="brand-text"><span class="brand-name">@L.T("WELES")</span><span class="brand-sub">@L.T("Attack Surface Intelligence")</span></span></div>
+        @Body
+        <div class="auth-footer"><LanguageSwitch Compact="true" Class="segmented-sm" /></div>
+    </main>
+</div>

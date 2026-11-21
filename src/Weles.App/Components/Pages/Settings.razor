@@ -43,7 +43,7 @@
         <LanguageSwitch />
         <p class="muted small">@L.T("Język interfejsu, komunikatów i uzasadnień generowanych przez WELES. Opisy CVE pochodzą z NVD i są po angielsku.")</p>
 
-        @if (Autostart.IsSupported)
+        @if (Autostart.IsSupported && _isAdmin)
         {
             <div class="card-title" style="margin-top:18px"><Icon Name="play" /> @L.T("Uruchamianie")</div>
             <label class="checkbox"><input type="checkbox" checked="@_autostart" @onchange="ToggleAutostart" /> @L.T("Uruchamiaj WELES po zalogowaniu (w tle, bez otwierania przeglądarki)")</label>
@@ -118,8 +118,13 @@
     private bool _autostart;
     private string? _autostartError;
 
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+    [Inject] private IAuthorizationService Authorization { get; set; } = default!;
+    private bool _isAdmin;
+
     protected override async Task OnInitializedAsync()
     {
+        _isAdmin = await Access.CanAsync(AuthState, Authorization, Policies.Admin);
         _autostart = Autostart.IsEnabled();
         _db = await DatabaseInfo.GetInfoAsync();
         _ai = await Ai.GetStatusAsync();

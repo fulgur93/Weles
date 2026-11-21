@@ -1,0 +1,26 @@
+@page "/login"
+@layout Layout.AuthLayout
+@attribute [AllowAnonymous]
+@inject Weles.Infrastructure.Security.UserService Users
+@inject NavigationManager Navigation
+
+<PageTitle>@L.T("Logowanie · WELES")</PageTitle>
+
+<h1>@L.T("Logowanie")</h1>
+@if (!string.IsNullOrEmpty(Error)) { <div class="alert alert-bad">@L.Message(Error)</div> }
+<form method="post" action="account/login" data-enhance="false" class="auth-form">
+    <input type="hidden" name="returnUrl" value="@(ReturnUrl ?? "/")" />
+    <label class="field"><span>@L.T("Nazwa użytkownika")</span><input class="input" name="userName" autocomplete="username" required autofocus /></label>
+    <label class="field"><span>@L.T("Hasło")</span><input class="input" name="password" type="password" autocomplete="current-password" required /></label>
+    <button class="btn btn-primary" type="submit">@L.T("Zaloguj")</button>
+</form>
+
+@code {
+    [SupplyParameterFromQuery] public string? Error { get; set; }
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!await Users.AnyAsync()) Navigation.NavigateTo("setup", forceLoad: true);
+    }
+}

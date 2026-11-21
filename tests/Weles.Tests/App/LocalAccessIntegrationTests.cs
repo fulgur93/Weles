@@ -21,6 +21,7 @@ public class LocalAccessIntegrationTests(WelesAppFactory factory) : IClassFixtur
         var client = NewClient();
         var auth = await client.GetAsync($"/auth?token={Uri.EscapeDataString(Token)}");
         Assert.Equal(HttpStatusCode.Redirect, auth.StatusCode);
+        await factory.SignInAsync(client);
         return client;
     }
 
@@ -196,7 +197,7 @@ public class ScanWorkerIntegrationTests(WelesAppFactory factory) : IClassFixture
 
         var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, BaseAddress = new Uri("http://localhost") });
         var token = factory.Services.GetRequiredService<LocalAccessToken>().Value;
-        await client.GetAsync($"/auth?token={Uri.EscapeDataString(token)}");
+        await factory.SignInAsync(client);
         var html = System.Net.WebUtility.HtmlDecode(await client.GetStringAsync($"/scans/{scanId}"));
         Assert.Contains("127.0.0.1", html);
         Assert.Contains("Zakończony", html);
@@ -227,7 +228,7 @@ public class AssetPagesIntegrationTests(WelesAppFactory factory) : IClassFixture
         await editor.UpdateAsync(assetId, new("Mój serwer testowy", null, Weles.Core.Enums.AssetCriticality.High, null));
 
         var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, BaseAddress = new Uri("http://localhost") });
-        await client.GetAsync($"/auth?token={Uri.EscapeDataString(factory.Services.GetRequiredService<LocalAccessToken>().Value)}");
+        await factory.SignInAsync(client);
 
         var list = System.Net.WebUtility.HtmlDecode(await client.GetStringAsync("/assets"));
         Assert.Contains("Mój serwer testowy", list);
@@ -263,7 +264,7 @@ public class ActiveScanIndicatorTests(WelesAppFactory factory) : IClassFixture<W
         var scanId = (await targets.StartScanAsync(id, slow.Port.ToString())).Id!.Value;
 
         var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, BaseAddress = new Uri("http://localhost") });
-        await client.GetAsync($"/auth?token={Uri.EscapeDataString(factory.Services.GetRequiredService<LocalAccessToken>().Value)}");
+        await factory.SignInAsync(client);
 
         var sawIndicator = false;
         for (var i = 0; i < 50 && coordinator.IsActive(scanId); i++)
@@ -297,12 +298,22 @@ public class Stage7PagesTests(WelesAppFactory factory) : IClassFixture<WelesAppF
     [InlineData("/attack-surface?id=999")]
     [InlineData("/reports")]
     [InlineData("/reports?net=all")]
+    [InlineData("/web")]
+    [InlineData("/web?category=AdminPanel")]
+    [InlineData("/signatures")]
+    [InlineData("/api/export/web.csv")]
+    [InlineData("/api/export/web.json")]
+    [InlineData("/api/export/signatures.json")]
+    [InlineData("/api/export/results.csv")]
+    [InlineData("/api/export/results.json")]
+    [InlineData("/integrations")]
+    [InlineData("/api/export/defectdojo.json")]
     [InlineData("/reports/audit/999")]
     [InlineData("/reports/imported/999")]
     public async Task Pages_render_without_redirects(string path)
     {
         var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, BaseAddress = new Uri("http://localhost") });
-        await client.GetAsync($"/auth?token={Uri.EscapeDataString(factory.Services.GetRequiredService<LocalAccessToken>().Value)}");
+        await factory.SignInAsync(client);
         var response = await client.GetAsync(path);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -317,7 +328,7 @@ public class ReportEndpointTests(WelesAppFactory factory) : IClassFixture<WelesA
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/reports/1/download")).StatusCode);
 
         var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, BaseAddress = new Uri("http://localhost") });
-        await client.GetAsync($"/auth?token={Uri.EscapeDataString(factory.Services.GetRequiredService<LocalAccessToken>().Value)}");
+        await factory.SignInAsync(client);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/reports/424242/download")).StatusCode);
     }
 }

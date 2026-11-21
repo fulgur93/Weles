@@ -100,6 +100,18 @@ public static class RiskRules
 
     public static RiskRule? Find(string id) => All.FirstOrDefault(r => r.Id == id);
 
+    /// <summary>MITRE CWE of every configuration rule – exported to DefectDojo and shown next to the finding.</summary>
+    public static IReadOnlyDictionary<string, int> Cwe { get; } = new Dictionary<string, int>
+    {
+        ["ADB-NOAUTH"] = 306, ["ADB-ENABLED"] = 489, ["DOCKER-API"] = 306, ["REDIS-NOAUTH"] = 306, ["ADMIN-PANEL-EXPOSED"] = 284,
+        ["TELNET"] = 319, ["HTTP-BASIC-CLEARTEXT"] = 319, ["LOGIN-HTTP"] = 319, ["FTP-CLEARTEXT"] = 319, ["RDP-NO-NLA"] = 287,
+        ["RDP-EXPOSED"] = 284, ["VNC-EXPOSED"] = 284, ["SMB-EXPOSED"] = 284, ["DB-EXPOSED"] = 284, ["POSTGRES-NO-SSL"] = 319,
+        ["MQTT-CLEARTEXT"] = 319, ["TLS-LEGACY"] = 327, ["CERT-EXPIRED"] = 298, ["CERT-WEAK-KEY"] = 326, ["CERT-SELF-SIGNED"] = 295,
+        ["CERT-NAME-MISMATCH"] = 297, ["UPNP-EXPOSED"] = 284, ["HTTP-HEADERS"] = 693, ["VERSION-DISCLOSURE"] = 200
+    };
+
+    public static int? CweOf(string ruleId) => Cwe.TryGetValue(ruleId, out var cwe) ? cwe : null;
+
     private static readonly HashSet<int> DatabasePorts = [1433, 1521, 3306, 5432, 6379, 9200, 27017, 5984, 11211];
 
     public static IEnumerable<ConfigFinding> Evaluate(ServiceFacts s, DateTime now)

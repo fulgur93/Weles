@@ -1,0 +1,160 @@
+@page "/web"
+@using Weles.Core.Fingerprint
+@using Weles.Infrastructure.Queries
+@inject WebQueries Queries
+@inject NetworkQueries Networks
+
+<PageTitle>@L.T("Usługi web · WELES")</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>@L.T("Usługi web")</h1>
+        <p class="page-subtitle">@L.T("Co działa pod adresami HTTP/HTTPS: tytuł, kod odpowiedzi, nagłówki, ciasteczka, przekierowania, certyfikat, favicon i technologie rozpoznane sygnaturami (CMS, frameworki, serwery, panele administracyjne, środowiska testowe, IoT). Tylko zwykłe zapytania GET – bez logowania i bez wysyłania formularzy.")</p>
+    </div>
+    @if (_networks is not null) { <NetworkPicker Context="_networks" Value="@_filter" /> }
+</div>
+
+@if (_rows is null)
+{
+    <div class="card loading">@L.T("Wczytywanie…")</div>
+}
+else
+{
+    <section class="kpi-grid kpi-grid-4">
+        <div class="card"><div class="kpi-label">@L.T("Usługi web")</div><div class="kpi-value">@_rows.Count</div><div class="kpi-hint">@L.F("{0} z technologiami", _rows.Count(r => r.Technologies.Count > 0))</div></div>
+        <div class="card @(Count(SignatureCategory.AdminPanel) > 0 ? "kpi-critical" : "")"><div class="kpi-label">@L.T("Panele administracyjne")</div><div class="kpi-value">@Count(SignatureCategory.AdminPanel)</div><div class="kpi-hint">@L.T("panele, strony logowania")</div></div>
+        <div class="card"><div class="kpi-label">@L.T("Środowiska testowe")</div><div class="kpi-value">@Count(SignatureCategory.Staging)</div><div class="kpi-hint">@L.T("staging, dev, debug")</div></div>
+        <div class="card"><div class="kpi-label">@L.T("CMS")</div><div class="kpi-value">@Count(SignatureCategory.Cms)</div><div class="kpi-hint">@string.Join(", ", _rows.SelectMany(r => r.Technologies).Where(t => t.Category == SignatureCategory.Cms).Select(t => t.Name).Distinct().Take(4))</div></div>
+    </section>
+
+    <section class="card">
+        <div class="toolbar">
+            <input class="input" placeholder="@L.T("Szukaj: adres, tytuł, technologia, nagłówek, ciasteczko…")" @bind="_search" @bind:event="oninput" />
+            <select class="input" @bind="_category">
+                <option value="">@L.T("Wszystkie kategorie")</option>
+                @foreach (var c in Enum.GetValues<SignatureCategory>()) { <option value="@c">@CategoryLabel(c)</option> }
+            </select>
+            <a class="btn btn-ghost btn-sm" href="api/export/web.csv" download><Icon Name="download" Size="14" /> CSV</a>
+            <a class="btn btn-ghost btn-sm" href="api/export/web.json" download><Icon Name="download" Size="14" /> JSON</a>
+            <a class="btn btn-ghost btn-sm" href="signatures">@L.T("Sygnatury")</a>
+        </div>
+        @if (Visible.Count == 0)
+        {
+            <p class="empty">@(_rows.Count == 0 ? L.T("Brak usług web – uruchom skan zakresu z portami HTTP/HTTPS.") : L.T("Nic nie pasuje do filtra."))</p>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="table table-hover">
+                    <thead><tr><th class="right">@L.T("Ciekawość")</th><th>@L.T("Adres")</th><th>HTTP</th><th>@L.T("Tytuł")</th><th>@L.T("Technologie")</th><th>@L.T("Skan")</th></tr></thead>
+                    <tbody>
+                        @foreach (var r in Visible.Take(_limit))
+                        {
+                            var open = _open.Contains(r.ServiceId);
+                            <tr class="clickable" @onclick="() => Toggle(r.ServiceId)">
+                                <td class="right"><StatusPill Tone="@(r.Interest >= 50 ? "bad" : r.Interest >= 25 ? "warn" : "info")">@r.Interest</StatusPill></td>
+                                <td><span class="mono small">@r.Web.Url</span><div class="muted small">@L.Message(r.AssetName)</div></td>
+                                <td class="mono">@r.Web.Status</td>
+                                <td>@(r.Web.Title ?? "—")</td>
+                                <td><div class="chips">@foreach (var t in r.Technologies) { <span class="chip tech-@t.Category.ToString().ToLowerInvariant()" title="@CategoryLabel(t.Category) · @t.Confidence%">@L.Message(t.Name)@(t.Version is null ? "" : " " + t.Version)</span> }</div></td>
+                                <td class="small"><a href="scans/@r.ScanId" @onclick:stopPropagation="true">#@r.ScanId</a></td>
+                            </tr>
+                            @if (open)
+                            {
+                                <tr class="audit-device-detail"><td colspan="6">
+                                    <div class="grid-2 web-detail">
+                                        <div>
+                                            <div class="section-title">@L.T("Dlaczego ciekawe")</div>
+                                            @if (r.InterestReasons.Count == 0) { <p class="muted small">—</p> } else { <ul class="small">@foreach (var why in r.InterestReasons) { <li>@L.Message(why)</li> }</ul> }
+                                            <div class="section-title">@L.T("Technologie i dowody")</div>
+                                            @foreach (var t in r.Technologies)
+                                            {
+                                                <div class="small"><strong>@L.Message(t.Name)</strong> @(t.Version) <span class="muted">· @CategoryLabel(t.Category) · @t.Confidence% · @t.SignatureId</span>
+                                                    <div class="muted mono break">@L.Message(t.Evidence)</div></div>
+                                            }
+                                            @if (r.Web.Redirects.Count > 0)
+                                            {
+                                                <div class="section-title">@L.T("Przekierowania")</div>
+                                                <ul class="small mono">@foreach (var h in r.Web.Redirects) { <li>@L.Message(h)</li> }</ul>
+                                            }
+                                            <div class="section-title">@L.T("Ciasteczka")</div>
+                                            @if (r.Web.Cookies.Count == 0) { <p class="muted small">—</p> }
+                                            else
+                                            {
+                                                <ul class="small">@foreach (var c in r.Web.Cookies) { <li class="mono">@c.Name <span class="muted">@(c.Secure ? "Secure" : "") @(c.HttpOnly ? "HttpOnly" : "") @(c.SameSite is null ? "" : "SameSite=" + c.SameSite)</span></li> }</ul>
+                                            }
+                                            @foreach (var issue in r.CookieIssues) { <div class="small tone-warn">@L.Message(issue)</div> }
+                                            <div class="section-title">@L.T("Ścieżki (GET)")</div>
+                                            <ul class="small mono">@foreach (var p in r.Web.Paths.Where(p => p.Status != 0)) { <li>@p.Path → @p.Status@(p.Title is null ? "" : " · " + p.Title)</li> }</ul>
+                                            @if (r.Web.FaviconMmh3 is { } hash) { <div class="small muted mono">favicon mmh3 @hash · md5 @r.Web.FaviconMd5</div> }
+                                        </div>
+                                        <div>
+                                            <div class="section-title">@L.T("Nagłówki odpowiedzi")</div>
+                                            <table class="table small"><tbody>@foreach (var h in r.Web.Headers) { <tr class="@(WebQueries.InterestingHeaderNames.Contains(h.Key, StringComparer.OrdinalIgnoreCase) ? "row-highlight" : "")"><td class="mono">@h.Key</td><td class="mono break">@h.Value</td></tr> }</tbody></table>
+                                        </div>
+                                    </div>
+                                    @if (r.AssetId is { } asset) { <a class="small" href="assets/@asset">@L.T("Szczegóły urządzenia")</a> }
+                                </td></tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (Visible.Count > _limit)
+            {
+                <div class="pager"><span class="muted small">@L.F("Pokazano {0} z {1}", _limit, Visible.Count)</span><button class="btn btn-ghost btn-sm" @onclick="() => _limit += 50">@L.T("Pokaż więcej")</button></div>
+            }
+        }
+    </section>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "net")] public string? NetworkParameter { get; set; }
+    [SupplyParameterFromQuery(Name = "category")] public string? CategoryParameter { get; set; }
+
+    private IReadOnlyList<WebServiceRow>? _rows;
+    private NetworkContext? _networks;
+    private string _filter = NetworkContext.All;
+    private string _search = "";
+    private string _category = "";
+    private int _limit = 50;
+    private readonly HashSet<int> _open = [];
+
+    private int Count(SignatureCategory category) => _rows?.Count(r => r.Technologies.Any(t => t.Category == category)) ?? 0;
+
+    private List<WebServiceRow> Visible => (_rows ?? []).Where(r =>
+            (_category == "" || r.Technologies.Any(t => t.Category.ToString() == _category))
+            && (_search.Length == 0 || Haystack(r).Contains(_search, StringComparison.OrdinalIgnoreCase)))
+        .ToList();
+
+    private static string Haystack(WebServiceRow r) =>
+        $"{r.Web.Url} {r.AssetName} {r.Web.Title} {string.Join(' ', r.Technologies.Select(t => t.Name + " " + t.Version))} {string.Join(' ', r.Web.Headers.Select(h => h.Key + ":" + h.Value))} {string.Join(' ', r.Web.Cookies.Select(c => c.Name))}";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _networks = await Networks.ContextAsync();
+        _filter = _networks.Normalize(NetworkParameter);
+        if (CategoryParameter is { } c && Enum.TryParse<SignatureCategory>(c, true, out var parsed)) _category = parsed.ToString();
+        var networks = _networks;
+        var filter = _filter;
+        _rows = await Queries.LatestAsync(id => networks.IncludesAsset(filter, id));
+    }
+
+    private void Toggle(int id)
+    {
+        if (!_open.Remove(id)) _open.Add(id);
+    }
+
+    public static string CategoryLabel(SignatureCategory c) => c switch
+    {
+        SignatureCategory.Cms => L.T("CMS"),
+        SignatureCategory.Framework => L.T("Framework"),
+        SignatureCategory.Server => L.T("Serwer"),
+        SignatureCategory.Language => L.T("Język / platforma"),
+        SignatureCategory.Iot => L.T("Urządzenie IoT"),
+        SignatureCategory.AdminPanel => L.T("Panel administracyjny"),
+        SignatureCategory.Staging => L.T("Środowisko testowe"),
+        SignatureCategory.Interesting => L.T("Ciekawe"),
+        _ => L.T("Inne")
+    };
+}

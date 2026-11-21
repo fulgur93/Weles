@@ -49,3 +49,9 @@ pwsh deploy/windows/publish.ps1 -Rid win-x64 # artifacts/weles-<ver>-win-x64.zip
 | 9 | Raporty: PDF, eksport JSON/ZIP z SHA‑256, import audytu z walidacją, podsumowanie AI audytu | ✅ |
 | 10 | Agenci: Worker Service Windows/Linux, wychodzące HTTPS z przypiętym certyfikatem, rejestracja, unieważnianie, tylko zatwierdzone zakresy | ✅ |
 | 11 | Pakowanie: instalator Windows (bez administratora), paczka DEB, autostart, dołączona Ollama i model | ✅ |
+
+## Rozszerzenie: wyzwanie AGH (HackNation 2026)
+
+Fingerprinting HTTP/HTTPS z sygnaturami (wbudowane i własne), import celów i wyników (nmap XML, CSV, JSON), eksport CSV/JSON,
+integracja z DefectDojo (CVE, CWE, CVSS, EPSS, granularność, reimport), RBAC z 4 rolami, szyfrowanie bazy SQLCipher,
+zakresy do 65 536 adresów. Szczegóły: `docs/architecture.md` §5i.

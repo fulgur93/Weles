@@ -1,0 +1,27 @@
+@* Not signed in → setup (no account yet) or login; signed in without the role → a plain message. *@
+@using Weles.Infrastructure.Security
+@inject NavigationManager Navigation
+@inject UserService Users
+
+@if (_signedIn)
+{
+    <section class="card empty">
+        <h1>@L.T("Brak uprawnień")</h1>
+        <p>@L.T("Twoja rola nie pozwala otworzyć tej strony ani wykonać tej operacji. Poproś administratora o zmianę roli.")</p>
+        <a href="">@L.T("Pulpit")</a>
+    </section>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationState { get; set; }
+    private bool _signedIn;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = AuthenticationState is null ? null : await AuthenticationState;
+        _signedIn = state?.User.Identity?.IsAuthenticated == true;
+        if (_signedIn) return;
+        var returnUrl = "/" + Navigation.ToBaseRelativePath(Navigation.Uri);
+        Navigation.NavigateTo(await Users.AnyAsync() ? $"login?returnUrl={Uri.EscapeDataString(returnUrl)}" : "setup", forceLoad: true);
+    }
+}

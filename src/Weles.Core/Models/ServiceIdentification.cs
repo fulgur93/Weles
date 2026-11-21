@@ -24,6 +24,9 @@ public sealed record ServiceIdentification
     public bool IsTls { get; init; }
     public Dictionary<string, string> Extra { get; init; } = [];
 
+    /// <summary>What the HTTP(S) service showed (headers, cookies, redirects, favicon, safe paths) – evaluated by signatures.</summary>
+    public Fingerprint.WebObservation? Web { get; init; }
+
     public static ServiceIdentification FromPortOnly(int port) => new()
     {
         ServiceName = Networking.WellKnownPorts.NameOf(port) ?? "unknown",

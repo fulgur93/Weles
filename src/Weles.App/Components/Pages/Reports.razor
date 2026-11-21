@@ -65,10 +65,10 @@ else
         <div class="card-title"><Icon Name="folder" /> @L.T("Import audytu")</div>
         <p class="muted small">@L.T("Wybierz plik ZIP lub JSON wyeksportowany z WELES (do 50 MB). Plik jest sprawdzany: dozwolone pliki w archiwum, sumy SHA-256 z manifestu, format i rozmiary danych. Nic nie jest rozpakowywane na dysk.")</p>
         <p class="muted small">@L.T("Zaimportowany audyt jest tylko do odczytu i nie trafia do inwentarza, oceny ryzyka ani monitoringu – opisuje inną sieć w innym czasie.")</p>
-        <label class="btn btn-ghost">
+        <Can Policy="@Policies.Manage"><label class="btn btn-ghost">
             <Icon Name="folder" Size="15" /> @(_importing ? L.T("Importowanie…") : L.T("Wybierz plik audytu"))
             <InputFile OnChange="ImportAsync" accept=".zip,.json" class="visually-hidden" disabled="@_importing" />
-        </label>
+        </label></Can>
         @if (_importError is not null) { <div class="alert alert-bad">@L.Message(_importError)</div> }
         @if (_importedNow is not null) { <div class="alert alert-ok">@L.F("Zaimportowano audyt „{0}”.", L.Message(_importedNow.Title)) <a href="reports/imported/@_importedNow.Id">@L.T("Otwórz")</a></div> }
 
@@ -87,7 +87,7 @@ else
                                 <td class="right">@(x.PostureScore?.ToString("0") ?? "—")</td>
                                 <td class="small mono">@x.SourceFileName</td>
                                 <td>@Labels.Local(x.ImportedAt)</td>
-                                <td class="right">@if (_confirmDelete == x.Id)
+                                <td class="right"><Can Policy="@Policies.Manage">@if (_confirmDelete == x.Id)
                                     {
                                         <button class="btn btn-danger btn-sm" @onclick="() => DeleteImportedAsync(x.Id)">@L.T("Usuń")</button>
                                         <button class="btn btn-ghost btn-sm" @onclick="() => _confirmDelete = null">@L.T("Anuluj")</button>
@@ -95,7 +95,7 @@ else
                                     else
                                     {
                                         <button class="btn btn-ghost btn-sm" @onclick="() => _confirmDelete = x.Id">@L.T("Usuń")</button>
-                                    }</td>
+                                    }</Can></td>
                             </tr>
                         }
                     </tbody>

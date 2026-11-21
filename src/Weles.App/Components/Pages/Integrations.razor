@@ -1,0 +1,178 @@
+@page "/integrations"
+@attribute [Authorize(Policy = Policies.Manage)]
+@using Weles.Core.Integrations
+@using Weles.Infrastructure.Integrations
+@using Weles.Infrastructure.Queries
+@inject DefectDojoService Dojo
+@inject NetworkQueries Networks
+@inject ScanQueries Scans
+
+<PageTitle>@L.T("Integracje · WELES")</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>@L.T("Integracje")</h1>
+        <p class="page-subtitle">@L.T("DefectDojo: wyniki WELES jako znaleziska z CVE, CWE, CVSS i EPSS. Każde wysłanie aktualizuje ten sam test (reimport), więc DefectDojo zamyka znaleziska, których WELES już nie widzi. Dane trafiają wyłącznie pod skonfigurowany adres.")</p>
+    </div>
+</div>
+
+@if (_loaded)
+{
+    <section class="card">
+        <div class="card-title"><Icon Name="lock" /> @L.T("Połączenie z DefectDojo")</div>
+        <div class="form-grid">
+            <label class="field"><span>@L.T("Adres DefectDojo")</span><input class="input" placeholder="https://defectdojo.firma.pl" @bind="_url" /></label>
+            <label class="field"><span>@L.T("Klucz API (Token)")</span><input class="input mono" type="password" autocomplete="off" placeholder="@(_hasKey ? L.T("zapisany – wpisz, aby zmienić") : L.T("API v2 Key z profilu użytkownika DefectDojo"))" @bind="_apiKey" /></label>
+            <label class="field"><span>@L.T("Typ produktu")</span><input class="input" @bind="_productType" /></label>
+            <label class="field"><span>@L.T("Produkt")</span><input class="input" @bind="_product" /></label>
+            <label class="field"><span>@L.T("Engagement")</span><input class="input" @bind="_engagement" /></label>
+            <label class="field"><span>@L.T("Tytuł testu (aktualizowany przy każdym wysłaniu)")</span><input class="input" @bind="_testTitle" /></label>
+        </div>
+        <label class="checkbox"><input type="checkbox" @bind="_closeOld" /> @L.T("Zamykaj w DefectDojo znaleziska, których WELES już nie wykrywa (close_old_findings)")</label>
+        <label class="checkbox"><input type="checkbox" @bind="_verifyTls" /> @L.T("Sprawdzaj certyfikat TLS serwera (wyłącz tylko dla instancji testowej z certyfikatem samopodpisanym)")</label>
+    </section>
+
+    <section class="card">
+        <div class="card-title"><Icon Name="layers" /> @L.T("Co wysyłać (granularność)")</div>
+        <div class="grid-2">
+            <div>
+                <label class="checkbox"><input type="checkbox" @bind="_cves" /> @L.T("Podatności CVE (CVE, CWE, CVSS, EPSS, CISA KEV)")</label>
+                <label class="field"><span>@L.T("Najsłabsza pewność dopasowania CVE")</span>
+                    <select class="input" @bind="_minimumMatch">
+                        @foreach (var m in Enum.GetValues<VulnerabilityMatchStatus>()) { <option value="@m">@Labels.Of(m)</option> }
+                    </select></label>
+                <label class="checkbox"><input type="checkbox" @bind="_configuration" /> @L.T("Problemy konfiguracji (z CWE, np. FTP bez szyfrowania – CWE-319)")</label>
+                <label class="checkbox"><input type="checkbox" @bind="_webFindings" /> @L.T("Technologie, panele administracyjne i środowiska testowe z sygnatur")</label>
+                <label class="checkbox"><input type="checkbox" @bind="_services" /> @L.T("Każda otwarta usługa jako znalezisko informacyjne (inwentarz)")</label>
+                <label class="checkbox"><input type="checkbox" @bind="_accepted" /> @L.T("Ryzyka zaakceptowane w WELES (jako nieaktywne)")</label>
+            </div>
+            <div>
+                <label class="field"><span>@L.T("Minimalny poziom")</span>
+                    <select class="input" @bind="_minimumSeverity">@foreach (var s in DojoSeverity.All) { <option value="@s">@s</option> }</select></label>
+                <label class="field"><span>@L.T("Grupowanie")</span>
+                    <select class="input" @bind="_grouping">
+                        <option value="@DojoGrouping.PerEndpoint">@L.T("Jedno znalezisko na host i port (dokładne śledzenie każdego punktu)")</option>
+                        <option value="@DojoGrouping.PerIssue">@L.T("Jedno znalezisko na problem z listą hostów (endpointy)")</option>
+                    </select></label>
+                <label class="field"><span>@L.T("Sieć")</span>
+                    <select class="input" @bind="_network">
+                        <option value="all">@L.T("Wszystkie sieci")</option>
+                        @foreach (var n in _networks) { <option value="@n.Key">@L.Message(n.Label)</option> }
+                    </select></label>
+                <label class="field"><span>@L.T("Źródło")</span>
+                    <select class="input" @bind="_scanId">
+                        <option value="0">@L.T("Najnowszy stan każdego urządzenia")</option>
+                        @foreach (var s in _scans) { <option value="@s.Id">@L.F("Skan #{0}", s.Id) · @L.Message(s.TargetName) · @Labels.Local(s.StartedAt ?? s.CreatedAt)</option> }
+                    </select></label>
+            </div>
+        </div>
+        <div class="actions">
+            <button class="btn btn-primary" @onclick="SaveAsync">@L.T("Zapisz")</button>
+            <button class="btn btn-ghost" @onclick="TestAsync">@L.T("Sprawdź połączenie")</button>
+            <button class="btn btn-ghost" @onclick="PreviewAsync">@L.T("Podgląd")</button>
+            <a class="btn btn-ghost" href="api/export/defectdojo.json" download><Icon Name="download" Size="14" /> @L.T("Plik JSON (Generic Findings Import)")</a>
+            <button class="btn btn-primary" disabled="@_busy" @onclick="SendAsync"><Icon Name="play" Size="14" /> @(_busy ? L.T("Wysyłanie…") : L.T("Wyślij do DefectDojo"))</button>
+        </div>
+        <p class="muted small">@L.T("Plik JSON zawiera ustawienia z ostatniego zapisu. W DefectDojo: Import Scan Results → Scan type „Generic Findings Import”.")</p>
+        @if (_errors.Count > 0) { <div class="alert alert-bad"><ul>@foreach (var e in _errors) { <li>@L.Message(e)</li> }</ul></div> }
+        @if (_status is { } st) { <div class="alert @(st.Success ? "alert-ok" : "alert-bad")">@L.Message(st.Message)@if (st.TestId is { } test) { <span> · test #@test</span> }</div> }
+        @if (_preview is { } p)
+        {
+            <div class="section-title">@L.F("Podgląd: {0} znalezisk, {1} endpointów", p.Findings, p.Endpoints)</div>
+            <div class="chips">
+                @foreach (var s in DojoSeverity.All.Reverse()) { <span class="chip">@s: @p.BySeverity.GetValueOrDefault(s)</span> }
+                @foreach (var k in p.ByKind) { <span class="chip">@KindLabel(k.Key): @k.Value</span> }
+            </div>
+        }
+        @if (_last is { } last)
+        {
+            <p class="muted small">@L.F("Ostatnie wysłanie: {0} – {1}", Labels.Local(last.At), L.Message(last.Message))</p>
+        }
+    </section>
+}
+
+@code {
+    private bool _loaded;
+    private string _url = "";
+    private string? _apiKey;
+    private bool _hasKey;
+    private string _productType = "WELES", _product = "WELES", _engagement = "Attack Surface", _testTitle = "WELES discovery";
+    private bool _closeOld = true, _verifyTls = true;
+    private bool _cves = true, _configuration = true, _webFindings = true, _services, _accepted;
+    private VulnerabilityMatchStatus _minimumMatch = VulnerabilityMatchStatus.NeedsVerification;
+    private string _minimumSeverity = DojoSeverity.Info;
+    private DojoGrouping _grouping = DojoGrouping.PerEndpoint;
+    private string _network = "all";
+    private int _scanId;
+    private IReadOnlyList<NetworkOption> _networks = [];
+    private IReadOnlyList<ScanListItem> _scans = [];
+    private List<string> _errors = [];
+    private DojoSendResult? _status, _last;
+    private DojoPreview? _preview;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var saved = await Dojo.SettingsAsync();
+        if (saved.Connection is { } c)
+        {
+            (_url, _productType, _product, _engagement, _testTitle, _closeOld, _verifyTls) = (c.Url, c.ProductType, c.Product, c.Engagement, c.TestTitle, c.CloseOldFindings, c.VerifyTls);
+        }
+
+        var o = saved.Options;
+        (_cves, _minimumMatch, _configuration, _webFindings, _services, _accepted, _minimumSeverity, _grouping, _network, _scanId) =
+            (o.IncludeCves, o.MinimumMatch, o.IncludeConfiguration, o.IncludeWeb, o.IncludeServices, o.IncludeAccepted, o.MinimumSeverity, o.Grouping, o.Network, o.ScanId ?? 0);
+        _hasKey = saved.HasApiKey;
+        _last = saved.LastResult;
+        _networks = (await Networks.ContextAsync()).Networks;
+        _scans = (await Scans.ListAsync()).Where(s => s.Status == ScanStatus.Completed).Take(50).ToList();
+        _loaded = true;
+    }
+
+    private DojoExportOptions Options => new(_cves, _minimumMatch, _configuration, _webFindings, _services, _accepted, _minimumSeverity, _grouping, _network, _scanId == 0 ? null : _scanId);
+
+    private async Task<bool> SaveAsync()
+    {
+        _status = null;
+        _errors = (await Dojo.SaveAsync(new DojoConnection(_url, _productType, _product, _engagement, _testTitle, _closeOld, _verifyTls), string.IsNullOrEmpty(_apiKey) ? null : _apiKey, Options)).ToList();
+        if (_errors.Count > 0) return false;
+        _hasKey |= !string.IsNullOrEmpty(_apiKey);
+        _apiKey = null;
+        _status = new DojoSendResult(true, "Zapisano ustawienia DefectDojo.", 0);
+        return true;
+    }
+
+    private async Task TestAsync()
+    {
+        if (await SaveAsync()) _status = await Dojo.TestConnectionAsync();
+    }
+
+    private async Task PreviewAsync()
+    {
+        _preview = DefectDojoService.Preview(await Dojo.BuildAsync(Options));
+    }
+
+    private async Task SendAsync()
+    {
+        if (!await SaveAsync()) return;
+        _busy = true;
+        try
+        {
+            _status = await Dojo.SendAsync(Options);
+            _last = _status;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string KindLabel(string kind) => kind switch
+    {
+        "cve" => L.T("CVE"),
+        "configuration" => L.T("konfiguracja"),
+        "web" => L.T("web"),
+        "service" => L.T("usługi"),
+        _ => kind
+    };
+}

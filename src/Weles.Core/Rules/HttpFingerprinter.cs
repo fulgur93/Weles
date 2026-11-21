@@ -7,7 +7,8 @@ using Weles.Core.Models;
 
 namespace Weles.Core.Rules;
 
-public sealed record HttpResponseInfo(int StatusCode, string StatusLine, IReadOnlyDictionary<string, string> Headers, string Body, string? Title)
+/// <param name="SetCookies">Every Set-Cookie header separately (they cannot be joined with commas like other headers).</param>
+public sealed record HttpResponseInfo(int StatusCode, string StatusLine, IReadOnlyDictionary<string, string> Headers, string Body, string? Title, IReadOnlyList<string>? SetCookies = null)
 {
     public string? Header(string name) => Headers.GetValueOrDefault(name);
 }
@@ -41,12 +42,14 @@ public static partial class HttpResponseParser
         }
 
         var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var cookies = new List<string>();
         foreach (var line in lines.Skip(1))
         {
             var colon = line.IndexOf(':');
             if (colon <= 0) continue;
             var name = line[..colon].Trim();
             var value = BannerParser.Sanitize(line[(colon + 1)..].Trim());
+            if (name.Equals("Set-Cookie", StringComparison.OrdinalIgnoreCase)) cookies.Add(value);
             headers[name] = headers.TryGetValue(name, out var existing) ? $"{existing}, {value}" : value;
         }
 
@@ -61,7 +64,7 @@ public static partial class HttpResponseParser
             body = Encoding.UTF8.GetString(Encoding.Latin1.GetBytes(body));
         }
 
-        response = new HttpResponseInfo(status, BannerParser.Sanitize(lines[0]), headers, body, ExtractTitle(body));
+        response = new HttpResponseInfo(status, BannerParser.Sanitize(lines[0]), headers, body, ExtractTitle(body), cookies);
         return true;
     }
 

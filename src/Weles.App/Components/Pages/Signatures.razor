@@ -1,0 +1,184 @@
+@page "/signatures"
+@using System.Text.Json
+@using Weles.Core.Fingerprint
+@using Weles.Infrastructure.Fingerprint
+@inject SignatureService Service
+
+<PageTitle>@L.T("Sygnatury · WELES")</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>@L.T("Sygnatury detekcyjne")</h1>
+        <p class="page-subtitle">@L.T("Bezpieczne sygnatury rozpoznają technologie po tym, co zwraca zwykłe zapytanie GET: nagłówek, nazwa ciasteczka, fragment HTML, tytuł, hash favicony, ścieżka (np. /admin, /version) bez logowania i bez parametrów. Nowa lub zmieniona sygnatura od razu działa także na wynikach wcześniejszych skanów.")</p>
+    </div>
+</div>
+
+<Can Policy="@Policies.Manage">
+<section class="card">
+    <div class="card-title"><Icon Name="check" /> @(_editingId is null ? L.T("Nowa sygnatura") : L.F("Edycja: {0}", _editingId))</div>
+    <textarea class="input mono signature-editor" rows="14" @bind="_json" @bind:event="oninput" spellcheck="false"></textarea>
+    <div class="actions">
+        <button class="btn btn-primary" @onclick="SaveAsync">@L.T("Zapisz")</button>
+        <button class="btn btn-ghost" @onclick="TestAsync">@L.T("Sprawdź na zebranych danych")</button>
+        <button class="btn btn-ghost" @onclick="NewTemplate">@L.T("Nowa (szablon)")</button>
+        <label class="btn btn-ghost">@L.T("Importuj JSON")<InputFile OnChange="ImportAsync" accept=".json" class="visually-hidden" /></label>
+        <a class="btn btn-ghost" href="api/export/signatures.json" download><Icon Name="download" Size="14" /> @L.T("Eksportuj własne")</a>
+    </div>
+    @if (_errors.Count > 0) { <div class="alert alert-bad"><ul>@foreach (var e in _errors) { <li>@L.Message(e)</li> }</ul></div> }
+    @if (_message is not null) { <div class="alert alert-ok">@L.Message(_message)</div> }
+    @if (_hits is not null)
+    {
+        <div class="section-title">@L.F("Dopasowania: {0}", _hits.Count)</div>
+        @if (_hits.Count == 0) { <p class="muted small">@L.T("Żadna zebrana usługa web nie pasuje.")</p> }
+        else
+        {
+            <table class="table small">
+                <thead><tr><th>@L.T("Adres")</th><th>@L.T("Tytuł")</th><th>@L.T("Wersja")</th><th>@L.T("Dowód")</th></tr></thead>
+                <tbody>@foreach (var h in _hits) { <tr><td class="mono">@h.Url</td><td>@h.Title</td><td>@h.Match.Version</td><td class="mono break">@string.Join("; ", h.Match.Evidence)</td></tr> }</tbody>
+            </table>
+        }
+    }
+    <details class="small">
+        <summary>@L.T("Format sygnatury")</summary>
+        <p>@L.T("Typy warunków: header (name, opcjonalnie pattern), cookie (pattern – nazwa ciasteczka), body, title, server, url (pattern), status (lista kodów), favicon (hash – mmh3 lub pattern – MD5), path (path, opcjonalnie status i pattern). match: any – wystarczy jeden warunek, all – wszystkie. version: source (body, title, server, header:Nazwa, path:/ścieżka) i pattern z grupą. Wzorce to wyrażenia regularne bez rozróżniania wielkości liter, przerywane po 100 ms.")</p>
+        <p>@L.T("Kategorie: cms, framework, server, language, iot, adminPanel, staging, interesting, other.")</p>
+    </details>
+</section>
+</Can>
+
+<section class="card">
+    <div class="card-title"><Icon Name="layers" /> @L.F("Własne sygnatury ({0})", _custom.Count)</div>
+    @if (_custom.Count == 0) { <p class="muted">@L.T("Brak własnych sygnatur.")</p> }
+    else
+    {
+        <table class="table">
+            <thead><tr><th>ID</th><th>@L.T("Nazwa")</th><th>@L.T("Kategoria")</th><th>@L.T("Warunki")</th><th>@L.T("Zmieniono")</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var c in _custom)
+                {
+                    <tr>
+                        <td class="mono">@(c.Signature?.Id ?? "?")</td>
+                        <td>@(c.Signature?.Name ?? "—")@if (c.Errors.Count > 0) { <div class="small tone-bad">@string.Join(" ", c.Errors.Select(L.Message))</div> }</td>
+                        <td>@(c.Signature is null ? "—" : WebServices.CategoryLabel(c.Signature.Category))</td>
+                        <td class="small mono">@(c.Signature is null ? "" : Summary(c.Signature))</td>
+                        <td class="small">@Labels.Local(c.UpdatedAt)@(c.UpdatedBy is null ? "" : " · " + c.UpdatedBy)</td>
+                        <td class="right nowrap">
+                            <Can Policy="@Policies.Modify"><label class="checkbox inline small"><input type="checkbox" checked="@c.Enabled" @onchange="e => ToggleAsync(c.Id, e.Value is true)" /> @L.T("włączona")</label></Can>
+                            <Can Policy="@Policies.Manage"><button class="btn btn-ghost btn-sm" @onclick="() => Edit(c.Json, c.Signature?.Id)">@L.T("Edytuj")</button>
+                            <button class="btn btn-ghost btn-sm" @onclick="() => DeleteAsync(c.Id)">@L.T("Usuń")</button></Can>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</section>
+
+<section class="card">
+    <div class="card-title"><Icon Name="lock" /> @L.F("Sygnatury wbudowane ({0})", Service.BuiltIn.Count)</div>
+    <p class="muted small">@L.T("Nie można ich zmienić – skopiuj do edytora, aby utworzyć własną wersję pod innym identyfikatorem.")</p>
+    <table class="table small">
+        <thead><tr><th>ID</th><th>@L.T("Nazwa")</th><th>@L.T("Kategoria")</th><th>@L.T("Warunki")</th><th></th></tr></thead>
+        <tbody>
+            @foreach (var s in Service.BuiltIn.OrderBy(s => s.Category).ThenBy(s => s.Name))
+            {
+                <tr><td class="mono">@s.Id</td><td>@L.Message(s.Name)</td><td>@WebServices.CategoryLabel(s.Category)</td><td class="mono">@Summary(s)</td>
+                    <td><Can Policy="@Policies.Manage"><button class="btn btn-ghost btn-sm" @onclick="() => Copy(s)">@L.T("Kopiuj")</button></Can></td></tr>
+            }
+        </tbody>
+    </table>
+</section>
+
+@code {
+    private const string Template = """
+        {
+          "id": "moja-aplikacja",
+          "name": "Moja aplikacja",
+          "category": "other",
+          "match": "any",
+          "confidence": 80,
+          "conditions": [
+            { "type": "header", "name": "X-Moja-Aplikacja" },
+            { "type": "title", "pattern": "Moja aplikacja" },
+            { "type": "path", "path": "/version", "status": [200], "pattern": "moja-aplikacja" }
+          ],
+          "version": { "source": "header:X-Moja-Aplikacja", "pattern": "([0-9.]+)" }
+        }
+        """;
+
+    private IReadOnlyList<CustomSignatureView> _custom = [];
+    private string _json = Template;
+    private string? _editingId;
+    private List<string> _errors = [];
+    private string? _message;
+    private IReadOnlyList<SignatureHit>? _hits;
+
+    protected override async Task OnInitializedAsync() => _custom = await Service.CustomAsync();
+
+    private static string Summary(Signature s) => string.Join(s.Match == "all" ? " ∧ " : " ∨ ",
+        s.Conditions.Select(c => c.Type + (c.Name is null ? "" : ":" + c.Name) + (c.Path is null ? "" : ":" + c.Path)));
+
+    private void NewTemplate() => Edit(Template, null);
+
+    private void Edit(string json, string? id)
+    {
+        _json = json;
+        _editingId = id;
+        _errors = [];
+        _message = null;
+        _hits = null;
+    }
+
+    private void Copy(Signature s) => Edit(JsonSerializer.Serialize(s with { Id = s.Id + "-wlasna", Name = s.Name + " (własna)" }, SignatureEngine.Json), null);
+
+    private async Task SaveAsync()
+    {
+        _message = null;
+        var result = await Service.SaveAsync(_json, "panel");
+        _errors = result.Errors.ToList();
+        if (result.Success)
+        {
+            _editingId = result.SignatureId;
+            _message = L.F("Zapisano „{0}” i oceniono ponownie wszystkie zebrane usługi web.", result.SignatureId);
+            _custom = await Service.CustomAsync();
+        }
+    }
+
+    private async Task TestAsync()
+    {
+        _message = null;
+        _hits = null;
+        var signature = SignatureService.Parse(_json, out var error);
+        _errors = error is not null ? [error] : SignatureEngine.Validate(signature).ToList();
+        if (_errors.Count == 0) _hits = await Service.TestAsync(signature!);
+    }
+
+    private async Task ImportAsync(InputFileChangeEventArgs e)
+    {
+        _message = null;
+        try
+        {
+            using var reader = new StreamReader(e.File.OpenReadStream(1024 * 1024));
+            var (saved, errors) = await Service.ImportAsync(await reader.ReadToEndAsync(), "import");
+            _errors = errors.ToList();
+            _message = L.F("Zaimportowano sygnatur: {0}.", saved);
+            _custom = await Service.CustomAsync();
+        }
+        catch (IOException)
+        {
+            _errors = ["Plik jest za duży (najwyżej 1 MB) lub nie da się go odczytać."];
+        }
+    }
+
+    private async Task ToggleAsync(int id, bool enabled)
+    {
+        await Service.SetEnabledAsync(id, enabled);
+        _custom = await Service.CustomAsync();
+    }
+
+    private async Task DeleteAsync(int id)
+    {
+        await Service.DeleteAsync(id);
+        _custom = await Service.CustomAsync();
+    }
+}

@@ -21,8 +21,10 @@ public static class DependencyInjection
         services.AddSingleton(paths);
         services.AddSingleton(TimeProvider.System);
 
-        services.AddDbContextFactory<WelesDbContext>(options =>
-            options.UseSqlite($"Data Source={paths.DatabaseFile};Default Timeout=30;Pooling=True"));
+        // Encryption at rest (SQLCipher): on by default; an existing plain database is converted once.
+        var databaseKey = configuration.GetValue("Weles:Database:Encrypt", true) ? DatabaseEncryption.LoadOrCreateKey(paths) : null;
+        if (databaseKey is not null) DatabaseEncryption.EncryptExisting(paths.DatabaseFile, databaseKey);
+        services.AddDbContextFactory<WelesDbContext>(options => options.UseSqlite(DatabaseEncryption.ConnectionString(paths.DatabaseFile, databaseKey)));
 
         services.AddSingleton<DatabaseInitializer>();
         services.AddSingleton<DatabaseInfoService>();
@@ -35,6 +37,7 @@ public static class DependencyInjection
         services.AddSingleton<MonitoringQueries>();
         services.AddSingleton<TopologyQueries>();
         services.AddSingleton<NetworkQueries>();
+        services.AddSingleton<WebQueries>();
         services.AddSingleton<Assets.AssetService>();
         services.AddSingleton<Reports.AuditDocumentBuilder>();
         services.AddSingleton<Reports.AuditReportService>();
@@ -62,6 +65,10 @@ public static class DependencyInjection
         services.AddSingleton<VulnerabilityStore>();
         services.AddSingleton<VulnerabilityMatchingService>();
         services.AddSingleton<Risk.RiskAssessmentService>();
+        services.AddSingleton<Fingerprint.SignatureService>();
+        services.AddSingleton<Import.ScanImportService>();
+        services.AddSingleton<Security.UserService>();
+        services.AddSingleton<Integrations.DefectDojoService>(sp => new Integrations.DefectDojoService(sp.GetRequiredService<IDbContextFactory<WelesDbContext>>(), sp.GetRequiredService<SettingsService>(), sp.GetRequiredService<NetworkQueries>(), sp.GetRequiredService<WebQueries>(), sp.GetRequiredService<Integrations.ISecretProtector>(), sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Integrations.DefectDojoService>>()));
         services.AddSingleton<ScanPostProcessor>();
         services.AddSingleton<Agents.AgentService>();
         services.AddHostedService<Agents.AgentMaintenanceService>();
