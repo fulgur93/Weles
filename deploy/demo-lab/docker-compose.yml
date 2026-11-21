@@ -1,6 +1,6 @@
 # WELES – lokalne laboratorium demonstracyjne.
-# Celowo stare, prawdziwe wersje usług dostępne WYŁĄCZNIE na adresach pętli zwrotnej (127.0.0.11–15).
-# Skan zakresu 127.0.0.11-127.0.0.15 (profil Szybki) daje prawdziwe wyniki i prawdziwe dopasowania CVE –
+# Celowo stare, prawdziwe wersje usług dostępne WYŁĄCZNIE na adresach pętli zwrotnej (127.0.0.11–16).
+# Skan zakresu 127.0.0.11-127.0.0.16 (profil Szybki) daje prawdziwe wyniki i prawdziwe dopasowania CVE –
 # bez dotykania sieci, na której odbywa się prezentacja. Usługi nie zawierają danych; po pokazie: docker compose down.
 name: weles-demo-lab
 
@@ -31,4 +31,12 @@ services:
     environment:
       MYSQL_RANDOM_ROOT_PASSWORD: "yes"
     ports: ["127.0.0.15:3306:3306"]
+    restart: "no"
+
+  webpanel:          # statyczny „portal stagingowy” (nginx 1.18.0): WordPress w meta, /admin, X-Powered-By, ciasteczka bez HttpOnly
+    image: nginx:1.18.0
+    volumes:
+      - ./webpanel/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./webpanel/html:/usr/share/nginx/html:ro
+    ports: ["127.0.0.16:8080:8080"]
     restart: "no"

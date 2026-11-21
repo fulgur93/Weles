@@ -1,7 +1,7 @@
 # Laboratorium demonstracyjne WELES
 
 Prawdziwe, celowo stare wersje usług uruchomione w Dockerze i dostępne **tylko na adresach pętli zwrotnej**
-(127.0.0.11–127.0.0.15). Pozwala pokazać wykrywanie usług i dopasowanie podatności, gdy na sali nie ma sieci
+(127.0.0.11–127.0.0.16). Pozwala pokazać wykrywanie usług i dopasowanie podatności, gdy na sali nie ma sieci
 albo nie ma zgody na jej skanowanie. Wyniki nie są udawane – WELES skanuje rzeczywiste procesy.
 
 | Adres | Usługa | Przykładowe dopasowania |
@@ -11,6 +11,7 @@ albo nie ma zgody na jej skanowanie. Wyniki nie są udawane – WELES skanuje rz
 | 127.0.0.13:6379 | Redis 5.0.7 | CVE-2021-32626 i inne |
 | 127.0.0.14:22 | OpenSSH 7.9p1 (Alpine) | CVE-2023-38408 i inne |
 | 127.0.0.15:3306 | MySQL 5.7.30 | biuletyny Oracle CPU |
+| 127.0.0.16:8080 | statyczny „portal stagingowy” (nginx) | fingerprinting: WordPress 5.8.1, staging, panel /admin, X-Powered-By, ciasteczka bez HttpOnly |
 
 ## Uruchomienie
 
@@ -19,7 +20,7 @@ cd deploy/demo-lab
 docker compose up -d --build
 ```
 
-W WELES: **Network Discovery → nowy zakres** `127.0.0.11-127.0.0.15`, zatwierdź, uruchom skan z profilem **Szybki**.
+W WELES: **Network Discovery → nowy zakres** `127.0.0.11-127.0.0.16`, zatwierdź, uruchom skan z profilem **Szybki**.
 Po skanie dopasowania pojawią się w **Vulnerabilities** i w szczegółach każdego urządzenia.
 
 Po pokazie: `docker compose down`.
@@ -31,5 +32,4 @@ Po pokazie: `docker compose down`.
   `protected-mode`).
 - Nie uruchamiaj tych obrazów na adresach dostępnych z sieci – to podatne wersje.
 
-> Status: pliki przygotowane, ale nieuruchomione na komputerze deweloperskim (brak Dockera). Pierwsze uruchomienie
-> może wymagać korekty, np. wersji pakietu `openssh-server` w archiwum Alpine 3.9.
+Własny profil portów dla pełnego pokazu: `22,80,3306,6379,8080`.
