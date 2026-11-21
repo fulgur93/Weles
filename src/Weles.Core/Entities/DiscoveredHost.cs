@@ -19,6 +19,9 @@ public class DiscoveredHost
     public DiscoveryMethod DiscoveryMethods { get; set; }
     public double? RoundTripMs { get; set; }
     public int? Ttl { get; set; }
+
+    /// <summary>Traceroute: router addresses on the way, comma-separated, the host last when reached; null when not traced.</summary>
+    public string? TracePath { get; set; }
     public string? OsGuess { get; set; }
     public bool IsGateway { get; set; }
     public AssetType AssetTypeGuess { get; set; }

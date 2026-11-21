@@ -662,6 +662,9 @@ namespace Weles.Infrastructure.Database.Migrations
                     b.Property<int>("ScanId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("TracePath")
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("Ttl")
                         .HasColumnType("INTEGER");
 

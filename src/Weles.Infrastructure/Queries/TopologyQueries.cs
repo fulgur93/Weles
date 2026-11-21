@@ -21,14 +21,22 @@ public sealed record TopologyNode(
     IReadOnlyList<int> OpenPorts,
     IReadOnlyList<string> Products,
     IReadOnlyList<string> Exposure,
-    int KnownExploited);
+    int KnownExploited,
+    Weles.Core.Topology.LinkEvidence? Link = null);
 
 /// <summary>
-/// One network with its devices. Links are inferred, not observed traffic: every device of a segment reaches the others
-/// and the gateway directly (same LAN); the gateway connects the segment to other networks and the Internet.
+/// One network with its devices. Each device's link carries its evidence (<see cref="Weles.Core.Topology.LinkEvidence"/>):
+/// observed – MAC in the ARP table (same layer-2 segment), the ICMP reply's TTL (routers in between) or a traceroute path –
+/// or only inferred from the address and the gateway. No traffic is captured; the observations come from the scan's own probes.
 /// </summary>
 /// <param name="IsPublic">Public (Internet) hosts outside any local network – drawn without a gateway and without "same LAN" links.</param>
-public sealed record TopologyNetwork(string Key, string Label, string? Cidr, TopologyNode? Gateway, IReadOnlyList<TopologyNode> Devices, bool IsPublic = false);
+/// <param name="Routers">Routers seen by traceroute on the way to this network's devices (address → how many devices behind it).</param>
+public sealed record TopologyNetwork(string Key, string Label, string? Cidr, TopologyNode? Gateway, IReadOnlyList<TopologyNode> Devices, bool IsPublic = false,
+    IReadOnlyDictionary<string, int>? Routers = null)
+{
+    public int ObservedLinks => Devices.Count(d => d.Link?.Observed == true);
+    public int InferredLinks => Devices.Count - ObservedLinks;
+}
 
 public sealed record TopologyModel(IReadOnlyList<TopologyNetwork> Networks, int HiddenOtherNetworks, string? CurrentNetwork);
 
@@ -47,12 +55,14 @@ public sealed class TopologyQueries(IDbContextFactory<WelesDbContext> contextFac
 
         var results = await risk.LatestResultsAsync(ct);
         var gateways = await GatewayAssetsAsync(ct);
+        var facts = await LinkFactsAsync(ct);
         TopologyNode Node(AssetListItem a)
         {
             var r = results.TryGetValue(a.Id, out var x) ? x.Result : null;
             var exposure = r?.Issues.Where(i => i.Score >= AttackPathEngine.MinimumIssueScore || i.KnownExploited > 0).Select(i => i.Title).Take(4).ToList() ?? [];
             return new TopologyNode(a.Id, a.DisplayName, a.IpAddress, a.Hostname, a.Type, gateways.Contains(a.Id), a.Status, a.RiskScore, a.RiskLevel,
-                a.OpenPorts, a.Products, exposure, r?.Issues.Sum(i => i.KnownExploited) ?? 0);
+                a.OpenPorts, a.Products, exposure, r?.Issues.Sum(i => i.KnownExploited) ?? 0,
+                facts.TryGetValue(a.Id, out var f) ? Weles.Core.Topology.TopologyEvidence.For(f) : null);
         }
 
         var networks = items.GroupBy(a => IsPublicHost(a) ? "public" : a.SegmentId?.ToString() ?? "none")
@@ -67,8 +77,9 @@ public sealed class TopologyQueries(IDbContextFactory<WelesDbContext> contextFac
 
                 var gateway = nodes.Where(n => n.IsGateway).OrderBy(n => n.Ip, StringComparer.Ordinal).FirstOrDefault();
                 var label = g.First().NetworkLabel ?? (g.Key == "none" ? "bez rozpoznanej sieci (np. 127.0.0.1, VPN)" : "sieć");
-                return new TopologyNetwork(g.Key, label, g.First().SegmentCidr, gateway,
-                    nodes.Where(n => n != gateway).OrderByDescending(n => n.RiskScore ?? 0).ThenBy(n => n.Name, StringComparer.Ordinal).ToList());
+                var devices = nodes.Where(n => n != gateway).OrderByDescending(n => n.RiskScore ?? 0).ThenBy(n => n.Name, StringComparer.Ordinal).ToList();
+                var routers = devices.SelectMany(d => d.Link?.Path ?? []).GroupBy(p => p).ToDictionary(x => x.Key, x => x.Count());
+                return new TopologyNetwork(g.Key, label, g.First().SegmentCidr, gateway, devices, Routers: routers);
             })
             .OrderBy(n => n.Key is "none" or "public").ThenBy(n => n.IsPublic).ThenByDescending(n => n.Devices.Count).ToList();
         return new TopologyModel(networks, hidden, currentNetworkOnly ? current.Description : null);
@@ -123,6 +134,18 @@ public sealed class TopologyQueries(IDbContextFactory<WelesDbContext> contextFac
         }
 
         return AttackPathEngine.Build(input, take);
+    }
+
+    /// <summary>Facts of each asset's latest observation that show how it is connected (ARP, TTL, traceroute).</summary>
+    private async Task<Dictionary<int, Weles.Core.Topology.LinkFacts>> LinkFactsAsync(CancellationToken ct)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        var rows = await db.DiscoveredHosts.AsNoTracking().Where(h => h.AssetId != null)
+            .Select(h => new { Id = h.AssetId!.Value, Row = h.Id, h.IpAddress, h.DiscoveryMethods, h.MacAddress, h.Ttl, h.TracePath })
+            .ToListAsync(ct);
+        return rows.GroupBy(r => r.Id).Select(g => g.MaxBy(r => r.Row)!).ToDictionary(r => r.Id, r => new Weles.Core.Topology.LinkFacts(
+            r.IpAddress, r.DiscoveryMethods.HasFlag(DiscoveryMethod.Arp), r.MacAddress, r.Ttl,
+            r.TracePath?.Split(',', StringSplitOptions.RemoveEmptyEntries)));
     }
 
     /// <summary>Assets whose latest observation was the default gateway of its segment.</summary>

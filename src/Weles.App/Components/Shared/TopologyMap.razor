@@ -42,7 +42,12 @@
     @foreach (var node in devices)
     {
         var (x, y) = _positions[node.AssetId];
-        <line x1="@Inv(center.X)" y1="@Inv(center.Y)" x2="@Inv(x)" y2="@Inv(y)" class="topo-edge risk-@RiskClass(node) @(node.Exposure.Count > 0 ? "exposed" : "")"><title>@(Network.IsPublic ? L.T("adres publiczny – osiągany przez Internet w skanie aktywnym") : L.T("ta sama sieć lokalna – połączenie wywnioskowane, nie zaobserwowany ruch"))</title></line>
+        var observed = node.Link?.Observed == true;
+        <line x1="@Inv(center.X)" y1="@Inv(center.Y)" x2="@Inv(x)" y2="@Inv(y)" class="topo-edge risk-@RiskClass(node) @(node.Exposure.Count > 0 ? "exposed" : "") @(observed ? "observed" : "inferred") @(node.Link?.Routed == true ? "routed" : "")"><title>@EdgeTitle(node)</title></line>
+        @if (node.Link is { Routed: true, Hops: { } hops })
+        {
+            @Text((center.X + x) / 2, (center.Y + y) / 2 - 4, L.F("{0} hop", hops), "topo-hops")
+        }
     }
 
     @if (Network.Gateway is { } gw)
@@ -115,6 +120,13 @@
         AssetType.VirtualMachine => "VM",
         _ => "?"
     };
+
+    private string EdgeTitle(TopologyNode node)
+    {
+        if (Network.IsPublic) return L.T("adres publiczny – osiągany przez Internet w skanie aktywnym");
+        if (node.Link is not { } link) return L.T("wywnioskowane z adresu i bramy – nie zaobserwowano (brak ARP, TTL i traceroute)");
+        return link.Observed ? L.T("zaobserwowane") + ": " + L.Message(link.Reason) : L.Message(link.Reason);
+    }
 
     private static string Short(string s, int max) => s.Length <= max ? s : s[..(max - 1)] + "…";
 

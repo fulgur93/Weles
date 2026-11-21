@@ -146,6 +146,9 @@ WELES łączy się z Internetem **tylko** po kliknięciu „Aktualizuj z Interne
   limity szybkości WELES); nigdy skrypty NSE, wykrywanie systemu, UDP ani pakiety surowe. Cele to wyłącznie adresy z
   zatwierdzonego zakresu, przekazane przez plik tymczasowy usuwany po skanie; wynik nmapa nie może poszerzyć zakresu
   (inne adresy i porty są pomijane). Nmap nie jest wymagany – bez niego skanuje silnik wbudowany.
+- **Traceroute (topologia):** tylko do adresów zatwierdzonego zakresu, tylko dla hostów bez dowodu w warstwie 2, maks.
+  32 hosty na skan i 8 hopów, po jednej sondzie naraz; na Linuksie przez `tracepath` uruchamiany bez powłoki z samym
+  zweryfikowanym adresem. Ruch sieciowy nie jest przechwytywany.
 - **Okna czasowe i wznawianie:** wznowienie wstrzymanego skanu przechodzi te same kontrole co nowy skan – zakres nadal
   zatwierdzony, niezmieniony od startu skanu i ta sama sieć (router); inaczej wznowienie jest odrzucane.
 

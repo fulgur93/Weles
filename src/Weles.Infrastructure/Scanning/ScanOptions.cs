@@ -8,6 +8,15 @@ public sealed class ScanOptions
     /// <summary>Largest scope one scan may cover (a /16 – the AGH requirement is above 10 000 addresses). Scopes still need approval.</summary>
     public int MaxHostsPerScan { get; set; } = 65536;
 
+    /// <summary>
+    /// Traceroute to hosts without layer-2 evidence (not in the ARP table) whose ICMP TTL was lowered or missing – the
+    /// observed routers make the topology map show real paths instead of an assumed "same LAN".
+    /// </summary>
+    public bool Traceroute { get; set; } = true;
+    public int TracerouteMaxHosts { get; set; } = 32;
+    public int TracerouteMaxHops { get; set; } = 8;
+    public int TracerouteHopTimeoutMs { get; set; } = 1000;
+
     /// <summary>Path to the nmap program; empty – searched in PATH (and Program Files\Nmap on Windows). Nmap is optional.</summary>
     public string? NmapPath { get; set; }
 

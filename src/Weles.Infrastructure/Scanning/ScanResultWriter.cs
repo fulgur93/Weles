@@ -54,6 +54,7 @@ public sealed class ScanResultWriter(IDbContextFactory<WelesDbContext> contextFa
                 DiscoveryMethods = result.Methods,
                 RoundTripMs = result.RoundTripMs,
                 Ttl = result.Ttl,
+                TracePath = result.TracePath is { Count: > 0 } trace ? string.Join(',', trace.Take(16)) : null,
                 OsGuess = result.Classification.OsFamily,
                 IsGateway = result.IsGateway,
                 AssetTypeGuess = result.Classification.Type,

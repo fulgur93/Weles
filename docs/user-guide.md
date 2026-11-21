@@ -209,6 +209,9 @@ WELES działa w pełni bez agentów. Agent przydaje się, gdy chcesz skanować s
 - **Niestabilne urządzenia:** urządzenie, które nie odpowiedziało w ostatnim skanie (lub dwóch), ma status **Niestabilne**;
   **Nieobecne** dopiero po 3 kolejnych skanach bez odpowiedzi. Na stronie urządzenia: w ilu skanach odpowiadało, ile razy z
   rzędu milczy i czy zależy to od pory dnia (np. „odpowiada w godzinach 06:00–18:00, nie odpowiada 00:00–06:00”).
+- **Topologia z dowodami:** linia ciągła – połączenie zaobserwowane (MAC w tablicy ARP, TTL odpowiedzi bez zmian),
+  kropkowana – przez routery (TTL obniżony albo traceroute, z liczbą hopów), przerywana – tylko wywnioskowane z adresu i
+  bramy. Najedź na linię lub kliknij urządzenie, aby zobaczyć dowód; karta sieci pokazuje liczniki i routery z traceroute.
 - **Dostęp z sieci lokalnej:** **Ustawienia → Dostęp z sieci lokalnej** (administrator): wybierz adres tego komputera i port,
   zapisz, uruchom ponownie WELES. Panel będzie pod `https://adres:port` dla komputerów z tej samej podsieci, po zalogowaniu.
   Przeglądarka ostrzeże o certyfikacie samopodpisanym – porównaj odcisk SHA-256 z Ustawień.

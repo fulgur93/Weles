@@ -526,6 +526,13 @@ svg.topology { width: 100%; height: auto; display: block; }
 .topo-segment rect, .topo-segment ellipse { fill: var(--surface-2); stroke: var(--border-strong); }
 .topo-edge { stroke: var(--border-strong); stroke-width: 1.5; }
 .topo-edge.unknown { stroke-dasharray: 6 5; }
+.topo-edge.inferred { stroke-dasharray: 4 6; opacity: .75; }
+.topo-edge.observed { stroke-dasharray: none; }
+.topo-edge.routed { stroke-dasharray: 14 4 2 4; }
+.topo-hops { font-size: 10px; fill: var(--text-muted); }
+.topo-legend .edge-solid, .topo-legend .edge-dashed, .topo-legend .edge-routed { display: inline-block; width: 26px; height: 0; border-top: 2px solid var(--text-muted); vertical-align: middle; margin-right: 6px; }
+.topo-legend .edge-dashed { border-top-style: dashed; }
+.topo-legend .edge-routed { border-top-style: dotted; }
 .topo-edge.exposed { stroke-width: 2.5; }
 .topo-edge.risk-critical { stroke: var(--risk-critical); } .topo-edge.risk-high { stroke: var(--risk-high); }
 .topo-edge.risk-medium { stroke: var(--risk-medium); }

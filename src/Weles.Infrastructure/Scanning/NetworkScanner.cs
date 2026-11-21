@@ -45,6 +45,9 @@ public sealed record NetworkScanOutcome(string? Error, bool Paused = false);
 /// </summary>
 public sealed class NetworkScanner(OuiDatabase oui, LocalNetworkDiscovery localNetwork, ScanOptions options, ILogger logger, NmapEngine? nmap = null)
 {
+    private int _traceBudget = options.TracerouteMaxHosts;
+    private int _traced;
+
     public const int MinBatchSize = 64;
     /// <summary>Upper bound of a subgroup – keeps resume points and pauses frequent on fast networks.</summary>
     public const int MaxBatchSize = 1024;
@@ -280,6 +283,11 @@ public sealed class NetworkScanner(OuiDatabase oui, LocalNetworkDiscovery localN
                 : $"Wykrywanie hostów zakończone: {totalAlive} aktywnych z {all.Count} adresów w {subgroup} podgrupach" + (totalArpOnly > 0 ? $" (w tym {totalArpOnly} wyłącznie z tablicy ARP)." : "."));
         }
 
+        if (_traced > 0)
+        {
+            await sink.EventAsync(ScanEventLevel.Info, $"Traceroute: {_traced} hostów bez potwierdzenia w warstwie 2 (brak w tablicy ARP, obniżony lub brak TTL) – trasy zapisane dla mapy topologii.");
+        }
+
         progress.Phase = ScanPhase.Finishing;
         return new NetworkScanOutcome(null);
     }
@@ -395,8 +403,20 @@ public sealed class NetworkScanner(OuiDatabase oui, LocalNetworkDiscovery localN
             MdnsServiceTypes: mdns?.Services.Select(s => s.Type).ToList()));
 
         var methods = liveness.Methods | (mac is not null ? DiscoveryMethod.Arp : DiscoveryMethod.None) | (hostname is not null ? DiscoveryMethod.Dns : DiscoveryMethod.None);
+
+        // Observed topology: hosts with no layer-2 evidence and a lowered or missing TTL get a traceroute (bounded per scan).
+        IReadOnlyList<string>? trace = null;
+        var facts = new Core.Topology.LinkFacts(address.ToString(), arp.ContainsKey(address), mac, liveness.Ttl, null, isLocal);
+        if (options.Traceroute && address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && Core.Topology.TopologyEvidence.NeedsTrace(facts)
+            && Interlocked.Decrement(ref _traceBudget) >= 0)
+        {
+            progress.Activity = $"Traceroute {address}";
+            trace = await TracerouteProbe.TraceAsync(address, options.TracerouteMaxHops, options.TracerouteHopTimeoutMs, ct);
+            Interlocked.Increment(ref _traced);
+        }
+
         return new HostScanResult(address, methods, liveness.RoundTripMs, liveness.Ttl, hostname, mac, vendor, isGateway, classification, portList, mdns?.Services,
-            isLocal && !IPAddress.IsLoopback(address) ? localMacs : null);
+            isLocal && !IPAddress.IsLoopback(address) ? localMacs : null, trace);
     }
 
     private async Task<IReadOnlyDictionary<IPAddress, MdnsHost>> DiscoverMdnsSafelyAsync(IReadOnlyList<IPAddress> local, int listenMs, CancellationToken ct)
